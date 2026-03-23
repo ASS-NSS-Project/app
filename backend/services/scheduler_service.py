@@ -1,0 +1,192 @@
+"""
+services/scheduler_service.py - Automatic crawl scheduling and evidence cleanup
+
+Contains two periodic tasks:
+
+1. _schedule_due_sources (every CHECK_INTERVAL_MINUTES minutes)
+   Checks which sources are "due" and schedules their crawl.
+   A source is due when:
+     last_crawled_at IS NULL
+     OR last_crawled_at + crawl_frequency_hours <= now()
+
+2. _cleanup_expired_evidence (once every CLEANUP_INTERVAL_HOURS hours)
+   Deletes evidence records (DB + files in MinIO) whose retention period
+   defined on the source (retention_days_evidence) has elapsed.
+"""
+
+import logging
+from datetime import datetime, timedelta
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from botocore.exceptions import ClientError
+from sqlalchemy import func, text
+
+from config import get_settings
+from database import SessionLocal
+from models import Evidence, IngestJob, Source, JobStatus
+from services.queue_service import publish_job
+from services.storage_service import StorageService
+
+logger = logging.getLogger(__name__)
+settings = get_settings()
+
+# How often the scheduler checks whether sources are due
+CHECK_INTERVAL_MINUTES = 5
+
+# How often expired evidence cleanup runs (in hours)
+CLEANUP_INTERVAL_HOURS = 24
+
+
+def _schedule_due_sources() -> None:
+    """
+    Checks all active sources and for those that are due,
+    creates an IngestJob record in the DB and publishes it to RabbitMQ.
+
+    Synchronous function – APScheduler runs it in a thread pool
+    so it doesn't block the async event loop.
+    """
+    db = SessionLocal()
+    try:
+        sources = db.query(Source).filter(Source.is_active == True).all()
+        now = datetime.utcnow()
+        scheduled = 0
+
+        for source in sources:
+            # Calculate whether the source is due
+            if source.last_crawled_at is None:
+                due = True
+            else:
+                due = now >= source.last_crawled_at + timedelta(hours=source.crawl_frequency_hours)
+
+            if not due:
+                continue
+
+            # Create the job record in the DB
+            job = IngestJob(
+                source_id=source.id,
+                url=source.base_url,
+                status=JobStatus.pending,
+            )
+            db.add(job)
+            db.commit()
+            db.refresh(job)
+
+            # Publish to RabbitMQ – the worker will pick it up and process it
+            try:
+                publish_job(job.id)
+                scheduled += 1
+                logger.info(f"Scheduler: scheduled crawl '{source.name}' → job {job.id}")
+            except Exception as e:
+                # If publishing fails, mark the job as failed
+                job.status = JobStatus.failed
+                job.error_message = f"Failed to publish to queue: {e}"
+                db.commit()
+                logger.error(f"Failed to schedule crawl for source '{source.name}': {e}")
+
+        if scheduled:
+            logger.info(f"Scheduler: {scheduled} crawl(s) scheduled")
+
+    finally:
+        db.close()
+
+
+def _cleanup_expired_evidence() -> None:
+    """
+    Deletes evidence records whose retention period has elapsed.
+
+    Each source has retention_days_evidence configured (default: 90 days).
+    After this period the following are deleted:
+      - files from MinIO (screenshots, HTML dumps, …)
+      - records from the evidence table in the DB
+
+    Documents and Qdrant chunks are kept – they have their own
+    retention period (retention_days_index) and will be handled separately.
+    """
+    db = SessionLocal()
+    try:
+        # Find expired evidence using PostgreSQL interval arithmetic:
+        # evidence.created_at + (source.retention_days_evidence days) <= now
+        expired = (
+            db.query(Evidence)
+            .join(IngestJob, Evidence.job_id == IngestJob.id)
+            .join(Source, IngestJob.source_id == Source.id)
+            .filter(
+                Evidence.created_at + (
+                    Source.retention_days_evidence * text("interval '1 day'")
+                ) <= func.now()
+            )
+            .all()
+        )
+
+        if not expired:
+            logger.debug("Evidence cleanup: no expired records found")
+            return
+
+        storage = StorageService()
+        deleted_files = 0
+        deleted_records = 0
+
+        for evidence in expired:
+            # Delete the file from MinIO
+            try:
+                storage.delete(settings.minio_bucket_evidence, evidence.storage_uri)
+                deleted_files += 1
+            except ClientError as e:
+                # File may have been deleted manually – log but don't abort
+                error_code = e.response["Error"]["Code"]
+                if error_code != "NoSuchKey":
+                    logger.warning(
+                        f"Failed to delete file '{evidence.storage_uri}' "
+                        f"from MinIO: {e}"
+                    )
+
+            # Delete the DB record
+            db.delete(evidence)
+            deleted_records += 1
+
+        db.commit()
+        logger.info(
+            f"Evidence cleanup: deleted {deleted_records} records "
+            f"and {deleted_files} files from MinIO"
+        )
+
+    except Exception as e:
+        logger.exception(f"Error during expired evidence cleanup: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
+def create_scheduler() -> AsyncIOScheduler:
+    """
+    Creates and configures an APScheduler instance.
+
+    The scheduler is registered in the application lifespan (main.py)
+    and starts/stops together with the API process.
+    """
+    scheduler = AsyncIOScheduler()
+
+    # Task 1: crawl scheduling
+    scheduler.add_job(
+        _schedule_due_sources,
+        trigger="interval",
+        minutes=CHECK_INTERVAL_MINUTES,
+        id="crawl_scheduler",
+        name="Automatic crawl scheduler",
+        replace_existing=True,
+        next_run_time=datetime.utcnow(),
+    )
+
+    # Task 2: expired evidence cleanup
+    # Runs once a day – not immediately on startup, but after 1 hour
+    scheduler.add_job(
+        _cleanup_expired_evidence,
+        trigger="interval",
+        hours=CLEANUP_INTERVAL_HOURS,
+        id="evidence_cleanup",
+        name="Expired evidence cleanup",
+        replace_existing=True,
+        next_run_time=datetime.utcnow() + timedelta(hours=1),
+    )
+
+    return scheduler

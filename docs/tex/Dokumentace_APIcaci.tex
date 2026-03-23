@@ -287,22 +287,73 @@ Grafana~\cite{grafana} bude poskytovat webový dashboard pro vizualizaci stavu s
 \newpage
 \subsection{Nasazení -- e-INFRA CZ infrastruktura}
 
-Celý systém poběží na infrastruktuře e-INFRA CZ~\cite{einfra} -- národní výzkumné infrastruktuře pro akademickou komunitu v~ČR. Nasazení bude rozděleno do tří prostředí.
+Celý systém poběží na infrastruktuře e-INFRA CZ~\cite{einfra} -- národní výzkumné
+infrastruktuře pro akademickou komunitu v~ČR. Nasazení je rozděleno do tří prostředí:
+MVP, produkce a batch výpočty.
 
-MVP (Docker~\cite{docker} Compose) poběží na virtuálním serveru v~e-INFRA CZ OpenStack~\cite{openstack} Cloud (G2 Brno / G2 Ostrava). VM s~GPU pro embedding/VLM workery. Reverse proxy: Traefik (potvrzeno). Perzistentní svazky na Ceph block storage. TLS přes cert-manager + Let's Encrypt.
+MVP prostředí běží na virtuálním serveru v~e-INFRA CZ OpenStack~\cite{openstack} Cloud
+(lokality G2 Brno a G2 Ostrava) s~GPU pro embedding a VLM workery. Jako reverse proxy
+slouží Traefik~\cite{traefik} (potvrzeno), perzistentní svazky jsou namapovány na Ceph
+block storage a TLS certifikáty jsou získávány automaticky přes cert-manager spolu
+s~Let's Encrypt. Nasazení probíhá pomocí Docker~\cite{docker} Compose.
 
-Produkční Kubernetes poběží na CERIT-SC Kubernetes platformě spravované přes Rancher. Ingress: NGINX Ingress (default v~Rancher) nebo Traefik dle omezení clusteru. TLS: cert-manager s~\texttt{letsencrypt-prod} ClusterIssuer. K~dispozici: MinIO Operator pro S3, CloudNative-PG pro PostgreSQL, GPU (NVIDIA L40/L40S 48GB, T4 16GB), Harbor~\cite{harbor} (\texttt{hub.cerit.io}) jako container registry, namespace separation (core vs monitoring).
+Produkční prostředí běží na platformě CERIT-SC Kubernetes spravované přes Rancher.
+Ingress zajišťuje NGINX Ingress (výchozí v~Rancher) nebo Traefik dle omezení clusteru;
+TLS je řešeno přes cert-manager s~\texttt{letsencrypt-prod} ClusterIssuerem. K~dispozici
+jsou MinIO Operator pro objektové úložiště S3, CloudNative-PG pro PostgreSQL, GPU uzly
+(NVIDIA L40/L40S 48\,GB a T4 16\,GB), Harbor~\cite{harbor} na \texttt{hub.cerit.io} jako
+container registry a oddělené namespace pro aplikační a monitoring vrstvu.
 
-Batch a~AI výpočty poběží na MetaCentrum Grid (PBS scheduler). GPU clustery: alfrid (NVIDIA L40/L40S 48GB pro 70B Q4 modely), DGX H100 (8x H100 80GB, on-demand), T4 15GB (embedding, VLM extrakce). Výpočty poběží v~Singularity (Apptainer)~\cite{apptainer} kontejnerech s~NGC images přes CVMFS. Doplňkově CERIT-SC AIaaS (OpenAI-compatible API).
+Výpočetně náročné batch a AI úlohy poběží na MetaCentrum Grid s~PBS schedulerem.
+Dostupné GPU clustery jsou alfrid (NVIDIA L40/L40S 48\,GB pro modely 70B v~kvantizaci Q4),
+DGX H100 (8$\times$H100 80\,GB, on-demand) a T4 15\,GB pro embedding a VLM extrakci.
+Výpočty probíhají v~kontejnerech Singularity (Apptainer)~\cite{apptainer} s~NGC obrazy
+přes CVMFS; doplňkově je k~dispozici CERIT-SC AIaaS jako OpenAI-kompatibilní API.
 
-CI/CD: 13 vývojářů na GitHubu. Pipeline: build Docker images, testy (Pytest~\cite{pytest} backend, Playwright E2E), push do Harbor, kubectl deploy na K8s s~GitHub Actions~\cite{ghactions}. Volitelně mirror na \texttt{gitlab.ics.muni.cz} pro GitLab K8s Agent. Aplikace vystavené na CERIT-SC budou dostupné pod doménou \texttt{*.dyn.cloud.e-infra.cz} s~automatickou DNS registrací. Přehled nasazení je na obr.~\ref{fig:layer5}.
+CI/CD pipeline pokrývá všech 13 vývojářů pracujících na GitHubu. Pipeline sestaví Docker
+obrazy, spustí testy (Pytest~\cite{pytest} pro backend, Playwright pro E2E), publikuje obrazy
+do Harbor a nasadí na Kubernetes pomocí GitHub Actions~\cite{ghactions}. Volitelně je
+k~dispozici mirror na \texttt{gitlab.ics.muni.cz} pro integraci s~GitLab Kubernetes Agentem.
+Aplikace vystavené na CERIT-SC jsou dostupné pod doménou \texttt{*.dyn.cloud.e-infra.cz}
+s~automatickou DNS registrací. Přehled nasazení zachycují obr.~\ref{fig:layer5}
+a~obr.~\ref{fig:infra-scheme}; harmonogram postupného nasazení je uveden
+v~obr.~\ref{fig:gantt-nasazeni}.
 
 \begin{figure}[H]
-\centering
-\includegraphics[width=\textwidth]{layer5.png}
-\caption{Nasazení na e-INFRA CZ}
-\label{fig:layer5}
+  \centering
+  \includegraphics[width=\textwidth]{layer5.png}
+  \caption{Přehled nasazení na e-INFRA CZ}
+  \label{fig:layer5}
 \end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{ASS-Infra-Deployment-scheme.png}
+  \caption{Základní schéma nasazení systému}
+  \label{fig:infra-scheme}
+\end{figure}
+
+Harmonogram nasazení (obr.~\ref{fig:gantt-nasazeni}) pokrývá dvouměsíční období od
+22.\,března do 22.\,května 2026 a je rozdělen do čtyř souběžně probíhajících proudů.
+V~prvním týdnu se zřizuje virtuální server a spouští MVP prostředí na Docker Compose
+včetně Traefiku a TLS; embedding a VLM workery jsou funkční do konce třetího týdne,
+kdy proběhne první smoke test. Souběžně se od druhého týdne připravuje produkční
+Kubernetes cluster -- nastavují se namespace, RBAC, Ingress a operátory pro databáze
+a objektové úložiště -- a produkční prostředí je akceptováno v~sedmém týdnu. Batch
+a AI výpočty na MetaCentrum Grid startují od druhého týdne konfigurací PBS jobů
+a Singularity kontejnerů; inference na GPU clusterech alfrid a DGX H100 je postupně
+zprovozňována v~průběhu druhého měsíce. CI/CD pipeline na GitHub Actions a monitoring
+běží průběžně po celou dobu nasazení a zajišťují kontinuální integraci napříč
+všemi prostředími.
+
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{gantt_nasazeni_einfra_1.pdf}
+  \caption{Harmonogram nasazení na e-INFRA CZ (22.\,3.\,--\,22.\,5.\,2026)}
+  \label{fig:gantt-nasazeni}
+\end{figure}
+
 
 \newpage
 % ══════════ 6. PIPELINE DIAGRAM ══════════

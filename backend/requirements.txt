@@ -1,0 +1,45 @@
+# ── Web framework ────────────────────────────────
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+
+# ── Database ─────────────────────────────────────
+sqlalchemy==2.0.30
+psycopg2-binary==2.9.9
+alembic==1.13.1              # Database migrations (schema changes over time)
+
+# ── Authentication ────────────────────────────────
+python-jose[cryptography]==3.3.0   # JWT tokens
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1             # Password hashing
+python-multipart==0.0.9            # Form data (login forms)
+
+# ── RabbitMQ / Job Queue ──────────────────────────
+pika==1.3.2                  # RabbitMQ client (AMQP protokol)
+
+# ── Crawl scheduler ───────────────────────────────
+APScheduler==3.10.4          # Periodické spouštění úloh (automatický crawl)
+
+# ── File Storage (MinIO / S3) ─────────────────────
+boto3==1.34.101              # AWS SDK - works with MinIO too
+
+# ── Web Scraping ──────────────────────────────────
+httpx==0.27.0                # Async HTTP client (fetch HTML pages)
+playwright==1.44.0           # Headless browser (render JS pages, take screenshots)
+beautifulsoup4==4.12.3       # Parse HTML
+
+# ── AI / LLM ──────────────────────────────────────
+openai>=1.30.0               # OpenAI-compatible client (used for Ollama)
+
+# ── Embeddings (local, no API key needed) ─────────
+sentence-transformers==3.0.1 # Converts text to vectors for semantic search
+# This downloads the model on first run (~90MB, cached after that)
+
+# ── Vector Database ───────────────────────────────
+qdrant-client==1.9.1         # Client for Qdrant vector database
+
+# ── Utilities ─────────────────────────────────────
+pydantic-settings==2.2.1     # Settings management from environment variables
+python-dotenv==1.0.1         # Load .env files
+Pillow==10.3.0               # Image processing
+aiofiles==23.2.1             # Async file operations
+tenacity==8.3.0              # Retry logic (for flaky network requests)
