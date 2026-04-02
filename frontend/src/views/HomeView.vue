@@ -5,6 +5,10 @@ import InputText from 'primevue/inputtext';
 import Card from 'primevue/card';
 import { useCounterStore } from '@/stores/counter';
 
+// Remove later these are examples
+import ItemsCard from '@/views/ExampleItems.vue'
+import RagCard from '@/views/ExampleRag.vue'
+
 const counter = useCounterStore();
 const text = ref('');
 </script>
@@ -36,6 +40,10 @@ const text = ref('');
           </div>
         </template>
       </Card>
+
+      <!-- Connected API example remvove later-->
+      <ItemsCard/>
+      <RagCard />
     </div>
   </main>
 </template>
