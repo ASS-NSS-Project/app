@@ -90,10 +90,22 @@ DOMAIN=your-server-ip-or-domain
 ACME_EMAIL=you@example.com
 ```
 
-### 3. Start the system
+### 3. Create the Traefik certificate file
+
+Traefik needs a writable file (not a directory) for TLS certificates. Git does not track it, so create it manually after cloning:
 
 ```bash
+touch acme.json && chmod 600 acme.json
+```
+
+### 4. Start the system
+
+```bash
+# CPU-only (default):
 docker compose up --build
+
+# With NVIDIA GPU acceleration for Ollama:
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
 ```
 
 This will:
@@ -107,7 +119,7 @@ rag_api    | INFO: Startup complete. API ready.
 rag_worker | INFO: Worker ready. Listening on queue: ingest
 ```
 
-### 4. Pull the Ollama models
+### 5. Pull the Ollama models
 
 On first run, Ollama starts empty. Pull the models it needs:
 
@@ -118,7 +130,7 @@ docker exec rag_ollama ollama pull qwen3-vl:2b
 
 This downloads ~2–4 GB of model weights. Only needed once — models are stored in a persistent Docker volume.
 
-### 5. Open the UI
+### 6. Open the UI
 
 Go to: **http://localhost**
 

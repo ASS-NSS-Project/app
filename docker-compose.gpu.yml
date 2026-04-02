@@ -1,0 +1,15 @@
+# GPU override — use this if you have an NVIDIA GPU:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+#
+# Without this override, Ollama runs on CPU only.
+
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
