@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+jobs:
+  # ── Commit message lint (mirrors ASS-NSS-Project/repo convention) ────────
+  commit-message-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install pre-commit
+        run: pip install pre-commit
+
+      - name: Check commit messages
+        run: pre-commit run --hook-stage commit-msg --from-ref HEAD~1 --to-ref HEAD || true
+
+  # ── Backend tests ────────────────────────────────────────────────────────
+  backend-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: rag
+          POSTGRES_PASSWORD: rag
+          POSTGRES_DB: rag
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt pytest pytest-asyncio httpx
+
+      - name: Run tests
+        working-directory: .
+        env:
+          DATABASE_URL: postgresql://rag:rag@localhost:5432/rag
+          REDIS_URL: redis://localhost:6379
+          SECRET_KEY: ci-test-secret-key-not-for-production
+          ADMIN_EMAIL: admin@test.local
+          ADMIN_PASSWORD: testpassword123
+          FRONTEND_URL: http://localhost:5173
+        run: pytest tests/ -v
+
+  # ── Frontend build check ─────────────────────────────────────────────────
+  frontend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Type-check and build
+        run: npm run build

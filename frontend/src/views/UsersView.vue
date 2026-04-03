@@ -6,47 +6,49 @@
         <p>User accounts and roles</p>
       </div>
 
-      <div v-if="loading" class="empty-state"><span class="loading"></span></div>
-      <div v-else-if="error" class="alert alert-error">{{ error }}</div>
-      <div v-else class="card" style="padding:0;overflow:hidden">
-        <table>
-          <thead>
-            <tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Action</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="u in users" :key="u.id">
-              <td>{{ u.email }}</td>
-              <td class="muted-cell">{{ u.full_name ?? '—' }}</td>
-              <td>
-                <select
-                  v-if="isAdmin"
-                  class="inline-select"
-                  :value="u.role"
-                  @change="changeRole(u.id, ($event.target as HTMLSelectElement).value)"
-                >
-                  <option v-for="r in roles" :key="r" :value="r">{{ r }}</option>
-                </select>
-                <span v-else class="badge badge-blue">{{ u.role }}</span>
-              </td>
-              <td>
-                <span class="badge" :class="u.is_active ? 'badge-green' : 'badge-red'">
-                  {{ u.is_active ? 'active' : 'inactive' }}
-                </span>
-              </td>
-              <td>
-                <button
-                  v-if="isAdmin && u.id !== currentUserId"
-                  class="btn btn-sm"
-                  :class="u.is_active ? 'btn-danger' : 'btn-success'"
-                  @click="toggleActive(u.id, !u.is_active)"
-                >
-                  {{ u.is_active ? 'Deactivate' : 'Activate' }}
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <div v-if="error" class="alert alert-error">{{ error }}</div>
+
+      <DataTable :value="users" :loading="loading" size="small" stripedRows>
+        <Column field="email" header="Email" />
+        <Column field="full_name" header="Name">
+          <template #body="{ data }">
+            <span style="color: var(--muted); font-size:13px">{{ data.full_name ?? '—' }}</span>
+          </template>
+        </Column>
+        <Column field="role" header="Role">
+          <template #body="{ data }">
+            <Select
+              v-if="isAdmin"
+              :model-value="data.role"
+              :options="roles"
+              size="small"
+              style="min-width: 110px"
+              @update:model-value="(v: string) => changeRole(data.id, v)"
+            />
+            <Tag v-else :value="data.role" severity="info" rounded />
+          </template>
+        </Column>
+        <Column field="is_active" header="Status">
+          <template #body="{ data }">
+            <Tag
+              :value="data.is_active ? 'active' : 'inactive'"
+              :severity="data.is_active ? 'success' : 'danger'"
+              rounded
+            />
+          </template>
+        </Column>
+        <Column header="Action">
+          <template #body="{ data }">
+            <Button
+              v-if="isAdmin && data.id !== currentUserId"
+              :label="data.is_active ? 'Deactivate' : 'Activate'"
+              :severity="data.is_active ? 'danger' : 'success'"
+              size="small"
+              @click="toggleActive(data.id, !data.is_active)"
+            />
+          </template>
+        </Column>
+      </DataTable>
     </div>
   </AppLayout>
 </template>
@@ -57,6 +59,11 @@ import AppLayout from '@/components/AppLayout.vue'
 import { get, patch } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import type { UserResponse } from '@/api/types'
+import DataTable from 'primevue/datatable'
+import Column from 'primevue/column'
+import Button from 'primevue/button'
+import Select from 'primevue/select'
+import Tag from 'primevue/tag'
 
 const auth = useAuthStore()
 const users = ref<UserResponse[]>([])
@@ -99,7 +106,3 @@ async function toggleActive(userId: string, isActive: boolean) {
 
 onMounted(loadUsers)
 </script>
-
-<style scoped>
-.muted-cell { font-size: 13px; color: var(--muted); }
-</style>

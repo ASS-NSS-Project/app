@@ -25,39 +25,49 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="mb-2">
         <div class="card-title">Recent Jobs</div>
         <div class="card-meta">Latest ingest activity</div>
-
-        <div v-if="loadingJobs" class="empty-state">
-          <span class="loading"></span>
-        </div>
-        <div v-else-if="!recentJobs.length" class="empty-state">
-          <div class="icon">📭</div>
-          <p>No jobs yet. Add a source and trigger ingest.</p>
-        </div>
-        <table v-else>
-          <thead>
-            <tr>
-              <th>Source</th><th>URL</th><th>Status</th><th>Strategy</th><th>Time</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="j in recentJobs" :key="j.id">
-              <td>{{ j.source_name }}</td>
-              <td class="url-cell">
-                <a :href="j.url" target="_blank">{{ j.url }}</a>
-              </td>
-              <td><StatusBadge :status="j.status" /></td>
-              <td>
-                <span v-if="j.strategy_used" class="badge badge-gray">{{ j.strategy_used }}</span>
-                <span v-else>—</span>
-              </td>
-              <td class="time-cell">{{ formatDate(j.created_at) }}</td>
-            </tr>
-          </tbody>
-        </table>
       </div>
+
+      <DataTable
+        :value="recentJobs"
+        :loading="loadingJobs"
+        stripedRows
+        size="small"
+      >
+        <template #empty>
+          <div class="empty-state">
+            <div class="icon">📭</div>
+            <p>No jobs yet. Add a source and trigger ingest.</p>
+          </div>
+        </template>
+        <Column field="source_name" header="Source" />
+        <Column field="url" header="URL">
+          <template #body="{ data }">
+            <a :href="data.url" target="_blank" style="color: var(--accent); font-size: 12px"
+               class="max-w-xs overflow-hidden text-ellipsis whitespace-nowrap block">
+              {{ data.url }}
+            </a>
+          </template>
+        </Column>
+        <Column field="status" header="Status">
+          <template #body="{ data }">
+            <StatusBadge :status="data.status" />
+          </template>
+        </Column>
+        <Column field="strategy_used" header="Strategy">
+          <template #body="{ data }">
+            <Tag v-if="data.strategy_used" :value="data.strategy_used" severity="secondary" rounded />
+            <span v-else style="color: var(--muted)">—</span>
+          </template>
+        </Column>
+        <Column field="created_at" header="Time">
+          <template #body="{ data }">
+            <span style="color: var(--muted); font-size: 12px">{{ formatDate(data.created_at) }}</span>
+          </template>
+        </Column>
+      </DataTable>
     </div>
   </AppLayout>
 </template>
@@ -68,6 +78,9 @@ import AppLayout from '@/components/AppLayout.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { get } from '@/api/client'
 import type { StatsResponse, SourceResponse, JobResponse } from '@/api/types'
+import DataTable from 'primevue/datatable'
+import Column from 'primevue/column'
+import Tag from 'primevue/tag'
 
 interface RecentJob extends JobResponse {
   source_name: string
@@ -105,14 +118,3 @@ onMounted(async () => {
   }
 })
 </script>
-
-<style scoped>
-.url-cell {
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.url-cell a { color: var(--accent); }
-.time-cell { color: var(--muted); font-size: 12px; white-space: nowrap; }
-</style>

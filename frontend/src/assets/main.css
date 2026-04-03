@@ -1,3 +1,7 @@
+/* Layer ordering: PrimeVue sits between Tailwind base and utilities */
+@layer tailwind-base, primevue, tailwind-utilities;
+@import "tailwindcss";
+
 :root {
   --bg: #0f1117;
   --surface: #1a1d27;
@@ -54,64 +58,6 @@ body {
   font-weight: 500;
   letter-spacing: 0.3px;
 }
-.field input,
-.field select,
-.field textarea {
-  width: 100%;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px 12px;
-  color: var(--text);
-  font-size: 13px;
-  outline: none;
-  transition: border 0.15s;
-  font-family: inherit;
-}
-.field input:focus,
-.field select:focus,
-.field textarea:focus { border-color: var(--accent); }
-.field textarea { resize: vertical; min-height: 80px; }
-
-/* ── Buttons ── */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  transition: all 0.15s;
-  font-family: inherit;
-  text-decoration: none;
-}
-.btn-primary { background: var(--accent); color: #fff; }
-.btn-primary:hover { background: #5a7aff; }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
-.btn-secondary:hover { background: var(--border); }
-.btn-danger { background: rgba(248,113,113,.12); color: var(--danger); border: 1px solid rgba(248,113,113,.2); }
-.btn-success { background: rgba(52,211,153,.12); color: var(--success); border: 1px solid rgba(52,211,153,.2); }
-.btn-sm { padding: 5px 10px; font-size: 12px; }
-
-/* ── Tables ── */
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th {
-  text-align: left;
-  padding: 10px 12px;
-  color: var(--muted);
-  font-weight: 500;
-  font-size: 11px;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  border-bottom: 1px solid var(--border);
-}
-td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-tr:last-child td { border-bottom: none; }
-tr:hover td { background: var(--surface2); }
 
 /* ── Badges ── */
 .badge {
@@ -127,27 +73,6 @@ tr:hover td { background: var(--surface2); }
 .badge-red { background: rgba(248,113,113,.12); color: var(--danger); }
 .badge-blue { background: rgba(108,143,255,.12); color: var(--accent); }
 .badge-gray { background: var(--surface2); color: var(--muted); }
-
-/* ── Modal ── */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.6);
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.modal {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 28px;
-  width: 460px;
-  max-width: 90vw;
-}
-.modal h3 { font-size: 16px; margin-bottom: 20px; }
-.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
 
 /* ── Stats grid ── */
 .stats-grid {
@@ -168,7 +93,6 @@ tr:hover td { background: var(--surface2); }
 /* ── Alert ── */
 .alert { padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 12px; }
 .alert-error { background: rgba(248,113,113,.1); border: 1px solid rgba(248,113,113,.2); color: var(--danger); }
-.alert-success { background: rgba(52,211,153,.1); border: 1px solid rgba(52,211,153,.2); color: var(--success); }
 
 /* ── Empty state ── */
 .empty-state { text-align: center; padding: 48px 20px; color: var(--muted); }
@@ -187,7 +111,7 @@ tr:hover td { background: var(--surface2); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── Inline select (for query options) ── */
+/* ── Inline controls (query options row) ── */
 .inline-select {
   background: var(--surface2);
   border: 1px solid var(--border);
@@ -207,3 +131,25 @@ tr:hover td { background: var(--surface2); }
   font-size: 12px;
   font-family: inherit;
 }
+
+/* ── PrimeVue overrides for dark theme ── */
+.p-datatable {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.p-datatable .p-datatable-header { background: var(--surface); border-color: var(--border); }
+.p-datatable .p-datatable-thead > tr > th {
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-color: var(--border);
+}
+.p-datatable .p-datatable-tbody > tr { background: var(--surface); color: var(--text); }
+.p-datatable .p-datatable-tbody > tr:hover > td { background: var(--surface2); }
+.p-datatable .p-datatable-tbody > tr > td { border-color: var(--border); font-size: 13px; }
+.p-datatable .p-datatable-tbody > tr:last-child > td { border-bottom: none; }

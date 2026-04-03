@@ -1,59 +1,67 @@
-import axios from 'axios'
-import type { AxiosInstance } from 'axios'
-
-// Lazily import the auth store to avoid circular dependency at module load time
 function getToken(): string | null {
   return localStorage.getItem('rag_token')
 }
 
-const http: AxiosInstance = axios.create({
-  baseURL: '/',
-})
-
-http.interceptors.request.use((config) => {
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  const headers: Record<string, string> = {}
   const token = getToken()
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+
+  const res = await fetch(path, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  })
+
+  if (res.status === 401) {
+    localStorage.removeItem('rag_token')
+    localStorage.removeItem('rag_user')
+    window.location.hash = '#/login'
+    throw new Error('Unauthorized')
   }
-  return config
-})
 
-http.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    // Redirect to login on 401
-    if (error.response?.status === 401) {
-      localStorage.removeItem('rag_token')
-      localStorage.removeItem('rag_user')
-      window.location.hash = '#/login'
-    }
-    return Promise.reject(error)
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw Object.assign(
+      new Error((data as { detail?: string })?.detail ?? `HTTP ${res.status}`),
+      { response: { data } },
+    )
   }
-)
 
-export async function get<T>(path: string, params?: Record<string, unknown>): Promise<T> {
-  const res = await http.get<T>(path, { params })
-  return res.data
+  return res.json() as Promise<T>
 }
 
-export async function post<T>(path: string, body?: unknown): Promise<T> {
-  const res = await http.post<T>(path, body)
-  return res.data
+export function get<T>(path: string): Promise<T> {
+  return request<T>('GET', path)
 }
 
-export async function patch<T>(path: string, body?: unknown): Promise<T> {
-  const res = await http.patch<T>(path, body)
-  return res.data
+export function post<T>(path: string, body?: unknown): Promise<T> {
+  return request<T>('POST', path, body)
 }
 
-export async function del<T>(path: string): Promise<T> {
-  const res = await http.delete<T>(path)
-  return res.data
+export function patch<T>(path: string, body?: unknown): Promise<T> {
+  return request<T>('PATCH', path, body)
+}
+
+export function del<T>(path: string): Promise<T> {
+  return request<T>('DELETE', path)
 }
 
 // Login uses application/x-www-form-urlencoded (OAuth2PasswordRequestForm)
 export async function loginForm(username: string, password: string) {
   const body = new URLSearchParams({ username, password })
-  const res = await axios.post('/auth/login', body)
-  return res.data
+  const res = await fetch('/auth/login', { method: 'POST', body })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw Object.assign(
+      new Error((data as { detail?: string })?.detail ?? 'Login failed'),
+      { response: { data } },
+    )
+  }
+  return res.json()
 }

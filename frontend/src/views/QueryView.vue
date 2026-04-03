@@ -6,77 +6,109 @@
         <p>Ask questions about indexed content</p>
       </div>
 
-      <div class="query-box">
-        <div class="query-input-row">
-          <textarea
+      <div class="card mb-5">
+        <div class="flex gap-3">
+          <Textarea
             v-model="question"
             placeholder="Ask a question about the indexed content..."
             rows="3"
+            autoResize
+            style="flex: 1"
             @keydown.ctrl.enter="doQuery"
-          ></textarea>
-          <button class="btn btn-primary ask-btn" :disabled="loading" @click="doQuery">
-            <span v-if="loading" class="loading"></span>
-            <span v-else>Ask</span>
-          </button>
+          />
+          <Button
+            label="Ask"
+            :loading="loading"
+            style="align-self: flex-end"
+            @click="doQuery"
+          />
         </div>
 
-        <div class="query-options">
-          <label>
-            Mode:
-            <select v-model="mode" class="inline-select">
-              <option value="rag">RAG (with retrieval)</option>
-              <option value="no_rag">No-RAG (model only)</option>
-            </select>
-          </label>
-          <label>
-            Top-K:
-            <input v-model.number="topK" type="number" min="1" max="20" class="inline-input" />
-          </label>
-          <label>
-            Source:
-            <select v-model="sourceId" class="inline-select">
-              <option value="">All sources</option>
-              <option v-for="s in sources" :key="s.id" :value="s.id">{{ s.name }}</option>
-            </select>
-          </label>
-          <label>
-            <input v-model="strictGrounding" type="checkbox" />
-            Strict grounding
-          </label>
-        </div>
-      </div>
-
-      <div v-if="result" class="answer-box">
-        <div class="answer-header">
-          <span class="badge" :class="result.mode === 'rag' ? 'badge-blue' : 'badge-gray'">
-            {{ result.mode.toUpperCase() }}
-          </span>
-          <span class="badge badge-gray">{{ result.chunks_retrieved }} chunks retrieved</span>
-        </div>
-        <div class="answer-text">{{ result.answer }}</div>
-
-        <div v-if="result.citations.length" class="citations-section">
-          <h4>Sources Used</h4>
-          <div v-for="c in result.citations" :key="c.index" class="citation-item">
-            <span class="citation-score">Score: {{ c.relevance_score }}</span>
-            <div class="citation-url">[{{ c.index }}] {{ c.url }}</div>
-            <div class="citation-text">{{ c.text }}</div>
+        <div class="flex gap-3 mt-3 flex-wrap items-center text-xs" style="color: var(--muted)">
+          <div class="flex items-center gap-2">
+            <span>Mode:</span>
+            <Select
+              v-model="mode"
+              :options="modeOptions"
+              optionLabel="label"
+              optionValue="value"
+              size="small"
+            />
+          </div>
+          <div class="flex items-center gap-2">
+            <span>Top-K:</span>
+            <InputNumber v-model="topK" :min="1" :max="20" size="small" style="width: 80px" />
+          </div>
+          <div class="flex items-center gap-2">
+            <span>Source:</span>
+            <Select
+              v-model="sourceId"
+              :options="sourceOptions"
+              optionLabel="label"
+              optionValue="value"
+              size="small"
+            />
+          </div>
+          <div class="flex items-center gap-2">
+            <Checkbox v-model="strictGrounding" :binary="true" inputId="strict" />
+            <label for="strict" style="cursor: pointer">Strict grounding</label>
           </div>
         </div>
       </div>
 
-      <div v-if="queryError" class="answer-box">
-        <div class="answer-text error-text">Error: {{ queryError }}</div>
+      <div v-if="result" class="card">
+        <div class="flex items-center gap-3 mb-4">
+          <Tag :value="result.mode.toUpperCase()" :severity="result.mode === 'rag' ? 'info' : 'secondary'" />
+          <Tag :value="`${result.chunks_retrieved} chunks`" severity="secondary" />
+        </div>
+        <div style="line-height: 1.7; font-size: 14px; white-space: pre-wrap">{{ result.answer }}</div>
+
+        <div v-if="result.citations.length" class="mt-5 pt-4" style="border-top: 1px solid var(--border)">
+          <h4 class="text-xs mb-3" style="color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px">
+            Sources Used
+          </h4>
+          <div
+            v-for="c in result.citations"
+            :key="c.index"
+            class="rounded mb-2 p-3"
+            style="background: var(--surface2); border: 1px solid var(--border)"
+          >
+            <div class="flex justify-between mb-1">
+              <span class="text-xs" style="color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
+                [{{ c.index }}] {{ c.url }}
+              </span>
+              <span class="text-xs" style="color: var(--success); flex-shrink: 0; margin-left: 8px">
+                Score: {{ c.relevance_score }}
+              </span>
+            </div>
+            <div class="text-xs" style="color: var(--muted); line-height: 1.5">{{ c.text }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="queryError" class="card">
+        <div style="color: var(--danger); font-size: 14px">Error: {{ queryError }}</div>
       </div>
     </div>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
 import { get, post } from '@/api/client'
 import type { SourceResponse, QueryResponse } from '@/api/types'
+import Button from 'primevue/button'
+import Textarea from 'primevue/textarea'
+import Select from 'primevue/select'
+import InputNumber from 'primevue/inputnumber'
+import Checkbox from 'primevue/checkbox'
+import Tag from 'primevue/tag'
+
+const modeOptions = [
+  { label: 'RAG (with retrieval)', value: 'rag' },
+  { label: 'No-RAG (model only)', value: 'no_rag' },
+]
 
 const question = ref('')
 const mode = ref<'rag' | 'no_rag'>('rag')
@@ -87,6 +119,11 @@ const loading = ref(false)
 const result = ref<QueryResponse | null>(null)
 const queryError = ref('')
 const sources = ref<SourceResponse[]>([])
+
+const sourceOptions = computed(() => [
+  { label: 'All sources', value: '' },
+  ...sources.value.map(s => ({ label: s.name, value: s.id })),
+])
 
 async function doQuery() {
   if (!question.value.trim()) return
@@ -117,73 +154,3 @@ onMounted(async () => {
   }
 })
 </script>
-
-<style scoped>
-.query-box {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 20px;
-  margin-bottom: 20px;
-}
-.query-input-row { display: flex; gap: 10px; }
-.query-input-row textarea {
-  flex: 1;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 10px 14px;
-  color: var(--text);
-  font-size: 14px;
-  outline: none;
-  resize: none;
-  min-height: 60px;
-  font-family: inherit;
-}
-.query-input-row textarea:focus { border-color: var(--accent); }
-.ask-btn { align-self: flex-end; }
-
-.query-options {
-  display: flex;
-  gap: 12px;
-  margin-top: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-  font-size: 12px;
-  color: var(--muted);
-}
-.query-options label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
-
-.answer-box {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 20px;
-}
-.answer-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-.answer-text { line-height: 1.7; font-size: 14px; white-space: pre-wrap; }
-.error-text { color: var(--danger); }
-
-.citations-section {
-  margin-top: 20px;
-  border-top: 1px solid var(--border);
-  padding-top: 16px;
-}
-.citations-section h4 {
-  font-size: 12px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 12px;
-}
-.citation-item {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 10px 12px;
-  margin-bottom: 8px;
-}
-.citation-url { font-size: 11px; color: var(--accent); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.citation-text { font-size: 12px; color: var(--muted); line-height: 1.5; }
-.citation-score { font-size: 11px; color: var(--success); float: right; }
-</style>

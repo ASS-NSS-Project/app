@@ -1,11 +1,20 @@
 <template>
   <div class="app-shell">
     <AppSidebar />
-    <div class="main-wrapper">
-      <header class="topbar">
-        <div class="topbar-right">
-          <span class="topbar-username">{{ auth.user?.username ?? auth.user?.email }}</span>
-          <button class="topbar-signout" @click="doLogout">Sign out</button>
+    <div class="main-wrapper flex flex-col flex-1 min-w-0">
+      <header class="topbar flex items-center justify-end px-5 h-12 flex-shrink-0"
+              style="border-bottom: 1px solid var(--border); background: var(--surface)">
+        <div class="flex items-center gap-4">
+          <span class="text-sm" style="color: var(--text)">
+            {{ auth.user?.username ?? auth.user?.email }}
+          </span>
+          <Button
+            label="Sign out"
+            severity="danger"
+            text
+            size="small"
+            @click="doLogout"
+          />
         </div>
       </header>
       <main class="main-content">
@@ -19,6 +28,7 @@
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import AppSidebar from './AppSidebar.vue'
+import Button from 'primevue/button'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -30,52 +40,10 @@ function doLogout() {
 </script>
 
 <style scoped>
-.app-shell {
-  display: flex;
-  height: 100vh;
-}
-
 .main-wrapper {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-width: 0;
-}
-
-.topbar {
-  height: 48px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0 20px;
-  background: var(--surface);
-  flex-shrink: 0;
-}
-
-.topbar-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.topbar-username {
-  font-size: 13px;
-  color: var(--text);
-}
-
-.topbar-signout {
-  font-size: 12px;
-  color: var(--danger);
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-family: inherit;
-  padding: 0;
-}
-
-.main-content {
-  flex: 1;
-  overflow: auto;
 }
 </style>

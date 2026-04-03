@@ -1,33 +1,43 @@
 <template>
   <AppLayout>
     <div class="page">
+
       <!-- Jobs panel view -->
       <template v-if="jobsPanel">
         <div class="page-header">
           <div class="page-actions">
-            <button class="btn btn-secondary btn-sm" @click="closeJobs">← Back to Sources</button>
-            <button class="btn btn-primary btn-sm" @click="triggerIngest(jobsPanel.sourceId, jobsPanel.baseUrl)">▶ Re-ingest</button>
+            <Button label="← Back to Sources" severity="secondary" size="small" @click="closeJobs" />
+            <Button label="▶ Re-ingest" size="small" @click="triggerIngest(jobsPanel.sourceId, jobsPanel.baseUrl)" />
             <span class="panel-title">Ingest Jobs</span>
           </div>
         </div>
 
-        <div v-if="!jobsPanel.jobs.length" class="empty-state">
-          <div class="icon">📭</div><p>No jobs yet.</p>
-        </div>
-        <div v-else class="card" style="padding:0;overflow:hidden">
-          <table>
-            <thead><tr><th>URL</th><th>Status</th><th>Strategy</th><th>Error</th><th>Time</th></tr></thead>
-            <tbody>
-              <tr v-for="j in jobsPanel.jobs" :key="j.id">
-                <td class="url-cell">{{ j.url.slice(0, 60) }}</td>
-                <td><StatusBadge :status="j.status" /></td>
-                <td>{{ j.strategy_used ?? '—' }}</td>
-                <td class="error-cell">{{ j.error_message?.slice(0, 80) ?? '—' }}</td>
-                <td class="time-cell">{{ j.created_at.slice(0, 16).replace('T', ' ') }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <DataTable :value="jobsPanel.jobs" size="small" stripedRows>
+          <template #empty>
+            <div class="empty-state"><div class="icon">📭</div><p>No jobs yet.</p></div>
+          </template>
+          <Column field="url" header="URL">
+            <template #body="{ data }">
+              <span style="font-size:12px">{{ data.url.slice(0, 60) }}</span>
+            </template>
+          </Column>
+          <Column field="status" header="Status">
+            <template #body="{ data }"><StatusBadge :status="data.status" /></template>
+          </Column>
+          <Column field="strategy_used" header="Strategy">
+            <template #body="{ data }">{{ data.strategy_used ?? '—' }}</template>
+          </Column>
+          <Column field="error_message" header="Error">
+            <template #body="{ data }">
+              <span style="color: var(--danger); font-size:11px">{{ data.error_message?.slice(0, 80) ?? '—' }}</span>
+            </template>
+          </Column>
+          <Column field="created_at" header="Time">
+            <template #body="{ data }">
+              <span style="color: var(--muted); font-size:11px">{{ data.created_at.slice(0, 16).replace('T', ' ') }}</span>
+            </template>
+          </Column>
+        </DataTable>
       </template>
 
       <!-- Sources list view -->
@@ -36,107 +46,129 @@
           <h2>Sources</h2>
           <p>Websites and URLs to monitor and index</p>
           <div class="page-actions">
-            <button class="btn btn-primary" @click="showAdd = true">+ Add Source</button>
+            <Button label="+ Add Source" @click="showAdd = true" />
           </div>
         </div>
 
-        <div v-if="loading" class="empty-state"><span class="loading"></span></div>
-        <div v-else-if="error" class="alert alert-error">{{ error }}</div>
-        <div v-else-if="!sources.length" class="empty-state">
-          <div class="icon">🌐</div>
-          <p>No sources yet. Click "Add Source" to register a website.</p>
-        </div>
-        <div v-else class="card" style="padding:0;overflow:hidden">
-          <table>
-            <thead>
-              <tr><th>Name</th><th>URL</th><th>Strategy</th><th>Permission</th><th>Actions</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="s in sources" :key="s.id">
-                <td><strong>{{ s.name }}</strong></td>
-                <td><a :href="s.base_url" target="_blank" class="url-link">{{ s.base_url }}</a></td>
-                <td><span class="badge badge-gray">{{ s.preferred_strategy }}</span></td>
-                <td><span class="badge badge-blue">{{ s.permission_type }}</span></td>
-                <td>
-                  <div class="action-group">
-                    <button class="btn btn-sm btn-primary" @click="triggerIngest(s.id, s.base_url)">▶ Ingest</button>
-                    <button class="btn btn-sm btn-secondary" @click="viewJobs(s)">Jobs</button>
-                    <button class="btn btn-sm btn-secondary" @click="openEdit(s)">Edit</button>
-                    <button class="btn btn-sm btn-danger" @click="deleteSource(s)">Delete</button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <div v-if="error" class="alert alert-error">{{ error }}</div>
+
+        <DataTable :value="sources" :loading="loading" size="small" stripedRows>
+          <template #empty>
+            <div class="empty-state">
+              <div class="icon">🌐</div>
+              <p>No sources yet. Click "Add Source" to register a website.</p>
+            </div>
+          </template>
+          <Column field="name" header="Name">
+            <template #body="{ data }"><strong>{{ data.name }}</strong></template>
+          </Column>
+          <Column field="base_url" header="URL">
+            <template #body="{ data }">
+              <a :href="data.base_url" target="_blank" style="color: var(--accent); font-size:12px">{{ data.base_url }}</a>
+            </template>
+          </Column>
+          <Column field="preferred_strategy" header="Strategy">
+            <template #body="{ data }">
+              <Tag :value="data.preferred_strategy" severity="secondary" rounded />
+            </template>
+          </Column>
+          <Column field="permission_type" header="Permission">
+            <template #body="{ data }">
+              <Tag :value="data.permission_type" severity="info" rounded />
+            </template>
+          </Column>
+          <Column header="Actions">
+            <template #body="{ data }">
+              <div class="flex gap-1 flex-wrap">
+                <Button label="▶ Ingest" size="small" @click="triggerIngest(data.id, data.base_url)" />
+                <Button label="Jobs" severity="secondary" size="small" @click="viewJobs(data)" />
+                <Button label="Edit" severity="secondary" size="small" @click="openEdit(data)" />
+                <Button label="Delete" severity="danger" size="small" @click="deleteSource(data)" />
+              </div>
+            </template>
+          </Column>
+        </DataTable>
       </template>
     </div>
 
-    <!-- Add Source Modal -->
-    <div v-if="showAdd" class="modal-backdrop" @click.self="showAdd = false">
-      <div class="modal">
-        <h3>Add New Source</h3>
-        <div v-if="addError" class="alert alert-error">{{ addError }}</div>
-        <div class="field"><label>Name</label><input v-model="addForm.name" placeholder="My Tech Blog" /></div>
-        <div class="field"><label>Base URL</label><input v-model="addForm.base_url" type="url" placeholder="https://example.com" /></div>
-        <div class="field">
-          <label>Permission Type</label>
-          <select v-model="addForm.permission_type">
-            <option value="public">Public</option>
-            <option value="licensed">Licensed</option>
-            <option value="api">API (contractual access)</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Preferred Ingest Strategy</label>
-          <select v-model="addForm.preferred_strategy">
-            <option value="html">HTML fetch (fast, static sites)</option>
-            <option value="rendered">Rendered DOM (JS-heavy sites)</option>
-            <option value="screenshot">Screenshot + AI (complex layouts)</option>
-          </select>
-        </div>
-        <div class="field"><label>Crawl Frequency (hours)</label><input v-model.number="addForm.crawl_frequency_hours" type="number" min="1" /></div>
-        <div class="modal-actions">
-          <button class="btn btn-secondary" @click="showAdd = false">Cancel</button>
-          <button class="btn btn-primary" :disabled="addLoading" @click="doAdd">Add Source</button>
-        </div>
+    <!-- Add Source Dialog -->
+    <Dialog v-model:visible="showAdd" header="Add New Source" modal style="width: 460px">
+      <Message v-if="addError" severity="error" class="mb-4">{{ addError }}</Message>
+      <div class="field"><label>Name</label>
+        <InputText v-model="addForm.name" placeholder="My Tech Blog" fluid />
       </div>
-    </div>
+      <div class="field"><label>Base URL</label>
+        <InputText v-model="addForm.base_url" placeholder="https://example.com" fluid />
+      </div>
+      <div class="field">
+        <label>Permission Type</label>
+        <Select v-model="addForm.permission_type" :options="permissionOptions"
+                optionLabel="label" optionValue="value" fluid />
+      </div>
+      <div class="field">
+        <label>Preferred Ingest Strategy</label>
+        <Select v-model="addForm.preferred_strategy" :options="strategyOptions"
+                optionLabel="label" optionValue="value" fluid />
+      </div>
+      <div class="field"><label>Crawl Frequency (hours)</label>
+        <InputNumber v-model="addForm.crawl_frequency_hours" :min="1" fluid />
+      </div>
+      <template #footer>
+        <Button label="Cancel" severity="secondary" @click="showAdd = false" />
+        <Button label="Add Source" :loading="addLoading" @click="doAdd" />
+      </template>
+    </Dialog>
 
-    <!-- Edit Source Modal -->
-    <div v-if="editSource" class="modal-backdrop" @click.self="editSource = null">
-      <div class="modal">
-        <h3>Edit Source</h3>
-        <div class="field">
-          <label>Preferred Ingest Strategy</label>
-          <select v-model="editForm.preferred_strategy">
-            <option value="html">HTML fetch (fast, static sites)</option>
-            <option value="rendered">Rendered DOM (JS-heavy sites)</option>
-            <option value="screenshot">Screenshot + AI (complex layouts)</option>
-          </select>
-        </div>
-        <div class="field"><label>Crawl Frequency (hours)</label><input v-model.number="editForm.crawl_frequency_hours" type="number" min="1" /></div>
-        <div class="modal-actions">
-          <button class="btn btn-secondary" @click="editSource = null">Cancel</button>
-          <button class="btn btn-primary" :disabled="editLoading" @click="doEdit">Save</button>
-        </div>
+    <!-- Edit Source Dialog -->
+    <Dialog v-model:visible="editVisible" header="Edit Source" modal style="width: 460px">
+      <div class="field">
+        <label>Preferred Ingest Strategy</label>
+        <Select v-model="editForm.preferred_strategy" :options="strategyOptions"
+                optionLabel="label" optionValue="value" fluid />
       </div>
-    </div>
+      <div class="field"><label>Crawl Frequency (hours)</label>
+        <InputNumber v-model="editForm.crawl_frequency_hours" :min="1" fluid />
+      </div>
+      <template #footer>
+        <Button label="Cancel" severity="secondary" @click="editVisible = false" />
+        <Button label="Save" :loading="editLoading" @click="doEdit" />
+      </template>
+    </Dialog>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, reactive } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { get, post, patch, del } from '@/api/client'
 import type { SourceResponse, JobResponse } from '@/api/types'
+import DataTable from 'primevue/datatable'
+import Column from 'primevue/column'
+import Dialog from 'primevue/dialog'
+import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
+import InputNumber from 'primevue/inputnumber'
+import Select from 'primevue/select'
+import Tag from 'primevue/tag'
+import Message from 'primevue/message'
 
 interface JobsPanel {
   sourceId: string
   baseUrl: string
   jobs: JobResponse[]
 }
+
+const permissionOptions = [
+  { label: 'Public', value: 'public' },
+  { label: 'Licensed', value: 'licensed' },
+  { label: 'API (contractual access)', value: 'api' },
+]
+const strategyOptions = [
+  { label: 'HTML fetch (fast, static sites)', value: 'html' },
+  { label: 'Rendered DOM (JS-heavy sites)', value: 'rendered' },
+  { label: 'Screenshot + AI (complex layouts)', value: 'screenshot' },
+]
 
 const sources = ref<SourceResponse[]>([])
 const loading = ref(true)
@@ -155,6 +187,10 @@ const addForm = reactive({
 })
 
 const editSource = ref<SourceResponse | null>(null)
+const editVisible = computed({
+  get: () => editSource.value !== null,
+  set: (v) => { if (!v) editSource.value = null },
+})
 const editLoading = ref(false)
 const editForm = reactive({ preferred_strategy: 'html', crawl_frequency_hours: 24 })
 
@@ -175,9 +211,7 @@ async function viewJobs(s: SourceResponse) {
   jobsPanel.value = { sourceId: s.id, baseUrl: s.base_url, jobs }
 }
 
-function closeJobs() {
-  jobsPanel.value = null
-}
+function closeJobs() { jobsPanel.value = null }
 
 async function triggerIngest(sourceId: string, url: string) {
   try {
@@ -248,10 +282,5 @@ onMounted(loadSources)
 </script>
 
 <style scoped>
-.url-link { color: var(--accent); font-size: 12px; }
-.url-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.error-cell { color: var(--danger); font-size: 11px; max-width: 180px; }
-.time-cell { color: var(--muted); font-size: 11px; white-space: nowrap; }
-.action-group { display: flex; gap: 4px; flex-wrap: wrap; }
 .panel-title { margin-left: 12px; font-size: 14px; font-weight: 600; }
 </style>

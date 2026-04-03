@@ -6,30 +6,45 @@
         <p>All system actions with timestamps and user attribution</p>
       </div>
 
-      <div class="card">
-        <div v-if="loading" class="empty-state"><span class="loading"></span></div>
-        <div v-else-if="error" class="alert alert-error">{{ error }}</div>
-        <div v-else-if="!entries.length" class="empty-state">
-          <div class="icon">📋</div>
-          <p>No audit log entries yet.</p>
-        </div>
-        <table v-else>
-          <thead>
-            <tr><th>Time</th><th>Action</th><th>User</th><th>Object</th><th>Extra</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="e in entries" :key="e.id">
-              <td class="time-cell">{{ e.created_at.slice(0, 19).replace('T', ' ') }}</td>
-              <td><span class="badge badge-blue">{{ e.action }}</span></td>
-              <td class="muted-cell">{{ e.user_email ?? 'system' }}</td>
-              <td class="muted-cell">{{ e.object_type ?? '—' }}</td>
-              <td class="extra-cell">
-                {{ e.extra && Object.keys(e.extra).length ? JSON.stringify(e.extra) : '—' }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <div v-if="error" class="alert alert-error">{{ error }}</div>
+
+      <DataTable :value="entries" :loading="loading" size="small" stripedRows>
+        <template #empty>
+          <div class="empty-state">
+            <div class="icon">📋</div>
+            <p>No audit log entries yet.</p>
+          </div>
+        </template>
+        <Column field="created_at" header="Time">
+          <template #body="{ data }">
+            <span style="color: var(--muted); font-size:11px; white-space:nowrap">
+              {{ data.created_at.slice(0, 19).replace('T', ' ') }}
+            </span>
+          </template>
+        </Column>
+        <Column field="action" header="Action">
+          <template #body="{ data }">
+            <Tag :value="data.action" severity="info" rounded />
+          </template>
+        </Column>
+        <Column field="user_email" header="User">
+          <template #body="{ data }">
+            <span style="color: var(--muted); font-size:12px">{{ data.user_email ?? 'system' }}</span>
+          </template>
+        </Column>
+        <Column field="object_type" header="Object">
+          <template #body="{ data }">
+            <span style="color: var(--muted); font-size:12px">{{ data.object_type ?? '—' }}</span>
+          </template>
+        </Column>
+        <Column field="extra" header="Extra">
+          <template #body="{ data }">
+            <span style="color: var(--muted); font-size:11px; word-break: break-all">
+              {{ data.extra && Object.keys(data.extra).length ? JSON.stringify(data.extra) : '—' }}
+            </span>
+          </template>
+        </Column>
+      </DataTable>
     </div>
   </AppLayout>
 </template>
@@ -39,6 +54,9 @@ import { ref, onMounted } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
 import { get } from '@/api/client'
 import type { AuditLogEntry } from '@/api/types'
+import DataTable from 'primevue/datatable'
+import Column from 'primevue/column'
+import Tag from 'primevue/tag'
 
 const entries = ref<AuditLogEntry[]>([])
 const loading = ref(true)
@@ -54,9 +72,3 @@ onMounted(async () => {
   }
 })
 </script>
-
-<style scoped>
-.time-cell { font-size: 11px; color: var(--muted); white-space: nowrap; }
-.muted-cell { font-size: 12px; color: var(--muted); }
-.extra-cell { font-size: 11px; color: var(--muted); max-width: 200px; word-break: break-all; }
-</style>
