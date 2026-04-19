@@ -15,10 +15,12 @@
 
 services:
   rabbitmq:
-    # Run as root so the erlang cookie file can be created in /var/lib/rabbitmq.
-    # In rootless Podman the rabbitmq user (UID 999) is mapped to a sub-UID that
-    # cannot write to the container's own home dir; root (UID 0 = host user) can.
+    # Disable SELinux confinement so the erlang cookie can be written.
+    # Also run as root: rootless Podman maps UID 0 to the host user, which
+    # owns the container overlay — the rabbitmq user (UID 999) does not.
     user: root
+    security_opt:
+      - label:disable
 
   traefik:
     # Override the full command: remove TLS redirect, ACME, and websecure entrypoint.
@@ -27,9 +29,11 @@ services:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
       - --entrypoints.web.address=:80
+    # Disable SELinux confinement so Traefik can connect to the Podman socket.
+    security_opt:
+      - label:disable
     volumes:
-      # :z relabels the socket for SELinux (required on Fedora/RHEL with rootless Podman)
-      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro,z
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
       # no acme.json needed without TLS
 
   api:
