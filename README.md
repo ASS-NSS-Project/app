@@ -101,9 +101,18 @@ touch acme.json && chmod 600 acme.json
 
 ### 4. Start the system
 
+**Docker:**
 ```bash
 docker compose up --build
 ```
+
+**Podman** (rootless — uses the local override on port 8000, no TLS):
+```bash
+podman system service --time=0 unix:///tmp/podman.sock &
+DOCKER_SOCK=/tmp/podman.sock podman compose up --build
+```
+
+The `docker-compose.override.yml` is picked up automatically and reconfigures Traefik to listen on port 8000 without requiring privileged ports or TLS certificates.
 
 You'll know it's ready when you see:
 ```
@@ -113,7 +122,10 @@ rag_worker | INFO: Worker ready. Listening on queue: ingest
 
 ### 5. Open the UI
 
-Go to **http://localhost** and log in with the `FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_PASSWORD` from your `.env`.
+- **Docker:** **http://localhost** (Traefik on port 80 with TLS)
+- **Podman:** **http://localhost:8000** (Traefik on port 8000, HTTP only)
+
+Log in with the `FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_PASSWORD` from your `.env`.
 
 ---
 
