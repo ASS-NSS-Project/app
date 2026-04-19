@@ -19,6 +19,8 @@ services:
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: rag_rabbitmq
+    security_opt:
+      - label=disable   # Podman rootless: allow volume chown for erlang cookie (SELinux)
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
@@ -51,6 +53,8 @@ services:
     image: traefik:v3
     container_name: rag_traefik
     restart: unless-stopped
+    security_opt:
+      - label=disable   # Podman rootless: allow access to container socket (SELinux)
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
@@ -114,7 +118,7 @@ services:
       qdrant:
         condition: service_started
     volumes:
-      - ./backend:/app
+      - ./backend:/app:z
       - hf_cache:/root/.cache/huggingface
     networks:
       - ragnet
@@ -164,7 +168,7 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ./backend:/app
+      - ./backend:/app:z
       - hf_cache:/root/.cache/huggingface
     networks:
       - ragnet

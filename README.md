@@ -80,11 +80,15 @@ To enable "Sign in with Google":
 ```env
 GOOGLE_CLIENT_ID=...your-client-id...
 GOOGLE_CLIENT_SECRET=...your-client-secret...
+# Production:
 GOOGLE_REDIRECT_URI=https://your-domain/auth/google/callback
 FRONTEND_URL=https://your-domain
+# Local dev:
+# GOOGLE_REDIRECT_URI=http://localhost/auth/google/callback
+# FRONTEND_URL=http://localhost
 ```
 
-Create OAuth credentials at [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials. Add `https://your-domain/auth/google/callback` to **Authorized redirect URIs**.
+Create OAuth credentials at [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials. Add the redirect URI to **Authorized redirect URIs**. If `GOOGLE_CLIENT_ID` is not set the button returns a `503` and the flow is skipped.
 
 #### Production routing (Traefik + TLS)
 
@@ -133,8 +137,9 @@ podman compose up --build
 > `podman compose down -v` first.
 
 The `docker-compose.override.yml` is picked up automatically. It reconfigures
-Traefik to run HTTP-only on port 80 and mounts RabbitMQ's home on a tmpfs to
-avoid SELinux and UID-mapping issues with the erlang cookie file.
+Traefik to run HTTP-only on port 80 and disables SELinux confinement for
+Traefik and RabbitMQ (via `security_opt: label=disable`) so they can access
+the container socket and their data volumes without permission errors.
 
 You'll know it's ready when you see:
 ```
@@ -144,7 +149,7 @@ rag_worker | INFO: Worker ready. Listening on queue: ingest
 
 ### 5. Open the UI
 
-Open **http://localhost** and log in with `FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_PASSWORD` from your `.env`.
+Open **http://localhost** and log in with `FIRST_ADMIN_USERNAME` / `FIRST_ADMIN_PASSWORD` from your `.env`.
 
 Docker serves on port 80 with automatic TLS. Podman local dev also serves on port 80, HTTP only (no redirect, no ACME).
 
@@ -607,7 +612,7 @@ docker compose down -v       # Stop and delete all data (fresh start)
 → Screenshot strategy needs Chromium in the worker container. If it fails, rebuild: `docker compose build --no-cache worker`.
 
 **Podman: RabbitMQ fails to start (erlang cookie eacces)**
-→ The override mounts `/var/lib/rabbitmq` as tmpfs; if you're not using the override, you'll hit SELinux/UID-mapping issues. Make sure `docker-compose.override.yml` is present and `podman compose` is run from the project root.
+→ SELinux is blocking the container from writing its erlang cookie. The base `docker-compose.yml` sets `security_opt: label=disable` on `rabbitmq` to fix this. If you removed it, add it back. Also make sure `podman compose` is run from the project root so the override file is picked up.
 
 **Podman: Traefik cannot connect to Docker socket (permission denied)**
 → The socket must be the systemd user socket, not one started with `podman system service` in `/tmp`. Run `systemctl --user enable --now podman.socket` and set `DOCKER_SOCK=/run/user/$(id -u)/podman/podman.sock` in `.env`.

@@ -36,7 +36,7 @@ sentence-transformers==3.0.1 # Converts text to vectors for semantic search
 FlagEmbedding               # BGE-M3 native library (dense + sparse vectors)
 
 # ── Vector Database ───────────────────────────────
-qdrant-client==1.9.1         # Client for Qdrant vector database
+qdrant-client==1.13.3        # Client for Qdrant vector database (>=1.10 for Prefetch/FusionQuery)
 
 # ── Utilities ─────────────────────────────────────
 pydantic-settings==2.2.1     # Settings management from environment variables

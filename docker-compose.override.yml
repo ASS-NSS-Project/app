@@ -35,6 +35,9 @@ services:
       - traefik.http.routers.api.rule=Host(`${DOMAIN:-localhost}`) && (PathPrefix(`/auth`) || PathPrefix(`/sources`) || PathPrefix(`/query`) || PathPrefix(`/incidents`) || PathPrefix(`/health`))
       - traefik.http.routers.api.entrypoints=web
       - traefik.http.services.api.loadbalancer.server.port=8000
+      # Disable the HTTPS router defined in the base compose (no websecure entrypoint in dev)
+      - traefik.http.routers.api-secure.entrypoints=web
+      - traefik.http.routers.api-secure.tls=false
 
   frontend:
     labels:
@@ -42,3 +45,6 @@ services:
       - traefik.http.routers.frontend.rule=Host(`${DOMAIN:-localhost}`)
       - traefik.http.routers.frontend.entrypoints=web
       - traefik.http.services.frontend.loadbalancer.server.port=80
+      # Disable the HTTPS router defined in the base compose (no websecure entrypoint in dev)
+      - traefik.http.routers.frontend-secure.entrypoints=web
+      - traefik.http.routers.frontend-secure.tls=false
