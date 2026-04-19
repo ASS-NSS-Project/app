@@ -2,15 +2,13 @@
 services/extraction_service.py - AI Vision Extraction
 
 When a webpage can't be read as text, we take a screenshot and send it
-to a local vision-language model via Ollama (qwen3-vl).
+to a vision-language model via the e-INFRA AIaaS OpenAI-compatible API.
 
 The model extracts:
 - Headings and structure
 - Paragraphs of text
 - Tables (converted to text)
 - Lists
-
-Uses Ollama's OpenAI-compatible API with image_url content type.
 """
 
 import base64
@@ -26,14 +24,13 @@ settings = get_settings()
 
 class ExtractionService:
     """
-    Uses a local vision-language model (via Ollama) to extract
-    structured text from screenshots.
+    Uses a vision-language model (e-INFRA AIaaS) to extract structured text from screenshots.
     """
 
     def __init__(self):
         self.client = AsyncOpenAI(
-            base_url=settings.ollama_base_url,
-            api_key="ollama",
+            base_url=settings.vlm_base_url,
+            api_key=settings.vlm_api_key,
         )
 
     async def extract_from_screenshot(
@@ -46,11 +43,11 @@ class ExtractionService:
         """
         image_b64 = base64.standard_b64encode(screenshot_bytes).decode("utf-8")
 
-        logger.info(f"Sending screenshot to {settings.ollama_vision_model} for URL: {url}")
+        logger.info(f"Sending screenshot to {settings.vlm_model} for URL: {url}")
 
         try:
             response = await self.client.chat.completions.create(
-                model=settings.ollama_vision_model,
+                model=settings.vlm_model,
                 max_tokens=4096,
                 messages=[
                     {
@@ -85,7 +82,7 @@ class ExtractionService:
         """
         try:
             response = await self.client.chat.completions.create(
-                model=settings.ollama_model,
+                model=settings.llm_model,
                 max_tokens=4096,
                 messages=[
                     {

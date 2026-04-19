@@ -1,34 +1,33 @@
 # RAG System — Multimodal Web Intelligence Platform
 
-A production-ready system for scraping web content, extracting structured data with AI vision, and answering questions via RAG (Retrieval-Augmented Generation).
+A production system for scraping web content, extracting structured data with AI vision, and answering questions via RAG (Retrieval-Augmented Generation).
 
-Everything runs **fully locally** — no external AI API keys required. All LLM inference is handled by [Ollama](https://ollama.com/).
+LLM and VLM inference runs on **CERIT-SC AIaaS** (e-INFRA). Object storage uses **CESNET S3**. Everything else — Postgres, RabbitMQ, Qdrant, the API, the worker — runs in Docker.
 
 ---
 
 ## What This System Does
 
 1. **Ingests** websites using a multi-strategy pipeline:
-   - HTML fetch → Rendered DOM (Playwright) → Screenshot + local vision AI
-2. **Extracts** structured content from screenshots using a local vision-language model (`qwen3-vl:2b` via Ollama)
-3. **Indexes** content in Qdrant (vector database) using local sentence-transformer embeddings (`BAAI/bge-m3`)
-4. **Answers** questions using RAG — finds relevant passages, then answers with citations via a local LLM (`llama3.2:3b` via Ollama)
-5. **Tracks** CAPTCHA incidents, audit logs, and evidence files
+   - HTML fetch → Rendered DOM (Playwright) → Screenshot + vision AI
+2. **Extracts** structured content from screenshots using a VLM on AIaaS
+3. **Indexes** content in Qdrant using BGE-M3 hybrid embeddings (dense + sparse, RRF fusion)
+4. **Answers** questions using RAG — retrieves relevant passages, then answers with citations via a text LLM on AIaaS
+5. **Tracks** CAPTCHA incidents, audit logs, and evidence files in CESNET S3
 
 ---
 
 ## Prerequisites
 
-- **Docker Desktop**: https://www.docker.com/products/docker-desktop/
-- **Git**: https://git-scm.com/
-- At least **8 GB RAM** available to Docker (models are loaded into memory)
-- A **GPU** is optional but recommended for faster inference (Ollama auto-detects NVIDIA GPUs)
+- **Docker** with Compose v2
+- **Git**
+- Credentials for **CESNET S3** (object storage) and **CERIT-SC AIaaS** (LLM/VLM endpoints)
 
 ---
 
-## Setup (Step by Step)
+## Setup
 
-### 1. Clone and enter the project
+### 1. Clone the repository
 
 ```bash
 git clone <repository-url> rag_system
@@ -41,26 +40,42 @@ cd rag_system
 cp .env.example .env
 ```
 
-Open `.env` in any text editor and fill in the required values:
+Fill in the required values. The mandatory ones:
 
 ```env
-# Strong random passwords for local services
-POSTGRES_PASSWORD=change_me_strong_password
-RABBITMQ_DEFAULT_PASS=change_me_strong_password
-MINIO_ROOT_PASSWORD=change_me_strong_password
+# PostgreSQL
+POSTGRES_PASSWORD=strong-random-password
 
-# JWT signing secret — generate with:
-# python -c "import secrets; print(secrets.token_hex(32))"
+# RabbitMQ
+RABBITMQ_DEFAULT_PASS=strong-random-password
+
+# CESNET S3
+S3_ENDPOINT_URL=https://<provided-by-team>
+S3_ACCESS_KEY=<provided-by-team>
+S3_SECRET_KEY=<provided-by-team>
+
+# CERIT-SC AIaaS — text LLM
+LLM_BASE_URL=https://<aiaas-endpoint>/v1
+LLM_API_KEY=<provided-by-team>
+LLM_MODEL=<from /v1/models, e.g. llama-3.3-70b-instruct>
+
+# CERIT-SC AIaaS — vision LLM
+VLM_BASE_URL=https://<aiaas-endpoint>/v1
+VLM_API_KEY=<provided-by-team>
+VLM_MODEL=<from /v1/models, e.g. qwen2.5-vl-7b-instruct>
+
+# JWT signing secret
+# Generate: python -c "import secrets; print(secrets.token_hex(32))"
 JWT_SECRET=your-random-hex-string
 
 # First admin account (created automatically on first startup)
 FIRST_ADMIN_EMAIL=admin@example.com
-FIRST_ADMIN_PASSWORD=change_me_strong_password
+FIRST_ADMIN_PASSWORD=strong-random-password
 ```
 
 #### Optional: Google OAuth2
 
-To enable "Sign in with Google", also fill in:
+To enable "Sign in with Google":
 
 ```env
 GOOGLE_CLIENT_ID=...your-client-id...
@@ -69,21 +84,9 @@ GOOGLE_REDIRECT_URI=https://your-domain/auth/google/callback
 FRONTEND_URL=https://your-domain
 ```
 
-Create OAuth credentials at [Google Cloud Console](https://console.cloud.google.com/) under APIs & Services → Credentials.
-Add `https://your-domain/auth/google/callback` to **Authorized redirect URIs**.
+Create OAuth credentials at [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials. Add `https://your-domain/auth/google/callback` to **Authorized redirect URIs**.
 
-#### Optional: Custom Ollama models
-
-The default models work out of the box. Override them in `.env` if you want different ones:
-
-```env
-OLLAMA_MODEL=llama3.2:3b           # Text LLM for RAG answers
-OLLAMA_VISION_MODEL=qwen3-vl:2b   # Vision LLM for screenshot extraction
-```
-
-#### Production deployment
-
-Set `DOMAIN` to your server's hostname or IP to enable Traefik routing. Once the domain resolves to your server, TLS certificates are obtained automatically from Let's Encrypt:
+#### Production routing (Traefik + TLS)
 
 ```env
 DOMAIN=your-server-ip-or-domain
@@ -92,8 +95,6 @@ ACME_EMAIL=you@example.com
 
 ### 3. Create the Traefik certificate file
 
-Traefik needs a writable file (not a directory) for TLS certificates. Git does not track it, so create it manually after cloning:
-
 ```bash
 touch acme.json && chmod 600 acme.json
 ```
@@ -101,17 +102,8 @@ touch acme.json && chmod 600 acme.json
 ### 4. Start the system
 
 ```bash
-# CPU-only (default):
 docker compose up --build
-
-# With NVIDIA GPU acceleration for Ollama:
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
 ```
-
-This will:
-- Download all Docker images (~5–10 minutes on first run, Ollama image is large)
-- Build the API and frontend containers
-- Start all 9 services
 
 You'll know it's ready when you see:
 ```
@@ -119,59 +111,362 @@ rag_api    | INFO: Startup complete. API ready.
 rag_worker | INFO: Worker ready. Listening on queue: ingest
 ```
 
-### 5. Pull the Ollama models
+### 5. Open the UI
 
-On first run, Ollama starts empty. Pull the models it needs:
-
-```bash
-docker exec rag_ollama ollama pull llama3.2:3b
-docker exec rag_ollama ollama pull qwen3-vl:2b
-```
-
-This downloads ~2–4 GB of model weights. Only needed once — models are stored in a persistent Docker volume.
-
-### 6. Open the UI
-
-Go to: **http://localhost**
-
-Log in with the `FIRST_ADMIN_EMAIL` and `FIRST_ADMIN_PASSWORD` from your `.env`.
+Go to **http://localhost** and log in with the `FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_PASSWORD` from your `.env`.
 
 ---
 
-## Using the System
+## API Reference
 
-### Adding a Source
+All endpoints (except `GET /health`) require a JWT token in the `Authorization` header:
 
-1. Click **Sources** in the sidebar
-2. Click **Add Source**
-3. Fill in the URL and select a strategy:
-   - **HTML fetch**: for simple static sites (fastest)
-   - **Rendered DOM**: for React/Vue/Angular apps
-   - **Screenshot + AI**: for complex layouts, tables in images, JS-heavy pages
+```
+Authorization: Bearer <token>
+```
 
-### Triggering Ingest
+Obtain a token via `POST /auth/login`. Roles control access: **admin** > **curator** > **analyst** > **user**.
 
-1. In the Sources list, click **▶ Ingest** next to a source
-2. A job is queued — the worker picks it up in seconds
-3. Click **Jobs** to see status and which strategy was used
+Enable Swagger UI by setting `API_DOCS=true` in `.env`, then visit `/docs`.
 
-The system automatically re-crawls each source based on its `crawl_frequency_hours` setting (default: 24 hours).
+---
 
-### Asking Questions
+### Authentication — `/auth`
 
-1. Click **Query** in the sidebar
-2. Type your question
-3. Choose mode:
-   - **RAG**: retrieves relevant chunks first, then answers with citations *(recommended)*
-   - **No-RAG**: asks the LLM directly without retrieval (for comparison)
-4. Press **Ask** (or Ctrl+Enter)
+#### `POST /auth/login`
+Authenticate with username/email and password. Returns a JWT token.
 
-### Handling CAPTCHA Incidents
+**Request** (`application/x-www-form-urlencoded`):
+| Field | Type | Description |
+|-------|------|-------------|
+| `username` | string | Email or username |
+| `password` | string | Password |
 
-When a scrape is blocked by a CAPTCHA:
-- An incident is automatically created with a screenshot of the block page
-- Go to **Incidents** in the sidebar
-- Click **Resolve** and enter a resolution note (e.g., "Switched source to API endpoint")
+**Response `200`**:
+```json
+{
+  "access_token": "eyJ...",
+  "token_type": "bearer",
+  "user_id": "uuid",
+  "role": "admin",
+  "email": "admin@example.com",
+  "username": "admin"
+}
+```
+
+---
+
+#### `GET /auth/google`
+Redirects to Google's OAuth2 consent page. No body required.
+
+#### `GET /auth/google/callback`
+OAuth2 callback — handled automatically by Google after user consent. Redirects to the frontend with the JWT token as a query parameter.
+
+---
+
+#### `POST /auth/register` *(admin only)*
+Create a new user account.
+
+**Request** (`application/json`):
+```json
+{
+  "username": "jsmith",
+  "email": "j@example.com",
+  "password": "min-12-chars",
+  "full_name": "Jane Smith",
+  "role": "user"
+}
+```
+`role` is one of: `admin`, `curator`, `analyst`, `user`.
+
+**Response `200`**: `UserResponse` (see below).
+
+---
+
+#### `GET /auth/me`
+Returns the currently authenticated user's profile.
+
+**Response `200`**:
+```json
+{
+  "id": "uuid",
+  "username": "admin",
+  "email": "admin@example.com",
+  "full_name": "Admin",
+  "role": "admin",
+  "is_active": true
+}
+```
+
+---
+
+#### `GET /auth/stats`
+Returns system-wide counts for the dashboard.
+
+**Response `200`**:
+```json
+{
+  "sources": 12,
+  "jobs": 480,
+  "incidents": 3,
+  "documents": 950
+}
+```
+
+---
+
+#### `GET /auth/audit` *(admin, curator)*
+Returns audit log entries, newest first.
+
+**Query params**:
+| Param | Default | Description |
+|-------|---------|-------------|
+| `limit` | `50` | Max entries (1–200) |
+| `offset` | `0` | Pagination offset |
+
+**Response `200`**: array of:
+```json
+{
+  "id": "uuid",
+  "action": "SOURCE_CREATED",
+  "object_type": "source",
+  "object_id": "uuid",
+  "extra": {"name": "Tech Blog", "url": "https://..."},
+  "created_at": "2026-04-19T10:00:00",
+  "user_email": "admin@example.com"
+}
+```
+
+---
+
+#### `GET /auth/users` *(admin, curator)*
+Lists all users.
+
+**Response `200`**: array of `UserResponse`.
+
+---
+
+#### `PATCH /auth/users/{user_id}` *(admin only)*
+Update a user's role or active status.
+
+**Request** (`application/json`, all fields optional):
+```json
+{
+  "role": "curator",
+  "is_active": false
+}
+```
+
+**Response `200`**: updated `UserResponse`.
+
+---
+
+### Sources — `/sources`
+
+A **source** is a website or URL we want to monitor and ingest.
+
+#### `GET /sources/`
+List all active sources.
+
+**Response `200`**: array of:
+```json
+{
+  "id": "uuid",
+  "name": "Tech Blog",
+  "base_url": "https://techblog.example.com",
+  "permission_type": "public",
+  "preferred_strategy": "html",
+  "crawl_frequency_hours": 24,
+  "is_active": true,
+  "created_at": "2026-04-19T10:00:00"
+}
+```
+
+---
+
+#### `POST /sources/` *(admin, curator)*
+Create a new source.
+
+**Request** (`application/json`):
+```json
+{
+  "name": "Tech Blog",
+  "base_url": "https://techblog.example.com",
+  "permission_type": "public",
+  "permission_ref": null,
+  "preferred_strategy": "html",
+  "crawl_frequency_hours": 24,
+  "crawl_depth": 1,
+  "rate_limit_rps": 1.0,
+  "retention_days_evidence": 90
+}
+```
+
+`preferred_strategy` is one of: `html`, `rendered`, `screenshot`.  
+URLs pointing to private/loopback addresses are rejected (SSRF protection).
+
+**Response `200`**: `SourceResponse`.
+
+---
+
+#### `PATCH /sources/{source_id}` *(admin, curator)*
+Update a source's settings. All fields are optional.
+
+**Request** (`application/json`):
+```json
+{
+  "name": "New Name",
+  "preferred_strategy": "rendered",
+  "crawl_frequency_hours": 12,
+  "is_active": true
+}
+```
+
+**Response `200`**: updated `SourceResponse`.
+
+---
+
+#### `DELETE /sources/{source_id}` *(admin only)*
+Deactivates a source (soft delete — sets `is_active = false`).
+
+**Response `200`**:
+```json
+{"message": "Source deactivated"}
+```
+
+---
+
+#### `POST /sources/{source_id}/ingest` *(admin, curator)*
+Trigger an immediate ingest job for a source.
+
+**Request** (`application/json`, optional):
+```json
+{
+  "url": "https://techblog.example.com/specific-article"
+}
+```
+If `url` is omitted, uses the source's `base_url`.
+
+**Response `200`**:
+```json
+{
+  "id": "uuid",
+  "url": "https://techblog.example.com",
+  "status": "pending",
+  "strategy_used": null,
+  "quality_score": null,
+  "error_message": null,
+  "created_at": "2026-04-19T10:00:00"
+}
+```
+
+`status` progresses through: `pending` → `running` → `done` | `failed` | `captcha_blocked`.
+
+---
+
+#### `GET /sources/{source_id}/jobs`
+List the 50 most recent ingest jobs for a source.
+
+**Response `200`**: array of `JobResponse` (same shape as above, with `strategy_used` and `quality_score` filled in once complete).
+
+---
+
+### Query — `/query`
+
+#### `POST /query/`
+Ask a question. Returns an answer with citations from the knowledge base.
+
+**Request** (`application/json`):
+```json
+{
+  "question": "What are the pricing tiers?",
+  "mode": "rag",
+  "top_k": 5,
+  "source_id": null,
+  "strict_grounding": true
+}
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `question` | required | The question to answer |
+| `mode` | `"rag"` | `"rag"` retrieves chunks first; `"no_rag"` asks the LLM directly |
+| `top_k` | `5` | Number of chunks to retrieve |
+| `source_id` | `null` | Restrict retrieval to one source (UUID) |
+| `strict_grounding` | `true` | If true, LLM only uses retrieved context; if false, may use general knowledge |
+
+**Response `200`**:
+```json
+{
+  "answer": "The system offers three tiers: ...",
+  "mode": "rag",
+  "citations": [
+    {
+      "index": 1,
+      "url": "https://techblog.example.com/pricing",
+      "text": "...relevant excerpt...",
+      "relevance_score": 0.912
+    }
+  ],
+  "chunks_retrieved": 5
+}
+```
+
+---
+
+### Incidents — `/incidents`
+
+Incidents are created automatically when a CAPTCHA or access block is detected during ingestion.
+
+#### `GET /incidents/`
+List incidents, newest first (max 100).
+
+**Query params**:
+| Param | Description |
+|-------|-------------|
+| `status` | Filter by status: `open`, `in_progress`, `resolved` |
+
+**Response `200`**: array of:
+```json
+{
+  "id": "uuid",
+  "type": "captcha",
+  "source_id": "uuid",
+  "url": "https://example.com/blocked",
+  "severity": "medium",
+  "status": "open",
+  "detector": "html_keyword",
+  "evidence_screenshot_uri": "source-id/job-id/captcha_page.png",
+  "created_at": "2026-04-19T10:00:00",
+  "resolved_at": null,
+  "resolution_note": null
+}
+```
+
+---
+
+#### `POST /incidents/{incident_id}/resolve` *(admin, curator)*
+Mark an incident as resolved.
+
+**Request** (`application/json`):
+```json
+{
+  "resolution_note": "Switched to API endpoint, CAPTCHA no longer triggered."
+}
+```
+
+**Response `200`**: updated incident with `status: "resolved"`, `resolved_at` timestamp, and `resolution_note` filled in.
+
+---
+
+### Health
+
+#### `GET /health`
+No authentication required. Returns `200` if the API is running.
+
+```json
+{"status": "ok", "service": "rag-api"}
+```
 
 ---
 
@@ -181,16 +476,13 @@ When a scrape is blocked by a CAPTCHA:
 |---------|-----|-------|
 | Main UI | http://localhost | Frontend application |
 | API | http://localhost (proxied) | FastAPI backend via Traefik |
-| Swagger UI | disabled by default | Set `API_DOCS=true` in `.env` to enable |
+| Swagger UI | disabled by default | Set `API_DOCS=true` in `.env`, then `/docs` |
 | Qdrant Dashboard | http://localhost:6333/dashboard | Browse vector collections (localhost only) |
-| MinIO Console | http://localhost:9001 | Browse stored files (localhost only) |
-| RabbitMQ Management | http://localhost:15672 | Browse queues and messages (localhost only) |
-| Ollama API | http://localhost:11434 | Local LLM inference (localhost only) |
+| RabbitMQ Management | http://localhost:15672 | Browse queues (localhost only) |
 
-MinIO login: `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` from your `.env`
-RabbitMQ login: `RABBITMQ_DEFAULT_USER` / `RABBITMQ_DEFAULT_PASS` from your `.env`
+RabbitMQ login: `RABBITMQ_DEFAULT_USER` / `RABBITMQ_DEFAULT_PASS` from `.env`.
 
-> Admin ports (9001, 15672, 6333, 11434) are bound to `127.0.0.1` only and not exposed to the network.
+> Admin ports (6333, 15672) are bound to `127.0.0.1` only and not exposed to the network.
 
 ---
 
@@ -207,22 +499,22 @@ Traefik (ports 80/443 — TLS termination, routing)
     └──► FastAPI API
             │── Auth (JWT + Google OAuth2)
             │── Sources API
-            │── Query API ──────────────► Qdrant (vector search)
+            │── Query API ──────────────► Qdrant (hybrid vector search)
             │── Incidents API               ▲
-            │── Audit API                   │ embed (BAAI/bge-m3)
-            │                               │
+            │                               │ embed BGE-M3 (dense + sparse)
             ▼                               │
        RabbitMQ Queue ──────► Worker ──────┘
                                   │
                                   ├── HTML fetch (httpx)
                                   ├── Rendered DOM (Playwright/Chrome)
                                   ├── Screenshot (Playwright)
-                                  │       └── Vision LLM (qwen3-vl via Ollama)
+                                  │       └── VLM (CERIT-SC AIaaS)
                                   │
                                   ├── PostgreSQL (metadata, jobs, audit)
-                                  └── MinIO (screenshots, HTML evidence)
+                                  └── CESNET S3 (screenshots, HTML evidence)
 
-All LLM inference: Ollama (local, no external API)
+LLM/VLM inference: CERIT-SC AIaaS (OpenAI-compatible API)
+Embeddings: BGE-M3 via FlagEmbedding (runs locally in the worker)
 ```
 
 ---
@@ -231,21 +523,20 @@ All LLM inference: Ollama (local, no external API)
 
 ### Enable API docs
 
-Set `API_DOCS=true` in your `.env`, then restart the API:
+Set `API_DOCS=true` in `.env`, then restart:
 
 ```bash
 docker compose restart api
 ```
 
-Swagger UI will be available at **http://localhost/docs** (or `http://localhost:8000/docs` if accessing the API directly).
+Swagger UI: **http://localhost/docs** (or `http://localhost:8000/docs` for direct access).
 
-### See logs
+### Logs
 
 ```bash
 docker compose logs -f api      # API logs
-docker compose logs -f worker   # Worker logs
-docker compose logs -f frontend # Frontend/Nginx logs
-docker compose logs -f ollama   # Ollama model server logs
+docker compose logs -f worker   # Worker/ingest logs
+docker compose logs -f frontend # Nginx logs
 ```
 
 ### Restart a single service
@@ -257,16 +548,13 @@ docker compose restart api
 ### Stop everything
 
 ```bash
-docker compose down             # Stop but keep data
-docker compose down -v          # Stop AND delete all data (fresh start)
+docker compose down          # Stop, keep data volumes
+docker compose down -v       # Stop and delete all data (fresh start)
 ```
 
 ---
 
 ## Troubleshooting
-
-**"Cannot connect to Docker daemon"**
-→ Start Docker Desktop first.
 
 **API stays on "Waiting for Postgres/RabbitMQ"**
 → Give it 30–60 seconds on first run. Databases take time to initialize.
@@ -274,17 +562,14 @@ docker compose down -v          # Stop AND delete all data (fresh start)
 **Worker not processing jobs**
 → Check `docker compose logs worker`. If it shows import errors, run `docker compose build` again.
 
-**Vision extraction fails / returns empty**
-→ Make sure `qwen3-vl:2b` was pulled: `docker exec rag_ollama ollama list`
+**Vision extraction fails**
+→ Verify `VLM_BASE_URL`, `VLM_API_KEY`, and `VLM_MODEL` in `.env`. Test the endpoint with `curl -H "Authorization: Bearer $VLM_API_KEY" $VLM_BASE_URL/models`.
 
-**Ollama is slow**
-→ By default it runs on CPU. On Linux with an NVIDIA GPU, the compose file enables GPU passthrough automatically. On Mac, Ollama uses Metal (GPU acceleration) inside the container.
-
-**Out of memory errors**
-→ Increase Docker's memory limit in Docker Desktop settings to at least 8 GB.
+**S3 upload errors**
+→ Verify `S3_ENDPOINT_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`. Check that the buckets in `S3_BUCKET_EVIDENCE` and `S3_BUCKET_DOCS` exist and the credentials have write access.
 
 **Playwright/screenshot errors**
-→ Screenshot strategy needs Chromium running inside the worker. If it fails, check `docker compose logs worker` for Playwright install errors and rebuild: `docker compose build --no-cache worker`.
+→ Screenshot strategy needs Chromium in the worker container. If it fails, rebuild: `docker compose build --no-cache worker`.
 
 ---
 
@@ -292,7 +577,7 @@ docker compose down -v          # Stop AND delete all data (fresh start)
 
 ```
 rag_system/
-├── docker-compose.yml          # All 9 services
+├── docker-compose.yml          # All 7 services
 ├── .env.example                # Config template (copy to .env)
 ├── acme.json                   # Traefik TLS certificate storage
 ├── backend/                    # FastAPI Python service
@@ -313,10 +598,11 @@ rag_system/
 │   │   └── incidents.py        # CAPTCHA incident management
 │   └── services/
 │       ├── ingest_service.py     # Core scraping pipeline (3 strategies + fallback)
-│       ├── extraction_service.py # Local vision LLM extraction via Ollama
-│       ├── embedding_service.py  # BAAI/bge-m3 sentence-transformers + Qdrant
-│       ├── rag_service.py        # RAG query engine (Ollama via OpenAI-compatible API)
-│       ├── storage_service.py    # MinIO file storage
+│       ├── chunking.py           # Structure-aware chunking (prose / table / VLM)
+│       ├── extraction_service.py # VLM extraction via AIaaS
+│       ├── embedding_service.py  # BGE-M3 FlagEmbedding + Qdrant hybrid search
+│       ├── rag_service.py        # RAG query engine (LLM via AIaaS)
+│       ├── storage_service.py    # CESNET S3 file storage
 │       ├── captcha_service.py    # CAPTCHA detection + incident creation
 │       ├── auth_service.py       # JWT + bcrypt password hashing
 │       ├── scheduler_service.py  # APScheduler: periodic crawls + evidence cleanup

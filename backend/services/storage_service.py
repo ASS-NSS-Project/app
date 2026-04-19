@@ -1,12 +1,12 @@
 """
-services/storage_service.py - File Storage (MinIO)
+services/storage_service.py - File Storage (S3-compatible object storage)
 
-MinIO is a local S3-compatible object storage.
-Think of it like a self-hosted Google Drive for our evidence files.
+Uses CESNET S3 (e-INFRA) in production via boto3.
+Configuration is driven entirely from environment variables (S3_* in .env).
 
 We store:
 - Screenshots (.png)
-- Raw HTML dumps (.html)  
+- Raw HTML dumps (.html)
 - PDF evidence (.pdf)
 - Structured document JSON (.json)
 
@@ -28,33 +28,35 @@ settings = get_settings()
 
 class StorageService:
     """
-    Thin wrapper around boto3 (AWS S3 SDK) pointing at our local MinIO.
+    Thin wrapper around boto3 pointing at an S3-compatible endpoint (CESNET e-INFRA).
     """
 
     def __init__(self):
-        # boto3 is the AWS Python SDK.
-        # By pointing endpoint_url at MinIO, it works identically.
         self.client = boto3.client(
             "s3",
-            endpoint_url=f"http://{settings.minio_endpoint}",
-            aws_access_key_id=settings.minio_root_user,
-            aws_secret_access_key=settings.minio_root_password,
-            config=Config(signature_version="s3v4"),
-            region_name="us-east-1",  # MinIO requires a region name (any value works)
+            endpoint_url=settings.s3_endpoint_url,
+            aws_access_key_id=settings.s3_access_key,
+            aws_secret_access_key=settings.s3_secret_key,
+            config=Config(
+                signature_version="s3v4",
+                s3={"addressing_style": "path" if settings.s3_use_path_style else "auto"},
+            ),
+            region_name=settings.s3_region,
         )
         self._ensure_buckets()
 
     def _ensure_buckets(self):
         """Create storage buckets if they don't exist yet."""
-        for bucket in [settings.minio_bucket_evidence, settings.minio_bucket_docs]:
+        for bucket in [settings.s3_bucket_evidence, settings.s3_bucket_docs]:
             try:
                 self.client.head_bucket(Bucket=bucket)
             except ClientError:
                 try:
                     self.client.create_bucket(Bucket=bucket)
-                    logger.info(f"Created MinIO bucket: {bucket}")
+                    logger.info(f"Created S3 bucket: {bucket}")
                 except Exception as e:
-                    logger.warning(f"Could not create bucket {bucket}: {e}")
+                    logger.error(f"Could not create bucket {bucket}: {e}")
+                    raise
 
     def upload(
         self,
@@ -64,14 +66,14 @@ class StorageService:
         content_type: str = "application/octet-stream",
     ) -> str:
         """
-        Upload bytes to MinIO.
-        
+        Upload bytes to S3.
+
         Args:
-            bucket: Which bucket (folder) to store in
+            bucket: Which bucket to store in
             key: The filename/path within the bucket
             data: The raw bytes to store
             content_type: MIME type (image/png, text/html, etc.)
-        
+
         Returns:
             The storage key (use this to retrieve the file later)
         """
@@ -85,7 +87,7 @@ class StorageService:
         return key
 
     def download(self, bucket: str, key: str) -> bytes:
-        """Download a file from MinIO and return as bytes."""
+        """Download a file from S3 and return as bytes."""
         response = self.client.get_object(Bucket=bucket, Key=key)
         return response["Body"].read()
 

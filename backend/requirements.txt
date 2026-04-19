@@ -33,6 +33,7 @@ openai>=1.30.0               # OpenAI-compatible client (used for Ollama)
 # ── Embeddings (local, no API key needed) ─────────
 sentence-transformers==3.0.1 # Converts text to vectors for semantic search
 # This downloads the model on first run (~90MB, cached after that)
+FlagEmbedding               # BGE-M3 native library (dense + sparse vectors)
 
 # ── Vector Database ───────────────────────────────
 qdrant-client==1.9.1         # Client for Qdrant vector database

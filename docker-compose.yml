@@ -32,25 +32,6 @@ services:
       timeout: 5s
       retries: 10
 
-  minio:
-    image: minio/minio:latest
-    container_name: rag_minio
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    volumes:
-      - minio_data:/data
-    ports:
-      - "127.0.0.1:9001:9001"
-    networks:
-      - ragnet
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
   qdrant:
     image: qdrant/qdrant:latest
     container_name: rag_qdrant
@@ -62,17 +43,6 @@ services:
       - ragnet
     # No healthcheck – the endpoint changed between versions.
     # The API connects lazily and retries on first use.
-
-  ollama:
-    image: ollama/ollama:latest
-    container_name: rag_ollama
-    volumes:
-      - ollama_data:/root/.ollama
-    ports:
-      - "127.0.0.1:11434:11434"
-    networks:
-      - ragnet
-    restart: unless-stopped
 
   traefik:
     image: traefik:v3
@@ -111,14 +81,21 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_HOST=postgres
       - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
-      - MINIO_ENDPOINT=minio:9000
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY}
+      - S3_SECRET_KEY=${S3_SECRET_KEY}
+      - S3_REGION=${S3_REGION:-us-east-1}
+      - S3_USE_PATH_STYLE=${S3_USE_PATH_STYLE:-true}
+      - S3_BUCKET_EVIDENCE=${S3_BUCKET_EVIDENCE:-rag-evidence}
+      - S3_BUCKET_DOCS=${S3_BUCKET_DOCS:-rag-documents}
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
-      - OLLAMA_BASE_URL=http://ollama:11434/v1
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
-      - OLLAMA_VISION_MODEL=${OLLAMA_VISION_MODEL:-qwen3-vl:2b}
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_MODEL=${LLM_MODEL}
+      - VLM_BASE_URL=${VLM_BASE_URL}
+      - VLM_API_KEY=${VLM_API_KEY}
+      - VLM_MODEL=${VLM_MODEL}
       - JWT_SECRET=${JWT_SECRET}
       - FIRST_ADMIN_EMAIL=${FIRST_ADMIN_EMAIL}
       - FIRST_ADMIN_PASSWORD=${FIRST_ADMIN_PASSWORD}
@@ -130,8 +107,6 @@ services:
       postgres:
         condition: service_healthy
       rabbitmq:
-        condition: service_healthy
-      minio:
         condition: service_healthy
       qdrant:
         condition: service_started
@@ -163,14 +138,21 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_HOST=postgres
       - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
-      - MINIO_ENDPOINT=minio:9000
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY}
+      - S3_SECRET_KEY=${S3_SECRET_KEY}
+      - S3_REGION=${S3_REGION:-us-east-1}
+      - S3_USE_PATH_STYLE=${S3_USE_PATH_STYLE:-true}
+      - S3_BUCKET_EVIDENCE=${S3_BUCKET_EVIDENCE:-rag-evidence}
+      - S3_BUCKET_DOCS=${S3_BUCKET_DOCS:-rag-documents}
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
-      - OLLAMA_BASE_URL=http://ollama:11434/v1
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
-      - OLLAMA_VISION_MODEL=${OLLAMA_VISION_MODEL:-qwen3-vl:2b}
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_MODEL=${LLM_MODEL}
+      - VLM_BASE_URL=${VLM_BASE_URL}
+      - VLM_API_KEY=${VLM_API_KEY}
+      - VLM_MODEL=${VLM_MODEL}
       - JWT_SECRET=${JWT_SECRET}
     depends_on:
       rabbitmq:
@@ -214,9 +196,7 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:
   qdrant_data:
-  ollama_data:
 
 networks:
   ragnet:

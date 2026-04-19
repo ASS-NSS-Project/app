@@ -61,6 +61,7 @@ async def query(
         top_k=request.top_k,
         source_id=request.source_id,
         strict_grounding=request.strict_grounding,
+        db=db,
     )
 
     log_action(

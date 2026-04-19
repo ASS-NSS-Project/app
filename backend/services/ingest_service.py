@@ -34,6 +34,7 @@ from models import (
 from services.storage_service import StorageService
 from services.extraction_service import ExtractionService
 from services.captcha_service import CaptchaDetector
+from services.chunking import split_prose, split_tables, split_vlm, TextChunk
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -354,9 +355,9 @@ class IngestService:
         file_hash = hashlib.sha256(data).hexdigest()
         storage_key = f"{job.source_id}/{job.id}/{filename}"
 
-        # Upload to MinIO
+        # Upload to S3-compatible storage
         self.storage.upload(
-            bucket=settings.minio_bucket_evidence,
+            bucket=settings.s3_bucket_evidence,
             key=storage_key,
             data=data,
             content_type=content_type,
@@ -433,46 +434,34 @@ class IngestService:
         self.db.commit()
         self.db.refresh(doc)
 
-        # Split text into overlapping chunks
-        chunks = self._split_text(text)
-        for idx, chunk_text in enumerate(chunks):
+        # Pick chunker based on strategy
+        source_method = strategy.value if strategy else "html"
+        all_chunks: list[TextChunk] = []
+
+        if strategy == IngestStrategy.screenshot:
+            all_chunks = split_vlm(text)
+        else:
+            # For HTML and rendered strategies: extract tables first, then prose
+            table_chunks = split_tables(text, source_method=source_method)
+            prose_chunks = split_prose(text, source_method=source_method)
+            all_chunks = table_chunks + prose_chunks
+
+        for idx, tc in enumerate(all_chunks):
             chunk = Chunk(
                 document_id=doc.id,
-                chunk_type=ChunkType.text,
-                text=chunk_text,
+                chunk_type=tc.chunk_type,
+                text=tc.text,
                 chunk_index=idx,
                 citation_url=job.url,
                 citation_evidence_id=evidence_id,
+                section_path=tc.section_path,
+                token_count=tc.token_count,
+                source_method=tc.source_method or source_method,
             )
             self.db.add(chunk)
 
         self.db.commit()
-        logger.info(f"Created document {doc.id} with {len(chunks)} chunks")
-
-    def _split_text(self, text: str) -> list[str]:
-        """
-        Split text into overlapping chunks.
-        
-        Example with chunk_size=10, overlap=3:
-        "abcdefghijk" -> ["abcdefghij", "hijklmnopq", ...]
-        
-        Overlap ensures context isn't lost at chunk boundaries.
-        """
-        size = settings.chunk_size
-        overlap = settings.chunk_overlap
-        words = text.split()
-
-        chunks = []
-        start = 0
-        while start < len(words):
-            end = start + size
-            chunk_words = words[start:end]
-            chunk_text = " ".join(chunk_words)
-            if len(chunk_text.strip()) > 50:  # Skip tiny chunks
-                chunks.append(chunk_text)
-            start = end - overlap  # Move forward, keeping some overlap
-
-        return chunks if chunks else [text[:2000]]  # Fallback for very short text
+        logger.info(f"Created document {doc.id} with {len(all_chunks)} chunks")
 
 
 class CaptchaDetectedError(Exception):

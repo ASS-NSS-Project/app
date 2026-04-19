@@ -78,3 +78,61 @@ async def test_query_requires_auth(client: AsyncClient):
     """/query/ must reject unauthenticated requests."""
     resp = await client.post("/query/", json={"question": "test", "mode": "rag", "top_k": 3, "strict_grounding": True})
     assert resp.status_code == 401
+
+
+# ── Chunker unit tests (no backing services needed) ───────────
+
+def test_prose_chunker_html_article():
+    """split_prose should return at least one chunk with non-empty text and section_path."""
+    from backend.services.chunking import split_prose  # type: ignore[import]
+
+    html = """
+    <html><body>
+      <h1>Introduction</h1>
+      <p>This is the first paragraph of the article. It contains some meaningful content.</p>
+      <h2>Background</h2>
+      <p>Here is some background information about the topic being discussed at length.</p>
+      <p>And another paragraph with more details about the subject matter covered here.</p>
+    </body></html>
+    """
+    chunks = split_prose(html, source_method="html")
+    assert len(chunks) >= 1
+    assert all(c.text for c in chunks), "All chunks must have non-empty text"
+    # At least one chunk should have a section_path derived from the headings
+    assert any(c.section_path for c in chunks), "At least one chunk must have section_path set"
+
+
+def test_table_chunker_html_table():
+    """split_tables should return at least one chunk tagged as ChunkType.table."""
+    from backend.services.chunking import split_tables  # type: ignore[import]
+    from backend.models import ChunkType  # type: ignore[import]
+
+    html = """
+    <html><body>
+      <table>
+        <tr><th>Country</th><th>Population</th></tr>
+        <tr><td>France</td><td>68 million</td></tr>
+        <tr><td>Germany</td><td>84 million</td></tr>
+      </table>
+    </body></html>
+    """
+    chunks = split_tables(html, source_method="html")
+    assert len(chunks) >= 1
+    assert all(c.chunk_type == ChunkType.table for c in chunks)
+
+
+def test_vlm_chunker_block_text():
+    """split_vlm should return multiple chunks with ChunkType.block when given --- separators."""
+    from backend.services.chunking import split_vlm  # type: ignore[import]
+    from backend.models import ChunkType  # type: ignore[import]
+
+    text = (
+        "# Title\n\nThis is the first block of text from a VLM extraction.\n\n"
+        "---\n\n"
+        "This is the second block with completely different content.\n\n"
+        "---\n\n"
+        "And here is a third block to confirm multiple splits work correctly."
+    )
+    chunks = split_vlm(text)
+    assert len(chunks) >= 2, "Should produce multiple chunks from --- separated blocks"
+    assert all(c.chunk_type == ChunkType.block for c in chunks)

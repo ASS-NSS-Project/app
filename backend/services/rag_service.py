@@ -9,13 +9,14 @@ With RAG:    Ask the LLM a question →
              2. Give those chunks to the LLM as context
              3. LLM answers based on OUR data, with citations
 
-Uses Ollama via its OpenAI-compatible API.
+Uses the e-INFRA AIaaS OpenAI-compatible API (LLM_BASE_URL / LLM_MODEL).
 """
 
 import logging
 from typing import Optional
 
 from openai import AsyncOpenAI
+from sqlalchemy.orm import Session
 
 from config import get_settings
 from services.embedding_service import EmbeddingService
@@ -31,8 +32,8 @@ class RAGService:
 
     def __init__(self):
         self.client = AsyncOpenAI(
-            base_url=settings.ollama_base_url,
-            api_key="ollama",  # Ollama doesn't require a real key
+            base_url=settings.llm_base_url,
+            api_key=settings.llm_api_key,
         )
         self.embedder = EmbeddingService()
 
@@ -43,9 +44,10 @@ class RAGService:
         top_k: int = 5,
         source_id: Optional[str] = None,
         strict_grounding: bool = True,
+        db: Optional[Session] = None,
     ) -> dict:
         if mode == "rag":
-            return await self._query_rag(question, top_k, source_id, strict_grounding)
+            return await self._query_rag(question, top_k, source_id, strict_grounding, db)
         else:
             return await self._query_no_rag(question)
 
@@ -55,9 +57,10 @@ class RAGService:
         top_k: int,
         source_id: Optional[str],
         strict_grounding: bool,
+        db: Optional[Session] = None,
     ) -> dict:
-        # Step 1: Retrieve relevant chunks
-        chunks = self.embedder.search(query=question, top_k=top_k, source_id=source_id)
+        # Step 1: Retrieve relevant chunks (text fetched from Postgres via db)
+        chunks = self.embedder.search(query=question, top_k=top_k, source_id=source_id, db=db)
 
         if not chunks:
             return {
@@ -73,10 +76,10 @@ class RAGService:
             context_parts.append(f"[{i}] Source: {chunk['citation_url']}\n{chunk['text']}")
         context = "\n\n---\n\n".join(context_parts)
 
-        # Step 3: Call Ollama
-        logger.info(f"Sending RAG query to Ollama ({settings.ollama_model}): '{question[:80]}'")
+        # Step 3: Call LLM
+        logger.info(f"Sending RAG query to LLM ({settings.llm_model}): '{question[:80]}'")
         response = await self.client.chat.completions.create(
-            model=settings.ollama_model,
+            model=settings.llm_model,
             max_tokens=2048,
             messages=[
                 {"role": "system", "content": self._build_rag_system_prompt(strict_grounding)},
@@ -111,9 +114,9 @@ class RAGService:
 
     async def _query_no_rag(self, question: str) -> dict:
         """No-RAG mode: ask the LLM directly, no retrieval."""
-        logger.info(f"Sending no-RAG query to Ollama ({settings.ollama_model})")
+        logger.info(f"Sending no-RAG query to LLM ({settings.llm_model})")
         response = await self.client.chat.completions.create(
-            model=settings.ollama_model,
+            model=settings.llm_model,
             max_tokens=2048,
             messages=[{"role": "user", "content": question}],
         )

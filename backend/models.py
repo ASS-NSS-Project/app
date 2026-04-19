@@ -263,7 +263,14 @@ class Chunk(Base):
     
     # Whether this chunk has been embedded in Qdrant
     is_embedded = Column(Boolean, default=False)
-    
+
+    # Extended metadata
+    parent_chunk_id = Column(String, ForeignKey("chunks.id"), nullable=True)
+    section_path = Column(String, nullable=True)
+    token_count = Column(Integer, nullable=True)
+    source_method = Column(String, nullable=True)  # "html" / "rendered" / "vlm"
+    language = Column(String, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     document = relationship("Document", back_populates="chunks")

@@ -1,29 +1,25 @@
 """
-services/embedding_service.py - Text embeddings + vector storage
+services/embedding_service.py - Text embeddings + vector storage (hybrid)
 
-"Embedding" means converting text into a list of numbers (a vector)
-that represents its semantic content.
+Uses BGE-M3 via FlagEmbedding to produce both dense (1024-d) and sparse vectors.
+Stores them as named vectors in Qdrant and retrieves using RRF fusion.
 
-Similar texts produce similar vectors – this enables semantic search:
-"What is the population of France?" finds relevant chunks even without exact word matches.
-
-We use the BAAI/bge-m3 model (sentence-transformers, runs locally, no API key required):
-- Multilingual (100+ languages)
-- Output: 1024-dimensional vectors
-- Higher quality than MiniLM, especially for non-English text
-
-Vectors are stored in Qdrant (vector database).
+Qdrant = semantic index only (no chunk text in payload).
+Postgres = source of truth for chunk text (fetched by chunk_id after retrieval).
 """
 
 import logging
 import uuid
 from typing import Optional
 
-from sentence_transformers import SentenceTransformer
+from FlagEmbedding import BGEM3FlagModel
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
-    Distance, VectorParams, PointStruct,
-    Filter, FieldCondition, MatchValue, SearchRequest
+    Distance, VectorParams, SparseVectorParams, NamedVector,
+    PointStruct, SparseVector,
+    Filter, FieldCondition, MatchValue,
+    Prefetch, FusionQuery, Fusion,
+    PayloadSchemaType,
 )
 from sqlalchemy.orm import Session
 
@@ -33,198 +29,193 @@ from models import Chunk
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Module-level singleton for the embedding model.
-# Loading a model takes ~2 seconds, so we load it once and reuse.
-_embedding_model: Optional[SentenceTransformer] = None
+_embedding_model: Optional[BGEM3FlagModel] = None
 
 
-def get_embedding_model() -> SentenceTransformer:
-    """Load the embedding model (once, then cache)."""
+def get_embedding_model() -> BGEM3FlagModel:
     global _embedding_model
     if _embedding_model is None:
-        logger.info(f"Loading embedding model: {settings.embedding_model}")
-        _embedding_model = SentenceTransformer(settings.embedding_model)
-        logger.info("Embedding model loaded successfully")
+        logger.info(f"Loading BGE-M3 FlagEmbedding model: {settings.embedding_model}")
+        _embedding_model = BGEM3FlagModel(settings.embedding_model, use_fp16=True)
+        logger.info("BGE-M3 model loaded successfully")
     return _embedding_model
 
 
 class EmbeddingService:
-    """
-    Handles embedding chunks and storing/searching in Qdrant.
-    """
-
     def __init__(self):
-        self.qdrant = QdrantClient(
-            host=settings.qdrant_host,
-            port=settings.qdrant_port,
-        )
-        # collection_was_recreated = True signals main.py to reset chunk embeddings
+        self.qdrant = QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
         self.collection_was_recreated = self._ensure_collection()
 
     def _ensure_collection(self) -> bool:
         """
-        Ensures the Qdrant collection exists with the correct dimension.
-
-        If the collection exists but has a different dimension (model change),
-        it is deleted and recreated. Returns True if the collection was recreated
-        or newly created – the caller can then reset is_embedded flags.
+        Ensure the Qdrant collection uses named vectors (dense + sparse).
+        Recreates the collection if it doesn't exist or uses old single-vector format.
+        Returns True if recreated/created (caller resets is_embedded flags).
         """
         try:
             info = self.qdrant.get_collection(settings.qdrant_collection)
-            existing_dim = info.config.params.vectors.size
-            if existing_dim == settings.embedding_dim:
-                logger.debug(f"Collection '{settings.qdrant_collection}' exists ({existing_dim}D)")
+            # Check if it's already using named vectors
+            params = info.config.params.vectors
+            sparse_params = info.config.params.sparse_vectors
+            if isinstance(params, dict) and "dense" in params and sparse_params and "sparse" in sparse_params:
+                logger.debug(f"Collection '{settings.qdrant_collection}' already uses named hybrid vectors")
                 return False
-            # Dimension mismatch – model was changed, recreate the collection
-            logger.warning(
-                f"Collection dimension ({existing_dim}D) does not match config "
-                f"({settings.embedding_dim}D). Recreating collection..."
-            )
+            # Old format – recreate
+            logger.warning("Collection is in old single-vector format. Recreating for hybrid named vectors.")
             self.qdrant.delete_collection(settings.qdrant_collection)
         except Exception:
-            pass  # Collection doesn't exist – we'll create it
+            pass  # Collection doesn't exist
 
-        logger.info(
-            f"Creating collection '{settings.qdrant_collection}' "
-            f"({settings.embedding_dim}D, model: {settings.embedding_model})"
-        )
+        logger.info(f"Creating hybrid named-vector collection '{settings.qdrant_collection}'")
         self.qdrant.create_collection(
             collection_name=settings.qdrant_collection,
-            vectors_config=VectorParams(
-                size=settings.embedding_dim,
-                distance=Distance.COSINE,
-            ),
+            vectors_config={"dense": VectorParams(size=settings.embedding_dim, distance=Distance.COSINE)},
+            sparse_vectors_config={"sparse": SparseVectorParams()},
         )
+
+        # Add payload indexes for efficient filtered retrieval
+        for field_name, schema_type in [
+            ("source_id", PayloadSchemaType.KEYWORD),
+            ("document_id", PayloadSchemaType.KEYWORD),
+            ("chunk_type", PayloadSchemaType.KEYWORD),
+            ("language", PayloadSchemaType.KEYWORD),
+            ("created_ts", PayloadSchemaType.INTEGER),
+        ]:
+            try:
+                self.qdrant.create_payload_index(
+                    collection_name=settings.qdrant_collection,
+                    field_name=field_name,
+                    field_schema=schema_type,
+                )
+            except Exception as e:
+                logger.warning(f"Could not create payload index for {field_name}: {e}")
+
         return True
 
-    def embed_text(self, text: str) -> list[float]:
-        """
-        Converts text into a vector (a list of 1024 floating-point numbers).
-
-        Example:
-            "The Eiffel Tower is in Paris"
-            -> [0.12, -0.34, 0.56, ...] (1024 numbers)
-        """
+    def embed_text(self, text: str) -> dict:
+        """Returns {'dense': [...], 'sparse': {indices: [...], values: [...]}}"""
         model = get_embedding_model()
-        vector = model.encode(text, normalize_embeddings=True)
-        return vector.tolist()
+        output = model.encode([text], return_dense=True, return_sparse=True)
+        dense = output['dense_vecs'][0].tolist()
+        sparse_weights = output['lexical_weights'][0]
+        indices = [int(k) for k in sparse_weights.keys()]
+        values = [float(v) for v in sparse_weights.values()]
+        return {"dense": dense, "sparse": {"indices": indices, "values": values}}
 
     def embed_chunks(self, db: Session, document_id: str):
-        """
-        Embed all un-embedded chunks for a document and store in Qdrant.
-        
-        Called after a document is ingested.
-        """
+        """Embed all un-embedded chunks for a document and upsert into Qdrant."""
         chunks = (
             db.query(Chunk)
-            .filter(
-                Chunk.document_id == document_id,
-                Chunk.is_embedded == False,
-            )
+            .filter(Chunk.document_id == document_id, Chunk.is_embedded == False)
             .all()
         )
-
         if not chunks:
             logger.info(f"No unembedded chunks for document {document_id}")
             return
 
         logger.info(f"Embedding {len(chunks)} chunks for document {document_id}")
         model = get_embedding_model()
-
-        # Batch encode all chunk texts at once (faster than one by one)
         texts = [chunk.text for chunk in chunks]
-        vectors = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
 
-        # Fetch source_id from the document – needed for filtering in Qdrant
+        output = model.encode(texts, return_dense=True, return_sparse=True)
+        dense_vecs = output['dense_vecs']
+        sparse_weights_list = output['lexical_weights']
+
         from models import Document
         doc = db.query(Document).filter(Document.id == document_id).first()
         source_id = doc.source_id if doc else None
 
-        # Build Qdrant points
+        import time
         points = []
-        for chunk, vector in zip(chunks, vectors):
-            # Each point contains:
-            # - id: unique chunk UUID
-            # - vector: embedding (list of floats)
-            # - payload: metadata for filtering (source, URL, document, type)
+        for chunk, dense_vec, sparse_weights in zip(chunks, dense_vecs, sparse_weights_list):
+            indices = [int(k) for k in sparse_weights.keys()]
+            values = [float(v) for v in sparse_weights.values()]
             point = PointStruct(
                 id=str(uuid.UUID(chunk.id)) if "-" in chunk.id else chunk.id,
-                vector=vector.tolist(),
+                vector={
+                    "dense": dense_vec.tolist(),
+                    "sparse": SparseVector(indices=indices, values=values),
+                },
                 payload={
                     "chunk_id": chunk.id,
                     "document_id": chunk.document_id,
-                    "source_id": source_id,        # required for filtering by source
-                    "text": chunk.text,
+                    "source_id": source_id,
                     "citation_url": chunk.citation_url,
                     "chunk_type": chunk.chunk_type.value if chunk.chunk_type else "text",
+                    "language": getattr(chunk, 'language', None),
+                    "created_ts": int(chunk.created_at.timestamp()) if chunk.created_at else int(time.time()),
                 },
             )
             points.append(point)
 
-        # Upsert: insert or update
-        self.qdrant.upsert(
-            collection_name=settings.qdrant_collection,
-            points=points,
-        )
+        self.qdrant.upsert(collection_name=settings.qdrant_collection, points=points)
 
-        # Mark chunks as embedded in the DB
         for chunk in chunks:
             chunk.is_embedded = True
         db.commit()
-
-        logger.info(f"Embedded {len(chunks)} chunks into Qdrant")
+        logger.info(f"Embedded {len(chunks)} chunks into Qdrant (hybrid)")
 
     def search(
         self,
         query: str,
         top_k: int = 5,
         source_id: Optional[str] = None,
+        db: Optional[Session] = None,
     ) -> list[dict]:
         """
-        Search for the most relevant chunks for a query.
-        
-        How it works:
-        1. Convert query to a vector
-        2. Find the k vectors in Qdrant closest to the query vector
-        3. Return their text + metadata
-        
-        Args:
-            query: The user's question
-            top_k: How many chunks to return
-            source_id: Optional filter (only search within one source)
-        
-        Returns:
-            List of dicts with text, score, citation_url, etc.
+        Hybrid search: prefetch 50 from dense, 50 from sparse, fuse with RRF.
+        Fetches chunk text from Postgres by chunk_id (single IN query).
         """
-        query_vector = self.embed_text(query)
+        model = get_embedding_model()
+        output = model.encode([query], return_dense=True, return_sparse=True)
+        dense_vec = output['dense_vecs'][0].tolist()
+        sparse_weights = output['lexical_weights'][0]
+        sparse_indices = [int(k) for k in sparse_weights.keys()]
+        sparse_values = [float(v) for v in sparse_weights.values()]
 
-        # Optional filter to restrict search to a specific source
         search_filter = None
         if source_id:
             search_filter = Filter(
-                must=[
-                    FieldCondition(
-                        key="source_id",
-                        match=MatchValue(value=source_id),
-                    )
-                ]
+                must=[FieldCondition(key="source_id", match=MatchValue(value=source_id))]
             )
 
-        results = self.qdrant.search(
+        results = self.qdrant.query_points(
             collection_name=settings.qdrant_collection,
-            query_vector=query_vector,
+            prefetch=[
+                Prefetch(
+                    query=dense_vec,
+                    using="dense",
+                    limit=50,
+                    filter=search_filter,
+                ),
+                Prefetch(
+                    query=SparseVector(indices=sparse_indices, values=sparse_values),
+                    using="sparse",
+                    limit=50,
+                    filter=search_filter,
+                ),
+            ],
+            query=FusionQuery(fusion=Fusion.RRF),
             limit=top_k,
-            query_filter=search_filter,
             with_payload=True,
         )
 
+        hits = results.points
+
+        # Batch-fetch chunk text from Postgres
+        chunk_ids = [h.payload.get("chunk_id") for h in hits if h.payload.get("chunk_id")]
+        chunk_text_map = {}
+        if chunk_ids and db is not None:
+            rows = db.query(Chunk).filter(Chunk.id.in_(chunk_ids)).all()
+            chunk_text_map = {r.id: r.text for r in rows}
+
         return [
             {
-                "chunk_id": r.payload.get("chunk_id"),
-                "document_id": r.payload.get("document_id"),
-                "text": r.payload.get("text"),
-                "citation_url": r.payload.get("citation_url"),
-                "score": r.score,  # 0.0 to 1.0, higher = more relevant
+                "chunk_id": h.payload.get("chunk_id"),
+                "document_id": h.payload.get("document_id"),
+                "text": chunk_text_map.get(h.payload.get("chunk_id"), ""),
+                "citation_url": h.payload.get("citation_url"),
+                "score": h.score,
             }
-            for r in results
+            for h in hits
         ]
