@@ -114,11 +114,21 @@ echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee -a /etc/sysctl.d/99-pod
 sudo sysctl -p /etc/sysctl.d/99-podman-ports.conf
 ```
 
+Add `DOCKER_SOCK` to your `.env` (needed so Traefik mounts the Podman socket):
+```
+DOCKER_SOCK=/tmp/podman.sock
+```
+
 Then expose the Podman socket and start the stack:
 ```bash
 podman system service --time=0 unix:///tmp/podman.sock &
-DOCKER_SOCK=/tmp/podman.sock podman compose up --build
+until [ -S /tmp/podman.sock ]; do sleep 0.1; done
+podman compose up --build
 ```
+
+> **First-time cleanup**: if you have leftover containers from a previous run, do
+> `podman compose down -v` first (the `-v` drops anonymous volumes so RabbitMQ
+> gets a fresh home directory with correct ownership).
 
 The `docker-compose.override.yml` is picked up automatically and reconfigures Traefik to run HTTP-only on port 80 (no TLS redirect, no ACME).
 
