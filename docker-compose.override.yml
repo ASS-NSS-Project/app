@@ -4,23 +4,24 @@
 # Traefik still listens on 80 (and 443 from base), but there is no
 # HTTP→HTTPS redirect in this profile so plain http://localhost works.
 #
-# For Podman rootless you need two things:
-#   1. Allow binding port 80 (once, as root):
+# For Podman rootless you need two one-time setup steps:
+#   1. Allow binding port 80 (requires root):
 #        echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee -a /etc/sysctl.d/99-podman-ports.conf
 #        sudo sysctl -p /etc/sysctl.d/99-podman-ports.conf
-#   2. Expose the Podman socket before starting:
-#        podman system service --time=0 unix:///tmp/podman.sock &
-#      Then set in .env (or export):
-#        DOCKER_SOCK=/tmp/podman.sock
+#
+#   2. Enable the Podman user socket (survives reboots via systemd):
+#        systemctl --user enable --now podman.socket
+#      Then add to .env:
+#        DOCKER_SOCK=/run/user/1000/podman/podman.sock
+#      (replace 1000 with your actual UID from `id -u`)
 
 services:
   rabbitmq:
-    # Disable SELinux confinement so the erlang cookie can be written.
-    # Also run as root: rootless Podman maps UID 0 to the host user, which
-    # owns the container overlay — the rabbitmq user (UID 999) does not.
-    user: root
-    security_opt:
-      - label:disable
+    # tmpfs for /var/lib/rabbitmq bypasses both SELinux label issues and
+    # rootless UID-mapping problems with the erlang cookie file.
+    # RabbitMQ state is ephemeral in local dev anyway.
+    tmpfs:
+      - /var/lib/rabbitmq
 
   traefik:
     # Override the full command: remove TLS redirect, ACME, and websecure entrypoint.
@@ -29,11 +30,10 @@ services:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
       - --entrypoints.web.address=:80
-    # Disable SELinux confinement so Traefik can connect to the Podman socket.
-    security_opt:
-      - label:disable
     volumes:
-      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+      # :z relabels the socket so SELinux allows container access.
+      # Set DOCKER_SOCK in .env to your Podman socket path (see header comment).
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro,z
       # no acme.json needed without TLS
 
   api:

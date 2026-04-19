@@ -114,23 +114,27 @@ echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee -a /etc/sysctl.d/99-pod
 sudo sysctl -p /etc/sysctl.d/99-podman-ports.conf
 ```
 
-Add `DOCKER_SOCK` to your `.env` (needed so Traefik mounts the Podman socket):
-```
-DOCKER_SOCK=/tmp/podman.sock
+Enable the Podman user socket (once — survives reboots):
+```bash
+systemctl --user enable --now podman.socket
 ```
 
-Then expose the Podman socket and start the stack:
+Add `DOCKER_SOCK` to your `.env` (replace `1000` with your UID from `id -u`):
+```
+DOCKER_SOCK=/run/user/1000/podman/podman.sock
+```
+
+Then start the stack:
 ```bash
-podman system service --time=0 unix:///tmp/podman.sock &
-until [ -S /tmp/podman.sock ]; do sleep 0.1; done
 podman compose up --build
 ```
 
 > **First-time cleanup**: if you have leftover containers from a previous run, do
-> `podman compose down -v` first (the `-v` drops anonymous volumes so RabbitMQ
-> gets a fresh home directory with correct ownership).
+> `podman compose down -v` first.
 
-The `docker-compose.override.yml` is picked up automatically and reconfigures Traefik to run HTTP-only on port 80 (no TLS redirect, no ACME).
+The `docker-compose.override.yml` is picked up automatically. It reconfigures
+Traefik to run HTTP-only on port 80 and mounts RabbitMQ's home on a tmpfs to
+avoid SELinux and UID-mapping issues with the erlang cookie file.
 
 You'll know it's ready when you see:
 ```
