@@ -1,22 +1,26 @@
-# Local development override — no privileged ports, no TLS.
+# Local development override — HTTP only, no TLS redirect, no ACME.
 # Picked up automatically by `docker compose up` / `podman compose up`.
 #
-# Traefik listens on port 8000 (HTTP only).
-# UI and API are both reachable at http://localhost:8000
+# Traefik still listens on 80 (and 443 from base), but there is no
+# HTTP→HTTPS redirect in this profile so plain http://localhost works.
 #
-# For Podman rootless, expose the Podman socket first:
-#   podman system service --time=0 unix:///tmp/podman.sock &
-# Then set in .env (or export):
-#   DOCKER_SOCK=/tmp/podman.sock
+# For Podman rootless you need two things:
+#   1. Allow binding port 80 (once, as root):
+#        echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee -a /etc/sysctl.d/99-podman-ports.conf
+#        sudo sysctl -p /etc/sysctl.d/99-podman-ports.conf
+#   2. Expose the Podman socket before starting:
+#        podman system service --time=0 unix:///tmp/podman.sock &
+#      Then set in .env (or export):
+#        DOCKER_SOCK=/tmp/podman.sock
 
 services:
   traefik:
+    # Override the full command: remove TLS redirect, ACME, and websecure entrypoint.
+    # Ports 80:80 and 443:443 are kept from the base compose file.
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
-      - --entrypoints.web.address=:8000
-    ports:
-      - "8000:8000"
+      - --entrypoints.web.address=:80
     volumes:
       - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
       # no acme.json needed without TLS

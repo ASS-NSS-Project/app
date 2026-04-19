@@ -106,13 +106,21 @@ touch acme.json && chmod 600 acme.json
 docker compose up --build
 ```
 
-**Podman** (rootless — uses the local override on port 8000, no TLS):
+**Podman** (rootless — exposes port 80 without TLS):
+
+Rootless Podman cannot bind port 80 by default. Allow it once (requires root):
+```bash
+echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee -a /etc/sysctl.d/99-podman-ports.conf
+sudo sysctl -p /etc/sysctl.d/99-podman-ports.conf
+```
+
+Then expose the Podman socket and start the stack:
 ```bash
 podman system service --time=0 unix:///tmp/podman.sock &
 DOCKER_SOCK=/tmp/podman.sock podman compose up --build
 ```
 
-The `docker-compose.override.yml` is picked up automatically and reconfigures Traefik to listen on port 8000 without requiring privileged ports or TLS certificates.
+The `docker-compose.override.yml` is picked up automatically and reconfigures Traefik to run HTTP-only on port 80 (no TLS redirect, no ACME).
 
 You'll know it's ready when you see:
 ```
