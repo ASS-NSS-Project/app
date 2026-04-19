@@ -1,0 +1,36 @@
+# Local development override — no privileged ports, no TLS.
+# Picked up automatically by `docker compose up` / `podman compose up`.
+#
+# Traefik listens on port 8000 (HTTP only).
+# UI and API are both reachable at http://localhost:8000
+#
+# For Podman rootless, expose the Podman socket first:
+#   podman system service --time=0 unix:///tmp/podman.sock &
+# Then set in .env (or export):
+#   DOCKER_SOCK=/tmp/podman.sock
+
+services:
+  traefik:
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+      # no acme.json needed without TLS
+
+  api:
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.api.rule=Host(`${DOMAIN:-localhost}`) && (PathPrefix(`/auth`) || PathPrefix(`/sources`) || PathPrefix(`/query`) || PathPrefix(`/incidents`) || PathPrefix(`/health`))
+      - traefik.http.routers.api.entrypoints=web
+      - traefik.http.services.api.loadbalancer.server.port=8000
+
+  frontend:
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.frontend.rule=Host(`${DOMAIN:-localhost}`)
+      - traefik.http.routers.frontend.entrypoints=web
+      - traefik.http.services.frontend.loadbalancer.server.port=80
