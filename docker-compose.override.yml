@@ -16,13 +16,6 @@
 #      (replace 1000 with your actual UID from `id -u`)
 
 services:
-  rabbitmq:
-    # tmpfs for /var/lib/rabbitmq bypasses both SELinux label issues and
-    # rootless UID-mapping problems with the erlang cookie file.
-    # RabbitMQ state is ephemeral in local dev anyway.
-    tmpfs:
-      - /var/lib/rabbitmq
-
   traefik:
     # Override the full command: remove TLS redirect, ACME, and websecure entrypoint.
     # Ports 80:80 and 443:443 are kept from the base compose file.

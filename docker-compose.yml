@@ -27,6 +27,8 @@ services:
       - "127.0.0.1:15672:15672"   # Management UI: http://localhost:15672
     networks:
       - ragnet
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 10s
@@ -199,6 +201,7 @@ services:
 
 volumes:
   postgres_data:
+  rabbitmq_data:    # Persists erlang cookie and queued messages across restarts
   qdrant_data:
   hf_cache:         # BGE-M3 weights shared between api and worker (~570 MB, downloaded once)
 
