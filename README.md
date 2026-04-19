@@ -144,10 +144,9 @@ rag_worker | INFO: Worker ready. Listening on queue: ingest
 
 ### 5. Open the UI
 
-- **Docker:** **http://localhost** (Traefik on port 80 with TLS)
-- **Podman:** **http://localhost:8000** (Traefik on port 8000, HTTP only)
+Open **http://localhost** and log in with `FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_PASSWORD` from your `.env`.
 
-Log in with the `FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_PASSWORD` from your `.env`.
+Docker serves on port 80 with automatic TLS. Podman local dev also serves on port 80, HTTP only (no redirect, no ACME).
 
 ---
 
@@ -563,7 +562,7 @@ Set `API_DOCS=true` in `.env`, then restart:
 docker compose restart api
 ```
 
-Swagger UI: **http://localhost/docs** (or `http://localhost:8000/docs` for direct access).
+Swagger UI: **http://localhost/docs**
 
 ### Logs
 
@@ -572,6 +571,8 @@ docker compose logs -f api      # API logs
 docker compose logs -f worker   # Worker/ingest logs
 docker compose logs -f frontend # Nginx logs
 ```
+
+(Use `podman compose` instead of `docker compose` when running under Podman.)
 
 ### Restart a single service
 
@@ -604,6 +605,15 @@ docker compose down -v       # Stop and delete all data (fresh start)
 
 **Playwright/screenshot errors**
 → Screenshot strategy needs Chromium in the worker container. If it fails, rebuild: `docker compose build --no-cache worker`.
+
+**Podman: RabbitMQ fails to start (erlang cookie eacces)**
+→ The override mounts `/var/lib/rabbitmq` as tmpfs; if you're not using the override, you'll hit SELinux/UID-mapping issues. Make sure `docker-compose.override.yml` is present and `podman compose` is run from the project root.
+
+**Podman: Traefik cannot connect to Docker socket (permission denied)**
+→ The socket must be the systemd user socket, not one started with `podman system service` in `/tmp`. Run `systemctl --user enable --now podman.socket` and set `DOCKER_SOCK=/run/user/$(id -u)/podman/podman.sock` in `.env`.
+
+**Podman: cannot bind port 80 (permission denied)**
+→ Allow rootless binding of low ports once: `echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee -a /etc/sysctl.d/99-podman-ports.conf && sudo sysctl -p /etc/sysctl.d/99-podman-ports.conf`
 
 ---
 
