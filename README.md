@@ -497,6 +497,37 @@ Mark an incident as resolved.
 
 ---
 
+#### `POST /incidents/simulate` *(admin only)*
+Create a synthetic CAPTCHA incident for testing. Useful for verifying the UI and resolve workflow without waiting for a real scrape to be blocked.
+
+**Request** (`application/json`, all fields optional):
+```json
+{
+  "source_id": "uuid-of-existing-source",
+  "url": "https://example.com/captcha-test",
+  "severity": "medium",
+  "detector": "simulate"
+}
+```
+
+If `source_id` is omitted the first active source is used automatically.
+
+**Quick test via curl:**
+```bash
+TOKEN=$(curl -s -X POST http://127.0.0.1/auth/login \
+  -d "username=admin&password=YOUR_ADMIN_PASSWORD" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+curl -s -X POST http://127.0.0.1/incidents/simulate \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}' | python3 -m json.tool
+```
+
+**Response `200`**: the created `IncidentResponse` with `status: "open"`.
+
+---
+
 ### Health
 
 #### `GET /health`
@@ -514,7 +545,8 @@ No authentication required. Returns `200` if the API is running.
 |---------|-----|-------|
 | Main UI | http://localhost | Frontend application |
 | API | http://localhost (proxied) | FastAPI backend via Traefik |
-| Swagger UI | disabled by default | Set `API_DOCS=true` in `.env`, then `/docs` |
+| Swagger UI | http://localhost/docs | Set `API_DOCS=true` in `.env` to enable |
+| ReDoc | http://localhost/redoc | Set `API_DOCS=true` in `.env` to enable |
 | Qdrant Dashboard | http://localhost:6333/dashboard | Browse vector collections (localhost only) |
 | RabbitMQ Management | http://localhost:15672 | Browse queues (localhost only) |
 
@@ -561,13 +593,14 @@ Embeddings: BGE-M3 via FlagEmbedding (runs locally in the worker)
 
 ### Enable API docs
 
-Set `API_DOCS=true` in `.env`, then restart:
+Set `API_DOCS=true` in `.env`, then restart the API container:
 
 ```bash
-docker compose restart api
+docker compose restart api   # or: podman compose restart api
 ```
 
-Swagger UI: **http://localhost/docs**
+- Swagger UI: **http://localhost/docs**
+- ReDoc: **http://localhost/redoc**
 
 ### Logs
 

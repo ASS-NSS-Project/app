@@ -32,7 +32,7 @@ services:
   api:
     labels:
       - traefik.enable=true
-      - traefik.http.routers.api.rule=Host(`${DOMAIN:-localhost}`) && (PathPrefix(`/auth`) || PathPrefix(`/sources`) || PathPrefix(`/query`) || PathPrefix(`/incidents`) || PathPrefix(`/health`))
+      - traefik.http.routers.api.rule=Host(`${DOMAIN:-localhost}`) && (PathPrefix(`/auth`) || PathPrefix(`/sources`) || PathPrefix(`/query`) || PathPrefix(`/incidents`) || PathPrefix(`/health`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`))
       - traefik.http.routers.api.entrypoints=web
       - traefik.http.services.api.loadbalancer.server.port=8000
       # Disable the HTTPS router defined in the base compose (no websecure entrypoint in dev)

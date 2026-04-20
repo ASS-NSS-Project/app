@@ -2,13 +2,13 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, Literal
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 from database import get_db
-from models import User, Incident, UserRole
+from models import User, Incident, IncidentType, IncidentStatus, IngestStrategy, Source, UserRole
 from routers.auth import get_authenticated_user, require_role
 from services.captcha_service import CaptchaService
 from services.auth_service import log_action
@@ -35,6 +35,47 @@ class IncidentResponse(BaseModel):
 
 class ResolveRequest(BaseModel):
     resolution_note: str = Field(..., min_length=1, max_length=2000)
+
+
+class SimulateRequest(BaseModel):
+    source_id: Optional[str] = None
+    url: str = "https://example.com/captcha-test"
+    severity: Literal["low", "medium", "high"] = "medium"
+    detector: str = "simulate"
+
+
+@router.post("/simulate", response_model=IncidentResponse)
+def simulate_incident(
+    request: SimulateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.admin)),
+):
+    """Create a synthetic CAPTCHA incident for testing. Admin only."""
+    source_id = request.source_id
+    if source_id:
+        if not db.query(Source).filter(Source.id == source_id).first():
+            raise HTTPException(status_code=404, detail="Source not found")
+    else:
+        first = db.query(Source).filter(Source.is_active == True).first()
+        if not first:
+            raise HTTPException(status_code=400, detail="No active sources — create one first")
+        source_id = first.id
+
+    incident = Incident(
+        type=IncidentType.captcha,
+        source_id=source_id,
+        url=request.url,
+        strategy=IngestStrategy.html,
+        severity=request.severity,
+        status=IncidentStatus.open,
+        detector=request.detector,
+    )
+    db.add(incident)
+    db.commit()
+    db.refresh(incident)
+    log_action(db, current_user.id, "INCIDENT_SIMULATED", "incident", incident.id)
+    logger.info("Simulated incident %s created by %s", incident.id, current_user.email)
+    return incident
 
 
 @router.get("/", response_model=list[IncidentResponse])

@@ -110,6 +110,7 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
       - FRONTEND_URL=${FRONTEND_URL}
+      - API_DOCS=${API_DOCS:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -126,10 +127,10 @@ services:
     labels:
       - traefik.enable=true
       # HTTP
-      - traefik.http.routers.api.rule=Host(`${DOMAIN}`) && (PathPrefix(`/auth`) || PathPrefix(`/sources`) || PathPrefix(`/query`) || PathPrefix(`/incidents`) || PathPrefix(`/health`))
+      - traefik.http.routers.api.rule=Host(`${DOMAIN}`) && (PathPrefix(`/auth`) || PathPrefix(`/sources`) || PathPrefix(`/query`) || PathPrefix(`/incidents`) || PathPrefix(`/health`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`))
       - traefik.http.routers.api.entrypoints=web
       # HTTPS (cert obtained automatically once DOMAIN resolves to this server)
-      - traefik.http.routers.api-secure.rule=Host(`${DOMAIN}`) && (PathPrefix(`/auth`) || PathPrefix(`/sources`) || PathPrefix(`/query`) || PathPrefix(`/incidents`) || PathPrefix(`/health`))
+      - traefik.http.routers.api-secure.rule=Host(`${DOMAIN}`) && (PathPrefix(`/auth`) || PathPrefix(`/sources`) || PathPrefix(`/query`) || PathPrefix(`/incidents`) || PathPrefix(`/health`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`))
       - traefik.http.routers.api-secure.entrypoints=websecure
       - traefik.http.routers.api-secure.tls=true
       - traefik.http.routers.api-secure.tls.certresolver=letsencrypt
