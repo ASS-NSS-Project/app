@@ -456,6 +456,14 @@ Ask a question. Returns an answer with citations from the knowledge base.
 
 Incidents are created automatically when a CAPTCHA or access block is detected during ingestion.
 
+**Testing with a real CAPTCHA page:**
+Google's reCAPTCHA demo is a stable developer test page that always contains CAPTCHA markup:
+1. Create a source with `base_url: https://www.google.com/recaptcha/api2/demo` and `preferred_strategy: html`
+2. Trigger an ingest — the HTML fetcher detects `recaptcha` keywords and creates an incident automatically
+3. The incident appears in this list with `detector: html_keyword`
+
+Use `html` strategy (not `rendered` or `screenshot`) — it's the fastest path and sufficient for keyword detection.
+
 #### `GET /incidents/`
 List incidents, newest first (max 100).
 
