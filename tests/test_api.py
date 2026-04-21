@@ -190,13 +190,21 @@ async def test_incidents_list_authenticated(client: AsyncClient, auth_headers: d
 def test_prose_chunker_html_article():
     from services.chunking import split_prose
 
+    # Paragraphs must total > min_tok (100) or the chunker discards them.
+    # Each paragraph here is ~40–50 tokens; three paragraphs exceed the threshold.
     html = """
     <html><body>
       <h1>Introduction</h1>
-      <p>This is the first paragraph of the article. It contains some meaningful content.</p>
+      <p>Retrieval-Augmented Generation combines a retrieval step with a generative language
+      model to produce answers that are grounded in a specific document corpus rather than
+      relying solely on the model's parametric knowledge acquired during pre-training.</p>
       <h2>Background</h2>
-      <p>Here is some background information about the topic being discussed at length.</p>
-      <p>And another paragraph with more details about the subject matter covered here.</p>
+      <p>Dense retrieval systems encode both queries and passages into a shared embedding space
+      so that semantically similar texts map to nearby vectors, enabling efficient nearest-neighbour
+      search over large document collections using libraries such as Faiss or Qdrant.</p>
+      <p>Hybrid retrieval combines dense vector search with sparse keyword matching such as BM25,
+      then fuses the ranked lists using Reciprocal Rank Fusion to improve precision across diverse
+      query types that benefit from different retrieval signals.</p>
     </body></html>
     """
     chunks = split_prose(html, source_method="html")
