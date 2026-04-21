@@ -1,8 +1,13 @@
 <template>
   <div class="flex items-center justify-center min-h-screen" style="background: var(--bg)">
     <div style="width: 380px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 40px">
-      <h2 class="text-xl font-semibold mb-1">🔍 RAG System</h2>
-      <p class="text-sm mb-7" style="color: var(--muted)">Multimodal web intelligence platform</p>
+      <div class="login-logo">
+        <span class="login-logo-mark">✦</span>
+        <div>
+          <h2 class="text-xl font-semibold" style="line-height:1.2;background:linear-gradient(90deg,var(--text) 40%,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">RAG System</h2>
+          <p class="text-xs" style="color: var(--muted); margin-top:2px">Team APIčáci</p>
+        </div>
+      </div>
 
       <Message v-if="error" severity="error" class="mb-4">{{ error }}</Message>
 
@@ -55,6 +60,24 @@
     </div>
   </div>
 </template>
+
+<style scoped>
+.login-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.login-logo-mark {
+  font-size: 28px;
+  background: linear-gradient(135deg, var(--accent2), #fcd34d);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 10px rgba(245,158,11,.7));
+  flex-shrink: 0;
+}
+</style>
 
 <script setup lang="ts">
 import { ref } from 'vue'

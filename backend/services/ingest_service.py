@@ -18,9 +18,11 @@ import hashlib
 import io
 import logging
 import os
+import time
 from datetime import datetime
 from typing import Optional, Tuple
 
+import feedparser
 import httpx
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright, Page
@@ -35,6 +37,9 @@ from services.storage_service import StorageService
 from services.extraction_service import ExtractionService
 from services.captcha_service import CaptchaDetector
 from services.chunking import split_prose, split_tables, split_vlm, TextChunk
+from services.metrics import (
+    INGEST_JOBS_TOTAL, INGEST_DURATION, CAPTCHA_INCIDENTS_TOTAL,
+)
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -77,6 +82,14 @@ class IngestService:
         job.started_at = datetime.utcnow()
         self.db.commit()
 
+        logger.info("Ingest pipeline started", extra={
+            "event": "ingest_started",
+            "job_id": job.id,
+            "source_id": job.source_id,
+            "url": job.url,
+        })
+
+        t0 = time.monotonic()
         try:
             text, strategy, evidence_id = await self._run_pipeline(job)
 
@@ -85,22 +98,49 @@ class IngestService:
                 job.error_message = "All strategies exhausted without extracting content"
                 job.finished_at = datetime.utcnow()
                 self.db.commit()
+                INGEST_JOBS_TOTAL.labels(status="failed", strategy="unknown").inc()
+                logger.error("All ingest strategies exhausted", extra={
+                    "event": "ingest_failed",
+                    "job_id": job.id,
+                    "source_id": job.source_id,
+                    "url": job.url,
+                    "reason": "all_strategies_exhausted",
+                })
                 return job
 
-            # Create document and chunks in the DB
             await self._create_document_and_chunks(job, text, strategy, evidence_id)
 
             job.status = JobStatus.done
             job.strategy_used = strategy
             job.finished_at = datetime.utcnow()
             self.db.commit()
+            elapsed = time.monotonic() - t0
+            strategy_val = strategy.value if strategy else "unknown"
+            INGEST_JOBS_TOTAL.labels(status="done", strategy=strategy_val).inc()
+            INGEST_DURATION.labels(strategy=strategy_val).observe(elapsed)
+            logger.info("Ingest pipeline completed", extra={
+                "event": "ingest_completed",
+                "job_id": job.id,
+                "source_id": job.source_id,
+                "url": job.url,
+                "strategy": strategy_val,
+                "duration_s": round(elapsed, 2),
+                "chars": len(text),
+            })
 
         except Exception as e:
-            logger.exception(f"Job {job_id} failed: {e}")
+            logger.exception("Ingest pipeline crashed", extra={
+                "event": "ingest_failed",
+                "job_id": job.id,
+                "source_id": job.source_id,
+                "url": job.url,
+                "reason": str(e),
+            })
             job.status = JobStatus.failed
             job.error_message = str(e)
             job.finished_at = datetime.utcnow()
             self.db.commit()
+            INGEST_JOBS_TOTAL.labels(status="failed", strategy="unknown").inc()
 
         return job
 
@@ -114,12 +154,19 @@ class IngestService:
 
         # Determine strategy order based on source preference
         strategies = self._get_strategy_order(source.preferred_strategy)
-        logger.info(f"[Job {job.id}] Strategy order: {strategies}")
 
         for strategy in strategies:
-            logger.info(f"[Job {job.id}] Trying strategy: {strategy}")
+            logger.info("Trying ingest strategy", extra={
+                "event": "ingest_strategy_attempt",
+                "job_id": job.id,
+                "source_id": job.source_id,
+                "url": job.url,
+                "strategy": strategy.value,
+            })
             try:
-                if strategy == IngestStrategy.html:
+                if strategy == IngestStrategy.api:
+                    result = await self._strategy_feed(job)
+                elif strategy == IngestStrategy.html:
                     result = await self._strategy_html(job)
                 elif strategy == IngestStrategy.rendered:
                     result = await self._strategy_rendered(job)
@@ -133,21 +180,28 @@ class IngestService:
 
                 text, evidence_id = result
 
-                # Check quality: is there enough content?
                 if len(text.strip()) >= settings.quality_threshold_chars:
-                    logger.info(
-                        f"[Job {job.id}] Strategy {strategy} succeeded "
-                        f"({len(text)} chars)"
-                    )
                     return text, strategy, evidence_id
                 else:
-                    logger.info(
-                        f"[Job {job.id}] Strategy {strategy} produced "
-                        f"only {len(text)} chars (below threshold), falling back"
-                    )
+                    logger.info("Strategy below quality threshold, falling back", extra={
+                        "event": "ingest_strategy_fallback",
+                        "job_id": job.id,
+                        "source_id": job.source_id,
+                        "url": job.url,
+                        "strategy": strategy.value,
+                        "chars": len(text),
+                        "threshold": settings.quality_threshold_chars,
+                    })
 
             except CaptchaDetectedError as e:
-                logger.warning(f"[Job {job.id}] CAPTCHA detected: {e}")
+                logger.warning("CAPTCHA detected during ingest", extra={
+                    "event": "captcha_detected",
+                    "job_id": job.id,
+                    "source_id": job.source_id,
+                    "url": job.url,
+                    "strategy": strategy.value,
+                    "detector": e.detector,
+                })
                 from services.captcha_service import CaptchaService
                 await CaptchaService(self.db).create_incident(
                     job=job,
@@ -157,10 +211,19 @@ class IngestService:
                 )
                 job.status = JobStatus.captcha_blocked
                 self.db.commit()
+                INGEST_JOBS_TOTAL.labels(status="captcha_blocked", strategy=strategy.value).inc()
+                CAPTCHA_INCIDENTS_TOTAL.labels(strategy=strategy.value).inc()
                 return None, None, None
 
             except Exception as e:
-                logger.warning(f"[Job {job.id}] Strategy {strategy} error: {e}")
+                logger.warning("Ingest strategy error", extra={
+                    "event": "ingest_strategy_error",
+                    "job_id": job.id,
+                    "source_id": job.source_id,
+                    "url": job.url,
+                    "strategy": strategy.value,
+                    "reason": str(e),
+                })
                 continue
 
         return None, None, None
@@ -168,17 +231,75 @@ class IngestService:
     def _get_strategy_order(self, preferred: IngestStrategy):
         """
         Returns the list of strategies to try, starting with the preferred one.
-        Always falls back through the full chain.
+        api/feed comes first when preferred; fallback chain is html→rendered→screenshot.
+        When preferred is rendered/screenshot, html is always appended as a last-resort
+        fallback because it works on any publicly accessible page.
         """
-        full_chain = [
+        fallback_chain = [
             IngestStrategy.html,
             IngestStrategy.rendered,
             IngestStrategy.screenshot,
         ]
-        if preferred in full_chain:
-            idx = full_chain.index(preferred)
-            return full_chain[idx:]  # Start from preferred, fall through to the end
-        return full_chain
+        if preferred == IngestStrategy.api:
+            return [IngestStrategy.api] + fallback_chain
+        if preferred in fallback_chain:
+            idx = fallback_chain.index(preferred)
+            chain = fallback_chain[idx:]
+            # Always ensure html is reachable as a final fallback
+            if IngestStrategy.html not in chain:
+                chain = chain + [IngestStrategy.html]
+            return chain
+        return fallback_chain
+
+    # ─────────────────────────────────────────────
+    # STRATEGY 0: RSS/Atom Feed (API/Feed)
+    # Parse feed entries and concatenate their content.
+    # Fastest and cleanest when a feed is available.
+    # ─────────────────────────────────────────────
+
+    async def _strategy_feed(self, job: IngestJob) -> Optional[Tuple[str, str]]:
+        """
+        Fetch and parse an RSS/Atom feed. Returns concatenated entry content.
+        Falls through (returns None) if the URL is not a valid feed.
+        """
+        async with httpx.AsyncClient(
+            timeout=20,
+            follow_redirects=True,
+            headers={"User-Agent": "RAGBot/1.0 (research; contact@example.com)"},
+        ) as client:
+            response = await client.get(job.url)
+
+        raw = response.content
+        feed = feedparser.parse(raw)
+
+        if feed.bozo and not feed.entries:
+            return None
+
+        parts: list[str] = []
+        if feed.feed.get("title"):
+            parts.append(feed.feed.title)
+
+        for entry in feed.entries[:50]:
+            title = entry.get("title", "")
+            summary = entry.get("summary", "") or entry.get("content", [{}])[0].get("value", "")
+            soup = BeautifulSoup(summary, "html.parser")
+            text = soup.get_text(separator="\n", strip=True)
+            if title or text:
+                parts.append(f"## {title}\n{text}" if title else text)
+
+        if not parts:
+            return None
+
+        combined = "\n\n".join(parts)
+
+        evidence_id = await self._save_evidence(
+            job=job,
+            data=raw,
+            evidence_type=EvidenceType.html,
+            filename="feed.xml",
+            content_type=response.headers.get("content-type", "application/xml"),
+        )
+        return combined, evidence_id
 
     # ─────────────────────────────────────────────
     # STRATEGY 1: Simple HTML Fetch
@@ -249,7 +370,7 @@ class IngestService:
             page = await browser.new_page()
 
             # Navigate and wait until network is quiet (no more requests)
-            await page.goto(job.url, wait_until="networkidle", timeout=30000)
+            await page.goto(job.url, wait_until="domcontentloaded", timeout=20000)
 
             # CAPTCHA detection: check page content
             content = await page.content()
@@ -294,7 +415,7 @@ class IngestService:
                 args=["--no-sandbox", "--disable-setuid-sandbox"]
             )
             page = await browser.new_page(viewport={"width": 1280, "height": 900})
-            await page.goto(job.url, wait_until="networkidle", timeout=30000)
+            await page.goto(job.url, wait_until="domcontentloaded", timeout=20000)
 
             # Check for CAPTCHA in the screenshot itself
             is_captcha = await self.captcha_detector.detect_from_page(page)
@@ -461,7 +582,15 @@ class IngestService:
             self.db.add(chunk)
 
         self.db.commit()
-        logger.info(f"Created document {doc.id} with {len(all_chunks)} chunks")
+        logger.info("Document created with chunks", extra={
+            "event": "document_created",
+            "job_id": job.id,
+            "source_id": job.source_id,
+            "url": job.url,
+            "document_id": doc.id,
+            "chunk_count": len(all_chunks),
+            "strategy": strategy.value if strategy else "unknown",
+        })
 
 
 class CaptchaDetectedError(Exception):

@@ -3,7 +3,7 @@ import logging
 import socket
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -197,6 +197,75 @@ def trigger_ingest(
 
     log_action(db, current_user.id, "INGEST_TRIGGERED", "job", job.id, {"url": url})
     return job
+
+
+class JobResponseWithSource(JobResponse):
+    source_name: Optional[str] = None
+    source_base_url: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/jobs/all", response_model=list[JobResponseWithSource])
+def list_all_jobs(
+    source_id: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    limit: int = Query(100, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_authenticated_user),
+):
+    q = db.query(IngestJob, Source.name, Source.base_url).join(
+        Source, IngestJob.source_id == Source.id
+    )
+    if source_id:
+        q = q.filter(IngestJob.source_id == source_id)
+    if status:
+        q = q.filter(IngestJob.status == status)
+    rows = q.order_by(IngestJob.created_at.desc()).offset(offset).limit(limit).all()
+    result = []
+    for job, src_name, src_url in rows:
+        d = {c.name: getattr(job, c.name) for c in job.__table__.columns}
+        d["source_name"] = src_name
+        d["source_base_url"] = src_url
+        result.append(d)
+    return result
+
+
+@router.post("/jobs/{job_id}/cancel")
+def cancel_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.curator)),
+):
+    job = db.query(IngestJob).filter(IngestJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status not in (JobStatus.pending, JobStatus.running):
+        raise HTTPException(status_code=400, detail="Only pending or running jobs can be cancelled")
+    job.status = JobStatus.failed
+    job.error_message = "Cancelled by user"
+    db.commit()
+    log_action(db, current_user.id, "JOB_CANCELLED", "job", job_id)
+    return {"message": "Job cancelled"}
+
+
+@router.delete("/jobs/{job_id}")
+def delete_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.admin)),
+):
+    job = db.query(IngestJob).filter(IngestJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status in (JobStatus.pending, JobStatus.running):
+        raise HTTPException(status_code=400, detail="Cancel the job before deleting it")
+    db.delete(job)
+    db.commit()
+    log_action(db, current_user.id, "JOB_DELETED", "job", job_id)
+    return {"message": "Job deleted"}
 
 
 @router.get("/{source_id}/jobs", response_model=list[JobResponse])

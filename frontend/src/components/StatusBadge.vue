@@ -1,5 +1,5 @@
 <template>
-  <Tag :value="status" :severity="severity" rounded />
+  <Tag :value="status" :severity="severity" rounded :class="{ 'status-running': status === 'running' }" />
 </template>
 
 <script setup lang="ts">

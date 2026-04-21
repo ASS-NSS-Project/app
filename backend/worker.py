@@ -16,21 +16,22 @@ the API while it waits for results. The queue decouples this.
 import asyncio
 import json
 import logging
+import os
+import threading
 from datetime import datetime
 
 import pika
+from prometheus_client import start_http_server
 
 from config import get_settings
 from database import SessionLocal
 from models import IngestJob, JobStatus, Source
 from services.ingest_service import IngestService
 from services.embedding_service import EmbeddingService
+from services.logging_config import setup_logging
 from services.queue_service import QUEUE_NAME, wait_for_rabbitmq
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+setup_logging(os.getenv("LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
@@ -44,33 +45,48 @@ def process_ingest_job(job_id: str) -> None:
 
     Synchronous wrapper around async code – pika doesn't natively support async.
     """
-    logger.info(f"Worker processing job: {job_id}")
+    logger.info("Worker picked up job", extra={"event": "worker_job_started", "job_id": job_id})
     db = SessionLocal()
 
+    # Job may have been cancelled between being queued and picked up
+    preflight = db.query(IngestJob).filter(IngestJob.id == job_id).first()
+    if not preflight or preflight.status != JobStatus.pending:
+        logger.info("Job already cancelled or missing, skipping", extra={
+            "event": "worker_job_skipped", "job_id": job_id,
+        })
+        db.close()
+        return
+
     try:
-        # Run the async ingest pipeline synchronously
         ingest_service = IngestService(db)
         job = asyncio.run(ingest_service.run(job_id))
 
         if job.status == JobStatus.done:
-            logger.info(f"Job {job_id} done, starting embedding...")
             _embed_job_chunks(db, job)
 
-            # Update the last crawl timestamp – the scheduler uses this
-            # to decide when to schedule the next crawl for this source
             source = db.query(Source).filter(Source.id == job.source_id).first()
             if source:
                 source.last_crawled_at = datetime.utcnow()
                 db.commit()
-                logger.info(f"Updated last_crawled_at for source '{source.name}'")
 
-            logger.info(f"Job {job_id} fully processed (ingest + embedding)")
+            logger.info("Worker job fully processed", extra={
+                "event": "worker_job_completed",
+                "job_id": job_id,
+                "source_id": str(job.source_id),
+            })
         else:
-            logger.warning(f"Job {job_id} finished with status: {job.status}")
+            logger.warning("Worker job finished with non-done status", extra={
+                "event": "worker_job_incomplete",
+                "job_id": job_id,
+                "status": job.status.value,
+            })
 
     except Exception as e:
-        logger.exception(f"Worker failed processing job {job_id}: {e}")
-        # Mark the job as failed in the DB
+        logger.exception("Worker job crashed", extra={
+            "event": "worker_job_crashed",
+            "job_id": job_id,
+            "reason": str(e),
+        })
         failed_job = db.query(IngestJob).filter(IngestJob.id == job_id).first()
         if failed_job:
             failed_job.status = JobStatus.failed
@@ -116,23 +132,32 @@ def on_message(channel, method, _properties, body: bytes) -> None:
         payload = json.loads(body)
         job_id = payload["job_id"]
     except (json.JSONDecodeError, KeyError) as e:
-        logger.error(f"Invalid message in queue: {body!r} – {e}")
-        # Reject the message without requeueing
+        logger.error("Invalid message in queue, dropping", extra={
+            "event": "worker_invalid_message",
+            "reason": str(e),
+        })
         channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
         return
 
     try:
         process_ingest_job(job_id)
-        # Acknowledge the message – RabbitMQ will remove it from the queue
         channel.basic_ack(delivery_tag=method.delivery_tag)
     except Exception as e:
-        logger.exception(f"Unexpected error processing job {job_id}: {e}")
-        # Return the message to the queue for retry
+        logger.exception("Unexpected error processing job, requeueing", extra={
+            "event": "worker_job_crashed",
+            "job_id": job_id,
+            "reason": str(e),
+        })
         channel.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
 
 if __name__ == "__main__":
-    logger.info("Starting RAG ingest worker...")
+    logger.info("Starting RAG ingest worker", extra={"event": "startup"})
+
+    # Expose Prometheus metrics on port 9090 (scraped by PodMonitor)
+    metrics_port = int(os.getenv("WORKER_METRICS_PORT", "9090"))
+    start_http_server(metrics_port)
+    logger.info("Prometheus metrics server started on port %d", metrics_port)
 
     # Wait until RabbitMQ is available
     wait_for_rabbitmq()

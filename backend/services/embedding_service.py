@@ -9,6 +9,7 @@ Postgres = source of truth for chunk text (fetched by chunk_id after retrieval).
 """
 
 import logging
+import time
 import uuid
 from typing import Optional
 
@@ -25,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from config import get_settings
 from models import Chunk
+from services.metrics import CHUNKS_EMBEDDED_TOTAL, EMBEDDING_DURATION
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -125,7 +127,7 @@ class EmbeddingService:
         doc = db.query(Document).filter(Document.id == document_id).first()
         source_id = doc.source_id if doc else None
 
-        import time
+        t0 = time.time()
         points = []
         for chunk, dense_vec, sparse_weights in zip(chunks, dense_vecs, sparse_weights_list):
             indices = [int(k) for k in sparse_weights.keys()]
@@ -148,12 +150,29 @@ class EmbeddingService:
             )
             points.append(point)
 
-        self.qdrant.upsert(collection_name=settings.qdrant_collection, points=points)
+        try:
+            self.qdrant.upsert(collection_name=settings.qdrant_collection, points=points)
+        except Exception as e:
+            logger.error("Failed to upsert embeddings into Qdrant", extra={
+                "event": "embedding_failed",
+                "document_id": document_id,
+                "chunk_count": len(chunks),
+                "reason": str(e),
+            })
+            raise
 
+        elapsed = time.time() - t0
         for chunk in chunks:
             chunk.is_embedded = True
         db.commit()
-        logger.info(f"Embedded {len(chunks)} chunks into Qdrant (hybrid)")
+        CHUNKS_EMBEDDED_TOTAL.inc(len(chunks))
+        EMBEDDING_DURATION.observe(elapsed)
+        logger.info("Chunks embedded into Qdrant", extra={
+            "event": "embedding_completed",
+            "document_id": document_id,
+            "chunk_count": len(chunks),
+            "elapsed_s": round(elapsed, 3),
+        })
 
     def search(
         self,
@@ -219,3 +238,13 @@ class EmbeddingService:
             }
             for h in hits
         ]
+
+    def delete_chunks(self, chunk_ids: list[str]) -> None:
+        """Remove Qdrant points whose payload chunk_id matches any of the given IDs."""
+        from qdrant_client.models import Filter, FieldCondition, MatchAny
+        self.qdrant.delete(
+            collection_name=settings.qdrant_collection,
+            points_selector=Filter(
+                must=[FieldCondition(key="chunk_id", match=MatchAny(any=chunk_ids))]
+            ),
+        )

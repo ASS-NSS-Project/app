@@ -13,16 +13,42 @@ Uses the e-INFRA AIaaS OpenAI-compatible API (LLM_BASE_URL / LLM_MODEL).
 """
 
 import logging
+import re
+import time
 from typing import Optional
 
-from openai import AsyncOpenAI
+import httpx
+from openai import AsyncOpenAI, APITimeoutError, APIStatusError
 from sqlalchemy.orm import Session
 
 from config import get_settings
 from services.embedding_service import EmbeddingService
+from services.metrics import QUERY_REQUESTS_TOTAL, QUERY_DURATION
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# Module-level singletons — created once, reused across requests
+_embedder: Optional[EmbeddingService] = None
+_llm_client: Optional[AsyncOpenAI] = None
+
+
+def _get_embedder() -> EmbeddingService:
+    global _embedder
+    if _embedder is None:
+        _embedder = EmbeddingService()
+    return _embedder
+
+
+def _get_llm_client() -> AsyncOpenAI:
+    global _llm_client
+    if _llm_client is None:
+        _llm_client = AsyncOpenAI(
+            base_url=settings.llm_base_url,
+            api_key=settings.llm_api_key,
+            timeout=httpx.Timeout(connect=10.0, read=180.0, write=10.0, pool=5.0),
+        )
+    return _llm_client
 
 
 class RAGService:
@@ -31,11 +57,8 @@ class RAGService:
     """
 
     def __init__(self):
-        self.client = AsyncOpenAI(
-            base_url=settings.llm_base_url,
-            api_key=settings.llm_api_key,
-        )
-        self.embedder = EmbeddingService()
+        self.client = _get_llm_client()
+        self.embedder = _get_embedder()
 
     async def query(
         self,
@@ -46,10 +69,14 @@ class RAGService:
         strict_grounding: bool = True,
         db: Optional[Session] = None,
     ) -> dict:
+        t0 = time.monotonic()
         if mode == "rag":
-            return await self._query_rag(question, top_k, source_id, strict_grounding, db)
+            result = await self._query_rag(question, top_k, source_id, strict_grounding, db)
         else:
-            return await self._query_no_rag(question)
+            result = await self._query_no_rag(question)
+        QUERY_REQUESTS_TOTAL.labels(mode=mode).inc()
+        QUERY_DURATION.labels(mode=mode).observe(time.monotonic() - t0)
+        return result
 
     async def _query_rag(
         self,
@@ -77,23 +104,44 @@ class RAGService:
         context = "\n\n---\n\n".join(context_parts)
 
         # Step 3: Call LLM
-        logger.info(f"Sending RAG query to LLM ({settings.llm_model}): '{question[:80]}'")
-        response = await self.client.chat.completions.create(
-            model=settings.llm_model,
-            max_tokens=2048,
-            messages=[
-                {"role": "system", "content": self._build_rag_system_prompt(strict_grounding)},
-                {"role": "user", "content": (
-                    f"Context documents:\n\n{context}\n\n---\n\n"
-                    f"Question: {question}\n\n"
-                    f"Answer based on the context documents above. "
-                    f"Cite sources using [1], [2], etc. notation. "
-                    f"If the context doesn't contain enough information to answer, say so clearly."
-                )},
-            ],
-        )
+        logger.info("Sending RAG query to LLM (%s): '%s'", settings.llm_model, question[:80])
+        try:
+            response = await self.client.chat.completions.create(
+                model=settings.llm_model,
+                max_tokens=2048,
+                extra_body={"enable_thinking": False},
+                messages=[
+                    {"role": "system", "content": self._build_rag_system_prompt(strict_grounding)},
+                    {"role": "user", "content": (
+                        f"Context documents:\n\n{context}\n\n---\n\n"
+                        f"Question: {question}\n\n"
+                        f"Answer based on the context documents above. "
+                        f"Cite sources using [1], [2], etc. notation. "
+                        f"If the context doesn't contain enough information to answer, say so clearly."
+                    )},
+                ],
+            )
+        except APITimeoutError:
+            logger.error("LLM request timed out", extra={
+                "event": "llm_timeout",
+                "model": settings.llm_model,
+                "mode": "rag",
+            })
+            raise RuntimeError(
+                f"LLM request timed out after 180 s. "
+                f"Check that LLM_BASE_URL and LLM_MODEL are correct ({settings.llm_model})."
+            )
+        except APIStatusError as e:
+            logger.error("LLM API error", extra={
+                "event": "llm_error",
+                "model": settings.llm_model,
+                "mode": "rag",
+                "status_code": e.status_code,
+                "detail": e.message,
+            })
+            raise RuntimeError(f"LLM API returned {e.status_code}: {e.message}")
 
-        answer = response.choices[0].message.content
+        answer = self._strip_thinking(response.choices[0].message.content or "")
 
         citations = [
             {
@@ -114,19 +162,44 @@ class RAGService:
 
     async def _query_no_rag(self, question: str) -> dict:
         """No-RAG mode: ask the LLM directly, no retrieval."""
-        logger.info(f"Sending no-RAG query to LLM ({settings.llm_model})")
-        response = await self.client.chat.completions.create(
-            model=settings.llm_model,
-            max_tokens=2048,
-            messages=[{"role": "user", "content": question}],
-        )
+        logger.info("Sending no-RAG query to LLM (%s)", settings.llm_model)
+        try:
+            response = await self.client.chat.completions.create(
+                model=settings.llm_model,
+                max_tokens=2048,
+                extra_body={"enable_thinking": False},
+                messages=[{"role": "user", "content": question}],
+            )
+        except APITimeoutError:
+            logger.error("LLM request timed out", extra={
+                "event": "llm_timeout",
+                "model": settings.llm_model,
+                "mode": "no_rag",
+            })
+            raise RuntimeError(
+                f"LLM request timed out after 180 s. "
+                f"Check that LLM_BASE_URL and LLM_MODEL are correct ({settings.llm_model})."
+            )
+        except APIStatusError as e:
+            logger.error("LLM API error", extra={
+                "event": "llm_error",
+                "model": settings.llm_model,
+                "mode": "no_rag",
+                "status_code": e.status_code,
+                "detail": e.message,
+            })
+            raise RuntimeError(f"LLM API returned {e.status_code}: {e.message}")
 
         return {
-            "answer": response.choices[0].message.content,
+            "answer": self._strip_thinking(response.choices[0].message.content or ""),
             "mode": "no_rag",
             "citations": [],
             "chunks_retrieved": 0,
         }
+
+    @staticmethod
+    def _strip_thinking(text: str) -> str:
+        return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
     def _build_rag_system_prompt(self, strict_grounding: bool) -> str:
         if strict_grounding:

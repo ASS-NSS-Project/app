@@ -23,7 +23,7 @@ from sqlalchemy import func, text
 
 from config import get_settings
 from database import SessionLocal
-from models import Evidence, IngestJob, Source, JobStatus
+from models import Chunk, Document, Evidence, IngestJob, Source, JobStatus
 from services.queue_service import publish_job
 from services.storage_service import StorageService
 
@@ -75,16 +75,30 @@ def _schedule_due_sources() -> None:
             try:
                 publish_job(job.id)
                 scheduled += 1
-                logger.info(f"Scheduler: scheduled crawl '{source.name}' → job {job.id}")
+                logger.info("Crawl job scheduled", extra={
+                    "event": "scheduler_job_triggered",
+                    "source_id": source.id,
+                    "source_name": source.name,
+                    "job_id": job.id,
+                    "url": source.base_url,
+                })
             except Exception as e:
-                # If publishing fails, mark the job as failed
                 job.status = JobStatus.failed
                 job.error_message = f"Failed to publish to queue: {e}"
                 db.commit()
-                logger.error(f"Failed to schedule crawl for source '{source.name}': {e}")
+                logger.error("Failed to publish crawl job to queue", extra={
+                    "event": "scheduler_crawl_failed",
+                    "source_id": source.id,
+                    "source_name": source.name,
+                    "job_id": job.id,
+                    "reason": str(e),
+                })
 
         if scheduled:
-            logger.info(f"Scheduler: {scheduled} crawl(s) scheduled")
+            logger.info("Scheduler run complete", extra={
+                "event": "scheduler_run_complete",
+                "scheduled_count": scheduled,
+            })
 
     finally:
         db.close()
@@ -129,7 +143,7 @@ def _cleanup_expired_evidence() -> None:
         for evidence in expired:
             # Delete the file from MinIO
             try:
-                storage.delete(settings.minio_bucket_evidence, evidence.storage_uri)
+                storage.delete(settings.s3_bucket_evidence, evidence.storage_uri)
                 deleted_files += 1
             except ClientError as e:
                 # File may have been deleted manually – log but don't abort
@@ -152,6 +166,62 @@ def _cleanup_expired_evidence() -> None:
 
     except Exception as e:
         logger.exception(f"Error during expired evidence cleanup: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
+def _cleanup_expired_index() -> None:
+    """
+    Deletes documents and chunks whose index retention period has elapsed.
+
+    Each source has retention_days_index configured (default: 365 days).
+    Chunks are deleted from PostgreSQL; Qdrant vectors are removed by chunk ID.
+    """
+    from services.embedding_service import EmbeddingService
+
+    db = SessionLocal()
+    try:
+        expired_docs = (
+            db.query(Document)
+            .join(Source, Document.source_id == Source.id)
+            .filter(
+                Document.created_at + (
+                    Source.retention_days_index * text("interval '1 day'")
+                ) <= func.now()
+            )
+            .all()
+        )
+
+        if not expired_docs:
+            logger.debug("Index cleanup: no expired documents found")
+            return
+
+        embedding_service = EmbeddingService()
+        deleted_chunks = 0
+        deleted_docs = 0
+
+        for doc in expired_docs:
+            chunks = db.query(Chunk).filter(Chunk.document_id == doc.id).all()
+            embedded_ids = [c.id for c in chunks if c.is_embedded]
+            if embedded_ids:
+                try:
+                    embedding_service.delete_chunks(embedded_ids)
+                except Exception as e:
+                    logger.warning("Failed to delete chunks from Qdrant for doc %s: %s", doc.id, e)
+            for chunk in chunks:
+                db.delete(chunk)
+                deleted_chunks += 1
+            db.delete(doc)
+            deleted_docs += 1
+
+        db.commit()
+        logger.info(
+            "Index cleanup: deleted %d documents and %d chunks", deleted_docs, deleted_chunks
+        )
+
+    except Exception:
+        logger.exception("Error during expired index cleanup")
         db.rollback()
     finally:
         db.close()
@@ -187,6 +257,17 @@ def create_scheduler() -> AsyncIOScheduler:
         name="Expired evidence cleanup",
         replace_existing=True,
         next_run_time=datetime.utcnow() + timedelta(hours=1),
+    )
+
+    # Task 3: expired index/document cleanup
+    scheduler.add_job(
+        _cleanup_expired_index,
+        trigger="interval",
+        hours=CLEANUP_INTERVAL_HOURS,
+        id="index_cleanup",
+        name="Expired index/document cleanup",
+        replace_existing=True,
+        next_run_time=datetime.utcnow() + timedelta(hours=2),
     )
 
     return scheduler

@@ -328,3 +328,57 @@ class AuditLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="audit_logs")
+
+
+# ─────────────────────────────────────────────────────
+# EXPERIMENT TABLE
+# RAG quality evaluation: retrieval metrics per query set.
+# ─────────────────────────────────────────────────────
+
+class ExperimentStatus(str, enum.Enum):
+    pending = "pending"
+    running = "running"
+    done = "done"
+    failed = "failed"
+
+
+class Experiment(Base):
+    __tablename__ = "experiments"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    created_by = Column(String, ForeignKey("users.id"), nullable=False)
+    status = Column(Enum(ExperimentStatus), default=ExperimentStatus.pending)
+
+    # Aggregated results populated after run completes
+    recall_at_k = Column(Float, nullable=True)
+    mrr = Column(Float, nullable=True)
+    ndcg = Column(Float, nullable=True)
+    avg_latency_ms = Column(Float, nullable=True)
+
+    top_k = Column(Integer, default=5)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    finished_at = Column(DateTime, nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    queries = relationship("ExperimentQuery", back_populates="experiment", cascade="all, delete-orphan")
+
+
+class ExperimentQuery(Base):
+    __tablename__ = "experiment_queries"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    experiment_id = Column(String, ForeignKey("experiments.id"), nullable=False)
+    query_text = Column(Text, nullable=False)
+    expected_keywords = Column(JSON, nullable=False, default=list)  # list[str]
+
+    # Per-query results
+    recall_at_k = Column(Float, nullable=True)
+    mrr = Column(Float, nullable=True)
+    ndcg = Column(Float, nullable=True)
+    latency_ms = Column(Float, nullable=True)
+    retrieved_chunk_ids = Column(JSON, nullable=True)
+
+    experiment = relationship("Experiment", back_populates="queries")

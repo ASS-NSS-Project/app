@@ -21,7 +21,7 @@ async function request<T>(
   if (res.status === 401) {
     localStorage.removeItem('rag_token')
     localStorage.removeItem('rag_user')
-    window.location.hash = '#/login'
+    window.dispatchEvent(new CustomEvent('auth:expired'))
     throw new Error('Unauthorized')
   }
 
@@ -33,6 +33,7 @@ async function request<T>(
     )
   }
 
+  if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
 }
 

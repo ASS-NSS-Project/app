@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:16
     container_name: rag_postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -14,11 +15,13 @@ services:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
+      start_period: 30s
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: rag_rabbitmq
+    restart: unless-stopped
     security_opt:
       - label=disable   # Podman rootless: allow volume chown for erlang cookie (SELinux)
     environment:
@@ -111,6 +114,7 @@ services:
       - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
       - FRONTEND_URL=${FRONTEND_URL}
       - API_DOCS=${API_DOCS:-false}
+      - SERVICE_NAME=api
     depends_on:
       postgres:
         condition: service_healthy
@@ -127,10 +131,10 @@ services:
     labels:
       - traefik.enable=true
       # HTTP
-      - traefik.http.routers.api.rule=Host(`${DOMAIN}`) && (PathPrefix(`/auth`) || PathPrefix(`/sources`) || PathPrefix(`/query`) || PathPrefix(`/incidents`) || PathPrefix(`/health`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`))
+      - traefik.http.routers.api.rule=Host(`${DOMAIN}`) && (PathPrefix(`/auth`) || PathPrefix(`/sources`) || PathPrefix(`/query`) || PathPrefix(`/incidents`) || PathPrefix(`/documents`) || PathPrefix(`/experiments`) || PathPrefix(`/health`) || PathPrefix(`/metrics`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`))
       - traefik.http.routers.api.entrypoints=web
       # HTTPS (cert obtained automatically once DOMAIN resolves to this server)
-      - traefik.http.routers.api-secure.rule=Host(`${DOMAIN}`) && (PathPrefix(`/auth`) || PathPrefix(`/sources`) || PathPrefix(`/query`) || PathPrefix(`/incidents`) || PathPrefix(`/health`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`))
+      - traefik.http.routers.api-secure.rule=Host(`${DOMAIN}`) && (PathPrefix(`/auth`) || PathPrefix(`/sources`) || PathPrefix(`/query`) || PathPrefix(`/incidents`) || PathPrefix(`/documents`) || PathPrefix(`/experiments`) || PathPrefix(`/health`) || PathPrefix(`/metrics`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`))
       - traefik.http.routers.api-secure.entrypoints=websecure
       - traefik.http.routers.api-secure.tls=true
       - traefik.http.routers.api-secure.tls.certresolver=letsencrypt
@@ -163,6 +167,7 @@ services:
       - VLM_API_KEY=${VLM_API_KEY}
       - VLM_MODEL=${VLM_MODEL}
       - JWT_SECRET=${JWT_SECRET}
+      - SERVICE_NAME=worker
     depends_on:
       rabbitmq:
         condition: service_healthy

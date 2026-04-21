@@ -12,6 +12,7 @@ from models import User, Incident, IncidentType, IncidentStatus, IngestStrategy,
 from routers.auth import get_authenticated_user, require_role
 from services.captcha_service import CaptchaService
 from services.auth_service import log_action
+from services.queue_service import publish_job
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
 
@@ -109,4 +110,23 @@ def resolve_incident(
         raise HTTPException(status_code=404, detail="Incident not found")
 
     log_action(db, current_user.id, "INCIDENT_RESOLVED", "incident", incident_id)
+
+    # Retry the failed URL: create a new IngestJob and publish it
+    source = db.query(Source).filter(Source.id == incident.source_id).first()
+    if source and source.is_active:
+        from models import IngestJob, JobStatus
+        retry_job = IngestJob(
+            source_id=incident.source_id,
+            url=incident.url,
+            status=JobStatus.pending,
+        )
+        db.add(retry_job)
+        db.commit()
+        db.refresh(retry_job)
+        try:
+            publish_job(retry_job.id)
+            logger.info("Queued retry job %s for incident %s", retry_job.id, incident_id)
+        except Exception as exc:
+            logger.warning("Failed to queue retry job for incident %s: %s", incident_id, exc)
+
     return incident

@@ -55,14 +55,17 @@ async def query(
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
     rag_service = RAGService()
-    result = await rag_service.query(
-        question=request.question,
-        mode=request.mode,
-        top_k=request.top_k,
-        source_id=request.source_id,
-        strict_grounding=request.strict_grounding,
-        db=db,
-    )
+    try:
+        result = await rag_service.query(
+            question=request.question,
+            mode=request.mode,
+            top_k=request.top_k,
+            source_id=request.source_id,
+            strict_grounding=request.strict_grounding,
+            db=db,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
     log_action(
         db, current_user.id, "QUERY_EXECUTED",

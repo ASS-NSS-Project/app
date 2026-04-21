@@ -141,6 +141,9 @@ def ensure_admin_exists(db: Session):
         )
         db.add(admin)
         db.commit()
+    elif existing.username is None:
+        existing.username = settings.first_admin_username
+        db.commit()
         import logging
         logging.getLogger(__name__).info(
             f"Created initial admin user: {settings.first_admin_email}"

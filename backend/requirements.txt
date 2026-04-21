@@ -44,3 +44,10 @@ python-dotenv==1.0.1         # Load .env files
 Pillow==10.3.0               # Image processing
 aiofiles==23.2.1             # Async file operations
 tenacity==8.3.0              # Retry logic (for flaky network requests)
+
+# ── Observability ─────────────────────────────────────────────────
+prometheus-client==0.20.0    # Prometheus metrics exposition (/metrics endpoint)
+python-json-logger==2.0.7    # Structured JSON log output for Loki/Alloy
+
+# ── Feed ingestion ────────────────────────────────────────────────
+feedparser==6.0.11           # RSS/Atom feed parsing (API/Feed ingest strategy)
