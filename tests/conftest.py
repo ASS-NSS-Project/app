@@ -1,21 +1,17 @@
-"""
-Test configuration and shared fixtures.
+import sys
+import os
 
-These tests run against the real FastAPI app using an in-process ASGI
-transport (no network), but they still require the services defined in
-.env to be reachable (PostgreSQL, etc.).  For CI, the workflow spins up
-those services as GitHub Actions service containers.
-
-To run locally:
-    pip install pytest pytest-asyncio httpx
-    pytest tests/
-"""
+# Put the backend package directory on sys.path so that backend-internal imports
+# (e.g. `from config import get_settings`, `from models import ...`) resolve the
+# same module objects that main.py and the routers use.  Without this, importing
+# `from backend.config import ...` in tests would create a *second* copy of the
+# module, breaking lru_cache singletons and causing AttributeErrors on settings.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-# Import after env is loaded so config picks up test overrides
-from backend.main import app  # type: ignore[import]
+from main import app  # noqa: E402
 
 
 @pytest_asyncio.fixture
@@ -31,14 +27,14 @@ async def client():
 @pytest_asyncio.fixture
 async def auth_headers(client: AsyncClient):
     """Return Authorization headers for the default admin account."""
-    from backend.config import get_settings  # type: ignore[import]
+    from config import get_settings
 
     settings = get_settings()
     resp = await client.post(
         "/auth/login",
         data={
-            "username": settings.admin_email,
-            "password": settings.admin_password,
+            "username": settings.first_admin_email,
+            "password": settings.first_admin_password,
         },
     )
     assert resp.status_code == 200, resp.text
