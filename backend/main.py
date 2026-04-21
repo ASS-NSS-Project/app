@@ -14,7 +14,7 @@ from database import SessionLocal
 import models  # noqa: F401
 from models import Chunk, Experiment, ExperimentStatus
 from routers import auth, sources, query, incidents
-from routers import auth_google
+from routers import auth_keycloak
 import routers.documents as documents_router
 import routers.experiments as experiments_router
 from services.auth_service import ensure_admin_exists
@@ -151,7 +151,7 @@ app.add_middleware(
 # Register all API routers
 # Each router handles a group of related endpoints
 app.include_router(auth.router)
-app.include_router(auth_google.router)
+app.include_router(auth_keycloak.router)
 app.include_router(sources.router)
 app.include_router(query.router)
 app.include_router(incidents.router)

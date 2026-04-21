@@ -36,7 +36,7 @@ async def test_login_success(client: AsyncClient):
     s = get_settings()
     resp = await client.post(
         "/auth/login",
-        data={"username": s.first_admin_email, "password": s.first_admin_password},
+        data={"username": s.first_admin_username, "password": s.first_admin_password},
     )
     assert resp.status_code == 200
     data = resp.json()

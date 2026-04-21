@@ -93,11 +93,13 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480  # 8 hours
 
-    # ── Google OAuth2 ─────────────────────────────
-    google_client_id: str = ""
-    google_client_secret: str = ""
-    google_redirect_uri: str = "http://localhost:8000/auth/google/callback"
-    frontend_url: str = "http://localhost:8000"
+    # ── Keycloak OIDC ──────────────────────────────
+    keycloak_url: str = ""              # e.g. https://keycloak.nss.jkzl.eu
+    keycloak_realm: str = "ass-nss-project"
+    keycloak_client_id: str = ""
+    keycloak_client_secret: str = ""
+    keycloak_redirect_uri: str = "http://localhost/auth/keycloak/callback"
+    frontend_url: str = "http://localhost"
 
     # ── First Admin (created on startup) ──────────
     first_admin_username: str = "admin"
