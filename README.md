@@ -831,11 +831,43 @@ rag_system/
 
 ---
 
-## TODO
+## CI / CD
 
-The following tasks are planned and will be completed before the Kubernetes migration:
+Images are built and pushed to **GitHub Container Registry** on every push to `main` or `dev`, and on semver git tags (`v*.*.*`).
+
+| Trigger | Tags produced |
+|---------|--------------|
+| push to `main` or `dev` | `main-<short-sha>`, `dev-<short-sha>` |
+| git tag `v1.2.3` | `1.2.3`, `1.2` |
+
+Images:
+- `ghcr.io/ass-nss-project/rag-api` — FastAPI backend (also used for the worker, different `command` in k8s)
+- `ghcr.io/ass-nss-project/rag-frontend` — Vue 3 / Nginx SPA
+
+The workflow: commit-message lint → backend tests → frontend build → build & push (main/dev/tags only).
+
+---
+
+## Kubernetes (Production)
+
+The production deployment lives in [ASS-NSS-Project/site-infra](https://github.com/ASS-NSS-Project/site-infra) (branch `kost`), managed by ArgoCD.
+
+| Service | Production URL |
+|---------|---------------|
+| Main UI + API | https://rag-sys.nss.jkzl.eu |
+| RabbitMQ Management | https://rabbitmq-mgmt.nss.jkzl.eu |
+
+ArgoCD sync waves:
+- Wave 19 — `rabbitmq-operator` (RabbitMQ Cluster Operator)
+- Wave 20 — `qdrant` (Qdrant via Helm)
+- Wave 21 — `rag-system` (API, worker, frontend, CNPG Postgres, secrets via ESO/Vault)
+
+Secrets are provisioned via `terraform/vault` in site-infra. DNS records are managed via `terraform/cloudflare`.
+
+---
+
+## TODO
 
 - [ ] **Frontend end-to-end smoke test** — walk the golden path (login → add source → trigger ingest → wait for completion → run a RAG query) to verify all compose fixes and service wiring hold together
 - [ ] **Migration 0006: drop `rq_job_id`** — `ingest_jobs.rq_job_id` is a dead column left over from an earlier Redis Queue prototype; nothing writes to it; drop it with a clean Alembic migration
-- [ ] **Analytics validation** — confirm structured logs are machine-readable, Prometheus metrics are reachable on `/metrics` and `:9090`, and the event catalogue above is complete
-- [ ] **Kubernetes deployment** — Helm chart / manifests for all services; PodMonitor wiring; Loki + Grafana Alloy for log aggregation
+- [ ] **Keycloak OIDC** — replace custom JWT auth with Keycloak OIDC for SSO across all cluster services

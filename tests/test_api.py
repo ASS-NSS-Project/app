@@ -1,26 +1,28 @@
-"""
-Integration tests for the RAG System API.
-
-Each test uses the in-process ASGI client from conftest.py so no real
-HTTP port is needed, but real backing services (Postgres, Qdrant, …)
-must be available — the CI workflow provides them as service containers.
-"""
-
 import pytest
 from httpx import AsyncClient
 
 pytestmark = pytest.mark.asyncio
 
 
+# ── Health & metrics ──────────────────────────────────────────
+
 async def test_health(client: AsyncClient):
-    """Health endpoint must return 200 and status=ok without auth."""
     resp = await client.get("/health")
     assert resp.status_code == 200
-    assert resp.json()["status"] == "ok"
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["service"] == "rag-api"
 
+
+async def test_metrics_available(client: AsyncClient):
+    resp = await client.get("/metrics")
+    assert resp.status_code == 200
+    assert b"python_gc" in resp.content or b"process_" in resp.content
+
+
+# ── Auth ──────────────────────────────────────────────────────
 
 async def test_login_invalid_credentials(client: AsyncClient):
-    """Wrong password must return 401."""
     resp = await client.post(
         "/auth/login",
         data={"username": "nonexistent@example.com", "password": "wrongpassword"},
@@ -29,62 +31,164 @@ async def test_login_invalid_credentials(client: AsyncClient):
 
 
 async def test_login_success(client: AsyncClient):
-    """Admin login must succeed and return an access token."""
-    from backend.config import get_settings  # type: ignore[import]
+    from config import get_settings
 
-    settings = get_settings()
+    s = get_settings()
     resp = await client.post(
         "/auth/login",
-        data={
-            "username": settings.admin_email,
-            "password": settings.admin_password,
-        },
+        data={"username": s.first_admin_email, "password": s.first_admin_password},
     )
     assert resp.status_code == 200
     data = resp.json()
     assert "access_token" in data
     assert data["token_type"] == "bearer"
+    assert "role" in data
+    assert "user_id" in data
 
 
 async def test_me_requires_auth(client: AsyncClient):
-    """/auth/me must reject unauthenticated requests."""
     resp = await client.get("/auth/me")
     assert resp.status_code == 401
 
 
 async def test_me_authenticated(client: AsyncClient, auth_headers: dict):
-    """/auth/me must return the current user's profile."""
     resp = await client.get("/auth/me", headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
     assert "email" in data
     assert "role" in data
+    assert "id" in data
 
 
-async def test_sources_list_requires_auth(client: AsyncClient):
-    """/sources/ must reject unauthenticated requests."""
+async def test_stats_requires_auth(client: AsyncClient):
+    resp = await client.get("/auth/stats")
+    assert resp.status_code == 401
+
+
+async def test_stats_authenticated(client: AsyncClient, auth_headers: dict):
+    resp = await client.get("/auth/stats", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    for key in ("sources", "jobs", "incidents", "documents"):
+        assert key in data
+        assert isinstance(data[key], int)
+
+
+async def test_users_list_requires_auth(client: AsyncClient):
+    resp = await client.get("/auth/users")
+    assert resp.status_code == 401
+
+
+async def test_users_list_authenticated(client: AsyncClient, auth_headers: dict):
+    resp = await client.get("/auth/users", headers=auth_headers)
+    assert resp.status_code == 200
+    users = resp.json()
+    assert isinstance(users, list)
+    assert len(users) >= 1
+    assert any(u["role"] == "admin" for u in users)
+
+
+# ── Sources ───────────────────────────────────────────────────
+
+async def test_sources_requires_auth(client: AsyncClient):
     resp = await client.get("/sources/")
     assert resp.status_code == 401
 
 
 async def test_sources_list_authenticated(client: AsyncClient, auth_headers: dict):
-    """/sources/ must return a list for authenticated users."""
     resp = await client.get("/sources/", headers=auth_headers)
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
 
 
+async def test_source_create_and_delete(client: AsyncClient, auth_headers: dict):
+    resp = await client.post(
+        "/sources/",
+        json={
+            "name": "CI test source",
+            "base_url": "https://example.com",
+            "permission_type": "public",
+            "preferred_strategy": "html",
+            "crawl_frequency_hours": 24,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    source = resp.json()
+    assert source["name"] == "CI test source"
+    source_id = source["id"]
+
+    resp = await client.delete(f"/sources/{source_id}", headers=auth_headers)
+    assert resp.status_code == 200
+
+
+async def test_source_ssrf_protection(client: AsyncClient, auth_headers: dict):
+    resp = await client.post(
+        "/sources/",
+        json={
+            "name": "SSRF test",
+            "base_url": "http://169.254.169.254/latest/meta-data/",
+            "permission_type": "public",
+            "preferred_strategy": "html",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+
+
+# ── Query ─────────────────────────────────────────────────────
+
 async def test_query_requires_auth(client: AsyncClient):
-    """/query/ must reject unauthenticated requests."""
-    resp = await client.post("/query/", json={"question": "test", "mode": "rag", "top_k": 3, "strict_grounding": True})
+    resp = await client.post(
+        "/query/",
+        json={"question": "test", "mode": "rag", "top_k": 3, "strict_grounding": True},
+    )
     assert resp.status_code == 401
 
 
-# ── Chunker unit tests (no backing services needed) ───────────
+# ── Documents ─────────────────────────────────────────────────
+
+async def test_documents_requires_auth(client: AsyncClient):
+    resp = await client.get("/documents/")
+    assert resp.status_code == 401
+
+
+async def test_documents_list_authenticated(client: AsyncClient, auth_headers: dict):
+    resp = await client.get("/documents/", headers=auth_headers)
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+# ── Experiments ───────────────────────────────────────────────
+
+async def test_experiments_requires_auth(client: AsyncClient):
+    resp = await client.get("/experiments/")
+    assert resp.status_code == 401
+
+
+async def test_experiments_list_authenticated(client: AsyncClient, auth_headers: dict):
+    resp = await client.get("/experiments/", headers=auth_headers)
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+# ── Incidents ─────────────────────────────────────────────────
+
+async def test_incidents_requires_auth(client: AsyncClient):
+    resp = await client.get("/incidents/")
+    assert resp.status_code == 401
+
+
+async def test_incidents_list_authenticated(client: AsyncClient, auth_headers: dict):
+    resp = await client.get("/incidents/", headers=auth_headers)
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+# ── Chunker unit tests (no backing services) ──────────────────
 
 def test_prose_chunker_html_article():
-    """split_prose should return at least one chunk with non-empty text and section_path."""
-    from backend.services.chunking import split_prose  # type: ignore[import]
+    from services.chunking import split_prose
 
     html = """
     <html><body>
@@ -97,15 +201,13 @@ def test_prose_chunker_html_article():
     """
     chunks = split_prose(html, source_method="html")
     assert len(chunks) >= 1
-    assert all(c.text for c in chunks), "All chunks must have non-empty text"
-    # At least one chunk should have a section_path derived from the headings
-    assert any(c.section_path for c in chunks), "At least one chunk must have section_path set"
+    assert all(c.text for c in chunks)
+    assert any(c.section_path for c in chunks)
 
 
 def test_table_chunker_html_table():
-    """split_tables should return at least one chunk tagged as ChunkType.table."""
-    from backend.services.chunking import split_tables  # type: ignore[import]
-    from backend.models import ChunkType  # type: ignore[import]
+    from services.chunking import split_tables
+    from models import ChunkType
 
     html = """
     <html><body>
@@ -122,9 +224,8 @@ def test_table_chunker_html_table():
 
 
 def test_vlm_chunker_block_text():
-    """split_vlm should return multiple chunks with ChunkType.block when given --- separators."""
-    from backend.services.chunking import split_vlm  # type: ignore[import]
-    from backend.models import ChunkType  # type: ignore[import]
+    from services.chunking import split_vlm
+    from models import ChunkType
 
     text = (
         "# Title\n\nThis is the first block of text from a VLM extraction.\n\n"
@@ -134,5 +235,5 @@ def test_vlm_chunker_block_text():
         "And here is a third block to confirm multiple splits work correctly."
     )
     chunks = split_vlm(text)
-    assert len(chunks) >= 2, "Should produce multiple chunks from --- separated blocks"
+    assert len(chunks) >= 2
     assert all(c.chunk_type == ChunkType.block for c in chunks)

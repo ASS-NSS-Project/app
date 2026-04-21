@@ -1,15 +1,17 @@
-"""
-Unit tests for config.py Settings.
+from config import Settings
 
-These tests do not require any backing services.
-They instantiate Settings directly with controlled values.
-"""
 
-from backend.config import Settings  # type: ignore[import]
+def test_settings_database_url():
+    s = Settings(
+        postgres_user="testuser",
+        postgres_password="testpass",
+        postgres_host="db.example.com",
+        postgres_db="testdb",
+    )
+    assert s.database_url == "postgresql://testuser:testpass@db.example.com/testdb"
 
 
 def test_settings_s3_fields():
-    """S3 settings are passed through to fields directly."""
     s = Settings(
         s3_endpoint_url="https://s3.cesnet.cz",
         s3_access_key="mykey",
@@ -29,7 +31,6 @@ def test_settings_s3_fields():
 
 
 def test_settings_llm_vlm_fields():
-    """LLM and VLM settings are passed through to fields directly."""
     s = Settings(
         llm_base_url="https://aiaas.example.com/v1",
         llm_api_key="llm-key",
@@ -47,9 +48,21 @@ def test_settings_llm_vlm_fields():
 
 
 def test_settings_chunking_defaults():
-    """Chunking config defaults are sane."""
     s = Settings()
     assert s.chunking.prose.target_tokens == 500
     assert s.chunking.prose.overlap_tokens == 50
     assert s.chunking.table.max_tokens == 1500
     assert s.chunking.vlm.max_tokens == 800
+
+
+def test_settings_auth_fields():
+    s = Settings(
+        jwt_secret="supersecret",
+        first_admin_email="ops@example.com",
+        first_admin_password="hunter2",
+    )
+    assert s.jwt_secret == "supersecret"
+    assert s.first_admin_email == "ops@example.com"
+    assert s.first_admin_password == "hunter2"
+    assert s.jwt_algorithm == "HS256"
+    assert s.jwt_expire_minutes == 480

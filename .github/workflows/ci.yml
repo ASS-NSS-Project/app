@@ -41,11 +41,6 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-      redis:
-        image: redis:7
-        ports:
-          - 6379:6379
-
     steps:
       - uses: actions/checkout@v4
 
@@ -60,14 +55,15 @@ jobs:
         run: pip install -r requirements.txt pytest pytest-asyncio httpx
 
       - name: Run tests
-        working-directory: .
         env:
-          PYTHONPATH: .
-          DATABASE_URL: postgresql://rag:rag@localhost:5432/rag
-          REDIS_URL: redis://localhost:6379
-          SECRET_KEY: ci-test-secret-key-not-for-production
-          ADMIN_EMAIL: admin@test.local
-          ADMIN_PASSWORD: testpassword123
+          PYTHONPATH: ${{ github.workspace }}/backend
+          POSTGRES_USER: rag
+          POSTGRES_PASSWORD: rag
+          POSTGRES_DB: rag
+          POSTGRES_HOST: localhost
+          JWT_SECRET: ci-test-secret-key-not-for-production
+          FIRST_ADMIN_EMAIL: admin@test.local
+          FIRST_ADMIN_PASSWORD: testpassword123
           FRONTEND_URL: http://localhost:5173
         run: pytest tests/ -v
 
