@@ -1,8 +1,8 @@
-# RAG System — Multimodal Web Intelligence Platform
+# RAG System — Multimodal Platform
 
 A production system for scraping web content, extracting structured data with AI vision, and answering questions via RAG (Retrieval-Augmented Generation).
 
-LLM and VLM inference runs on **CERIT-SC AIaaS** (e-INFRA). Object storage uses **CESNET S3**. Everything else — Postgres, RabbitMQ, Qdrant, the API, the worker — runs in Docker.
+LLM and VLM inference runs on **CERIT-SC AIaaS** (e-INFRA). Object storage uses **CESNET S3**. Everything else — Postgres, RabbitMQ, Qdrant, the API, the worker — runs in Docker/Podman.
 
 ---
 
@@ -14,12 +14,13 @@ LLM and VLM inference runs on **CERIT-SC AIaaS** (e-INFRA). Object storage uses 
 3. **Indexes** content in Qdrant using BGE-M3 hybrid embeddings (dense + sparse, RRF fusion)
 4. **Answers** questions using RAG — retrieves relevant passages, then answers with citations via a text LLM on AIaaS
 5. **Tracks** CAPTCHA incidents, audit logs, and evidence files in CESNET S3
+6. **Experiments** — run named batch query sets to benchmark retrieval quality over time
 
 ---
 
 ## Prerequisites
 
-- **Docker** with Compose v2
+- **Docker** with Compose v2, or **Podman** with podman-compose
 - **Git**
 - Credentials for **CESNET S3** (object storage) and **CERIT-SC AIaaS** (LLM/VLM endpoints)
 
@@ -103,6 +104,8 @@ ACME_EMAIL=you@example.com
 touch acme.json && chmod 600 acme.json
 ```
 
+This **must be a file**, not a directory. If Podman created a directory here from a previous run, delete it first: `rm -rf acme.json && touch acme.json && chmod 600 acme.json`.
+
 ### 4. Start the system
 
 **Docker:**
@@ -136,10 +139,11 @@ podman compose up --build
 > **First-time cleanup**: if you have leftover containers from a previous run, do
 > `podman compose down -v` first.
 
-The `docker-compose.override.yml` is picked up automatically. It reconfigures
-Traefik to run HTTP-only on port 80 and disables SELinux confinement for
-Traefik and RabbitMQ (via `security_opt: label=disable`) so they can access
-the container socket and their data volumes without permission errors.
+The `docker-compose.override.yml` is picked up automatically. It:
+- Reconfigures Traefik to run HTTP-only on port 80 (no TLS, no redirect)
+- Adds a TCP wait loop before the API and worker start, ensuring Postgres is fully ready
+- Wraps the RabbitMQ entrypoint to pre-write the erlang cookie with correct ownership (Podman rootless UID mapping fix)
+- Disables SELinux confinement for Traefik and RabbitMQ via `security_opt: label=disable`
 
 You'll know it's ready when you see:
 ```
@@ -149,7 +153,7 @@ rag_worker | INFO: Worker ready. Listening on queue: ingest
 
 ### 5. Open the UI
 
-Open **http://localhost** and log in with `FIRST_ADMIN_USERNAME` / `FIRST_ADMIN_PASSWORD` from your `.env`.
+Open **http://localhost** and log in with `FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_PASSWORD` from your `.env`.
 
 Docker serves on port 80 with automatic TLS. Podman local dev also serves on port 80, HTTP only (no redirect, no ACME).
 
@@ -452,6 +456,74 @@ Ask a question. Returns an answer with citations from the knowledge base.
 
 ---
 
+### Documents — `/documents`
+
+#### `GET /documents/`
+List all ingested documents (paginated).
+
+**Query params**: `limit` (default `50`), `offset` (default `0`), `source_id` (optional UUID filter).
+
+**Response `200`**: array of `DocumentResponse`.
+
+---
+
+#### `GET /documents/{doc_id}`
+Fetch a single document by ID.
+
+**Response `200`**: `DocumentResponse`.
+
+---
+
+#### `GET /documents/{doc_id}/chunks`
+List all chunks for a document.
+
+**Response `200`**: array of `ChunkResponse`.
+
+---
+
+#### `GET /documents/evidence/{evidence_id}/url`
+Get a pre-signed download URL for an evidence file (screenshot, HTML dump) stored in CESNET S3.
+
+**Response `200`**:
+```json
+{"url": "https://s3.example.com/...?X-Amz-Signature=..."}
+```
+
+---
+
+### Experiments — `/experiments`
+
+Experiments let you run named batch query sets to benchmark retrieval quality over time.
+
+#### `GET /experiments/`
+List all experiments.
+
+#### `POST /experiments/` *(admin, curator)*
+Create a new experiment.
+
+**Request** (`application/json`):
+```json
+{
+  "name": "Pricing Q&A benchmark",
+  "description": "Tests retrieval accuracy on pricing-related questions",
+  "queries": [
+    {"question": "What are the pricing tiers?"},
+    {"question": "Is there a free plan?"}
+  ]
+}
+```
+
+#### `GET /experiments/{experiment_id}`
+Fetch a single experiment with all its query results.
+
+#### `POST /experiments/{experiment_id}/run` *(admin, curator)*
+Re-run all queries in the experiment against the current index. Results are updated in place.
+
+#### `DELETE /experiments/{experiment_id}` *(admin only)*
+Delete an experiment and all its query results.
+
+---
+
 ### Incidents — `/incidents`
 
 Incidents are created automatically when a CAPTCHA or access block is detected during ingestion.
@@ -523,7 +595,7 @@ If `source_id` is omitted the first active source is used automatically.
 **Quick test via curl:**
 ```bash
 TOKEN=$(curl -s -X POST http://127.0.0.1/auth/login \
-  -d "username=admin&password=YOUR_ADMIN_PASSWORD" \
+  -d "username=admin@example.com&password=YOUR_ADMIN_PASSWORD" \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
 curl -s -X POST http://127.0.0.1/incidents/simulate \
@@ -536,7 +608,7 @@ curl -s -X POST http://127.0.0.1/incidents/simulate \
 
 ---
 
-### Health
+### Health & Metrics
 
 #### `GET /health`
 No authentication required. Returns `200` if the API is running.
@@ -544,6 +616,10 @@ No authentication required. Returns `200` if the API is running.
 ```json
 {"status": "ok", "service": "rag-api"}
 ```
+
+#### `GET /metrics`
+Prometheus metrics endpoint (no authentication). Scraped by PodMonitor.
+The worker also exposes Prometheus metrics on port `9090` (configurable via `WORKER_METRICS_PORT`).
 
 ---
 
@@ -578,8 +654,10 @@ Traefik (ports 80/443 — TLS termination, routing)
             │── Auth (JWT + Google OAuth2)
             │── Sources API
             │── Query API ──────────────► Qdrant (hybrid vector search)
-            │── Incidents API               ▲
-            │                               │ embed BGE-M3 (dense + sparse)
+            │── Documents API               ▲
+            │── Experiments API             │ embed BGE-M3 (dense + sparse)
+            │── Incidents API               │
+            │                               │
             ▼                               │
        RabbitMQ Queue ──────► Worker ──────┘
                                   │
@@ -612,13 +690,44 @@ docker compose restart api   # or: podman compose restart api
 
 ### Logs
 
+All services emit structured JSON logs. Each line includes `timestamp`, `level`, `logger`, `service`, `message`, and an `event` slug for machine parsing.
+
 ```bash
-docker compose logs -f api      # API logs
-docker compose logs -f worker   # Worker/ingest logs
-docker compose logs -f frontend # Nginx logs
+podman compose logs -f api      # API logs
+podman compose logs -f worker   # Worker/ingest logs
+podman compose logs -f frontend # Nginx logs
 ```
 
-(Use `podman compose` instead of `docker compose` when running under Podman.)
+Filter by event type:
+```bash
+podman compose logs api | grep '"event": "ingest_completed"'
+podman compose logs worker | grep '"event": "embedding_failed"'
+```
+
+Event catalogue:
+
+| Event | Service | Meaning |
+|-------|---------|---------|
+| `ingest_started` | worker | Job picked up from queue |
+| `ingest_completed` | worker | Full pipeline succeeded |
+| `ingest_failed` | worker | Pipeline raised an exception |
+| `ingest_strategy_attempt` | worker | Trying a scraping strategy |
+| `ingest_strategy_fallback` | worker | Falling back to next strategy |
+| `ingest_strategy_error` | worker | A strategy raised an error |
+| `captcha_detected` | worker | CAPTCHA found during ingest |
+| `document_created` | worker | Document + chunks saved to DB |
+| `embedding_completed` | worker | Chunks upserted into Qdrant |
+| `embedding_failed` | worker | Qdrant upsert failed |
+| `llm_timeout` | api | LLM request timed out |
+| `llm_error` | api | LLM request raised an error |
+| `scheduler_job_triggered` | api | Crawl job published to queue |
+| `scheduler_crawl_failed` | api | Failed to publish crawl job |
+| `scheduler_run_complete` | api | Scheduler tick finished |
+| `worker_job_started` | worker | Message dequeued |
+| `worker_job_completed` | worker | Job fully processed |
+| `worker_job_incomplete` | worker | Job finished with non-done status |
+| `worker_job_crashed` | worker | Unexpected exception in job |
+| `worker_invalid_message` | worker | Malformed message dropped |
 
 ### Restart a single service
 
@@ -638,10 +747,10 @@ docker compose down -v       # Stop and delete all data (fresh start)
 ## Troubleshooting
 
 **API stays on "Waiting for Postgres/RabbitMQ"**
-→ Give it 30–60 seconds on first run. Databases take time to initialize.
+→ Give it 30–60 seconds on first run. Databases take time to initialize. The API and worker use a TCP socket poll loop that waits up to 100 s total before failing.
 
 **Worker not processing jobs**
-→ Check `docker compose logs worker`. If it shows import errors, run `docker compose build` again.
+→ Check `podman compose logs worker`. If it shows import errors, run `podman compose build` again.
 
 **Vision extraction fails**
 → Verify `VLM_BASE_URL`, `VLM_API_KEY`, and `VLM_MODEL` in `.env`. Test the endpoint with `curl -H "Authorization: Bearer $VLM_API_KEY" $VLM_BASE_URL/models`.
@@ -652,8 +761,8 @@ docker compose down -v       # Stop and delete all data (fresh start)
 **Playwright/screenshot errors**
 → Screenshot strategy needs Chromium in the worker container. If it fails, rebuild: `docker compose build --no-cache worker`.
 
-**Podman: RabbitMQ fails to start (erlang cookie eacces)**
-→ SELinux is blocking the container from writing its erlang cookie. The base `docker-compose.yml` sets `security_opt: label=disable` on `rabbitmq` to fix this. If you removed it, add it back. Also make sure `podman compose` is run from the project root so the override file is picked up.
+**Podman: RabbitMQ fails to start (erlang cookie permission denied)**
+→ In Podman rootless, the container's UID 0 maps to your host user while the RabbitMQ process runs as UID 999 (a subuid-mapped UID). The entrypoint wrapper in `docker-compose.override.yml` handles this by pre-writing the cookie as UID 999 with mode 400 before the main entrypoint runs. If you see `eacces` or "must be accessible by owner only" errors, ensure the override file is being picked up (`podman compose up` from the project root) and that `rabbitmq_data` volume is clean (`podman compose down -v`).
 
 **Podman: Traefik cannot connect to Docker socket (permission denied)**
 → The socket must be the systemd user socket, not one started with `podman system service` in `/tmp`. Run `systemctl --user enable --now podman.socket` and set `DOCKER_SOCK=/run/user/$(id -u)/podman/podman.sock` in `.env`.
@@ -661,30 +770,36 @@ docker compose down -v       # Stop and delete all data (fresh start)
 **Podman: cannot bind port 80 (permission denied)**
 → Allow rootless binding of low ports once: `echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee -a /etc/sysctl.d/99-podman-ports.conf && sudo sysctl -p /etc/sysctl.d/99-podman-ports.conf`
 
+**acme.json is a directory instead of a file**
+→ Podman creates a directory when a volume-mounted file doesn't exist yet. Fix: `rm -rf acme.json && touch acme.json && chmod 600 acme.json`.
+
 ---
 
 ## Project Structure
 
 ```
 rag_system/
-├── docker-compose.yml          # All 7 services
+├── docker-compose.yml          # All services (production config)
+├── docker-compose.override.yml # Local dev overrides (HTTP only, Podman fixes)
 ├── .env.example                # Config template (copy to .env)
-├── acme.json                   # Traefik TLS certificate storage
+├── acme.json                   # Traefik TLS certificate storage (must be a file, not dir)
 ├── backend/                    # FastAPI Python service
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── main.py                 # App entry point, startup logic
+│   ├── main.py                 # App entry point, startup logic, Alembic migrations
 │   ├── config.py               # Settings from environment variables
 │   ├── database.py             # SQLAlchemy DB connection
 │   ├── models.py               # All database tables (ORM)
 │   ├── worker.py               # Background job processor (RabbitMQ consumer)
 │   ├── alembic.ini             # Database migration config
-│   ├── alembic/                # Migration scripts
+│   ├── alembic/                # Migration scripts (0001–0005)
 │   ├── routers/
 │   │   ├── auth.py             # Login, register, JWT tokens, audit log, user management
 │   │   ├── auth_google.py      # Google OAuth2 (HMAC-signed stateless state tokens)
 │   │   ├── sources.py          # Source management + ingest trigger (SSRF-protected)
 │   │   ├── query.py            # RAG query endpoint
+│   │   ├── documents.py        # Document/chunk browsing + evidence URL generation
+│   │   ├── experiments.py      # Batch query benchmarks
 │   │   └── incidents.py        # CAPTCHA incident management
 │   └── services/
 │       ├── ingest_service.py     # Core scraping pipeline (3 strategies + fallback)
@@ -695,19 +810,32 @@ rag_system/
 │       ├── storage_service.py    # CESNET S3 file storage
 │       ├── captcha_service.py    # CAPTCHA detection + incident creation
 │       ├── auth_service.py       # JWT + bcrypt password hashing
-│       ├── scheduler_service.py  # APScheduler: periodic crawls + evidence cleanup
+│       ├── scheduler_service.py  # APScheduler: periodic crawls + evidence/index cleanup
+│       ├── logging_config.py     # Structured JSON logging (python-json-logger)
 │       └── queue_service.py      # RabbitMQ job publisher
 └── frontend/                   # Vue 3 + TypeScript SPA
     ├── Dockerfile
     ├── nginx.conf              # Nginx static file server with security headers
     ├── src/
     │   ├── main.ts             # App entry point + OAuth token handler
-    │   ├── App.vue             # Root component
+    │   ├── App.vue             # Root component (auth expiry listener)
     │   ├── router/             # Vue Router (hash-based routing)
-    │   ├── stores/             # Pinia state management (auth)
+    │   ├── stores/             # Pinia state management (auth, query history)
     │   ├── api/                # Axios API client + TypeScript types
     │   ├── views/              # Page components (Dashboard, Sources, Query,
-    │   │                       #   Incidents, Audit, Users, Login)
+    │   │                       #   Incidents, Audit, Users, Login, Documents,
+    │   │                       #   Experiments)
     │   └── components/         # Reusable UI components
     └── package.json
 ```
+
+---
+
+## TODO
+
+The following tasks are planned and will be completed before the Kubernetes migration:
+
+- [ ] **Frontend end-to-end smoke test** — walk the golden path (login → add source → trigger ingest → wait for completion → run a RAG query) to verify all compose fixes and service wiring hold together
+- [ ] **Migration 0006: drop `rq_job_id`** — `ingest_jobs.rq_job_id` is a dead column left over from an earlier Redis Queue prototype; nothing writes to it; drop it with a clean Alembic migration
+- [ ] **Analytics validation** — confirm structured logs are machine-readable, Prometheus metrics are reachable on `/metrics` and `:9090`, and the event catalogue above is complete
+- [ ] **Kubernetes deployment** — Helm chart / manifests for all services; PodMonitor wiring; Loki + Grafana Alloy for log aggregation
