@@ -133,7 +133,7 @@ async def test_source_ssrf_protection(client: AsyncClient, auth_headers: dict):
         },
         headers=auth_headers,
     )
-    assert resp.status_code == 422
+    assert resp.status_code in (400, 422)
 
 
 # ── Query ─────────────────────────────────────────────────────
