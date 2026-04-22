@@ -34,11 +34,11 @@ This project adds the following infrastructure beyond the reference repo:
 
 - **RabbitMQ** — async ingest job queue (`services/queue_service.py`,
   `worker.py`).
-- **MinIO** — S3-compatible evidence file storage
+- **CESNET S3** — S3-compatible evidence file storage via boto3
   (`services/storage_service.py`).
 - **Qdrant** — vector database for semantic search
   (`services/embedding_service.py`).
-- **Ollama** — local LLM and vision model inference
+- **CERIT-SC AIaaS** — OpenAI-compatible LLM and VLM inference endpoints
   (`services/rag_service.py`, `services/extraction_service.py`).
 - **APScheduler** — crawl scheduling (`services/scheduler_service.py`).
 
@@ -48,8 +48,11 @@ This project adds the following infrastructure beyond the reference repo:
 |--------|---------|
 | `routers/auth.py` | JWT login, registration, user management, audit log |
 | `routers/auth_google.py` | Google OAuth2 flow |
+| `routers/auth_keycloak.py` | Keycloak OIDC flow |
 | `routers/sources.py` | Source CRUD + ingest triggering |
 | `routers/query.py` | RAG / no-RAG query endpoint |
+| `routers/documents.py` | Document and chunk browsing, signed S3 evidence URLs |
+| `routers/experiments.py` | Batch RAG benchmarking (recall@k, MRR, nDCG) |
 | `routers/incidents.py` | CAPTCHA incident management |
 
 ### Why `requirements.txt` instead of Poetry

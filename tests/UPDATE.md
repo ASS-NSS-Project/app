@@ -57,7 +57,7 @@ PostgreSQL service container (see `.github/workflows/ci.yml`).
 For local runs, start the full stack first:
 
 ```bash
-docker compose up -d postgres redis
+docker compose up -d postgres
 cd backend && pip install -r requirements.txt
 pip install pytest pytest-asyncio httpx
 pytest tests/ -v

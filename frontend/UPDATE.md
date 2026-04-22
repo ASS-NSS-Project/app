@@ -23,7 +23,7 @@ contributors familiar with that codebase can orient themselves quickly.
 ## What was extended / kept from the original project
 
 ### `package.json`
-- `axios` **removed** — replaced by native `fetch` (matches repo intent).
+- `axios` **removed** — replaced by native `fetch` (`src/api/client.ts`) (matches repo intent).
 - All version numbers bumped to match the reference repo.
 - `name` stays `rag-frontend` (not `frontend`) to avoid Docker image naming conflicts.
 
@@ -76,6 +76,9 @@ routing untouched.
 | `IncidentsView.vue` | `DataTable`, `Column`, `Dialog`, `Button`, `Textarea`, `Tag` |
 | `AuditView.vue` | `DataTable`, `Column`, `Tag` |
 | `UsersView.vue` | `DataTable`, `Column`, `Select`, `Button`, `Tag` |
+| `KnowledgeBaseView.vue` | `DataTable`, `Column`, `Button`, `Dialog`, `Tag`, `InputText` |
+| `ExperimentsView.vue` | `DataTable`, `Column`, `Button`, `Dialog`, `Tag`, `InputText`, `InputNumber` |
+| `JobsView.vue` | `DataTable`, `Column`, `Button`, `Select`, `Tag` |
 
 `AppSidebar.vue` was not changed — `router-link` navigation with PrimeIcons
 available via the global CSS import is sufficient.

@@ -49,7 +49,7 @@
         outlined
         class="w-full"
         label="Sign in with OIDC"
-        @click="() => { window.location.href = '/auth/keycloak' }"
+        @click="loginWithOIDC"
       >
         <template #icon>
           <svg width="16" height="16" viewBox="0 0 64 64" style="margin-right:8px;flex-shrink:0" fill="none">
@@ -99,6 +99,10 @@ const username = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
+
+function loginWithOIDC() {
+  window.location.href = '/auth/keycloak'
+}
 
 async function doLogin() {
   if (!username.value || !password.value) return

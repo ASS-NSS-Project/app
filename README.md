@@ -854,7 +854,7 @@ The production deployment lives in [ASS-NSS-Project/site-infra](https://github.c
 
 | Service | Production URL |
 |---------|---------------|
-| Main UI + API | https://rag-sys.nss.jkzl.eu |
+| Main UI + API | https://rag.nss.jkzl.eu |
 | RabbitMQ Management | https://rabbitmq-mgmt.nss.jkzl.eu |
 
 ArgoCD sync waves:

@@ -34,7 +34,7 @@ Poetry (plain `pip install pre-commit`) and checks the latest commit message.
 ### 2. `backend-tests`
 
 Runs the pytest suite in `tests/` against a real PostgreSQL service container
-(port 5432) and Redis (port 6379, used by RQ worker).
+(port 5432).
 
 - Python 3.11
 - `pip install -r backend/requirements.txt pytest pytest-asyncio httpx`
