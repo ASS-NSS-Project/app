@@ -44,19 +44,22 @@
         <span class="text-xs" style="color: var(--muted)">or</span>
       </Divider>
 
-      <a href="/auth/keycloak" style="text-decoration: none; display: block">
-        <Button severity="secondary" outlined class="w-full justify-center">
-          <template #icon>
-            <svg width="16" height="16" viewBox="0 0 64 64" class="mr-2" fill="none">
-              <circle cx="32" cy="32" r="30" fill="#4D9FEC" opacity="0.15"/>
-              <path d="M20 20h10l4 12-4 12H20l4-12-4-12z" fill="#4D9FEC"/>
-              <path d="M44 20H34l-4 12 4 12h10l-4-12 4-12z" fill="#00d4ff"/>
-              <circle cx="32" cy="32" r="4" fill="white"/>
-            </svg>
-          </template>
-          Continue with SSO
-        </Button>
-      </a>
+      <Button
+        severity="secondary"
+        outlined
+        class="w-full"
+        label="Sign in with OIDC"
+        @click="() => { window.location.href = '/auth/keycloak' }"
+      >
+        <template #icon>
+          <svg width="16" height="16" viewBox="0 0 64 64" style="margin-right:8px;flex-shrink:0" fill="none">
+            <circle cx="32" cy="32" r="30" fill="#4D9FEC" opacity="0.15"/>
+            <path d="M20 20h10l4 12-4 12H20l4-12-4-12z" fill="#4D9FEC"/>
+            <path d="M44 20H34l-4 12 4 12h10l-4-12 4-12z" fill="#00d4ff"/>
+            <circle cx="32" cy="32" r="4" fill="white"/>
+          </svg>
+        </template>
+      </Button>
     </div>
   </div>
 </template>
