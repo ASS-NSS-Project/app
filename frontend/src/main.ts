@@ -1,4 +1,4 @@
-import { createApp } from 'vue'
+import { createApp, type ComponentPublicInstance } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
@@ -29,4 +29,29 @@ app.use(PrimeVue, {
     }
   }
 })
+
+app.config.errorHandler = (err: unknown, instance: ComponentPublicInstance | null, info: string) => {
+  console.error(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: 'ERROR',
+    service: 'frontend',
+    event: 'vue_error',
+    info,
+    error: String(err),
+    stack: err instanceof Error ? err.stack : undefined,
+    component: instance?.$options?.name ?? 'unknown',
+  }))
+}
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.error(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: 'ERROR',
+    service: 'frontend',
+    event: 'unhandled_promise_rejection',
+    error: String(event.reason),
+    stack: event.reason instanceof Error ? event.reason.stack : undefined,
+  }))
+})
+
 app.mount('#app')

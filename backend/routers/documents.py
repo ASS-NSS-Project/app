@@ -104,9 +104,15 @@ def get_evidence_url(
     if not evidence:
         raise HTTPException(status_code=404, detail="Evidence not found")
     storage = StorageService()
-    presigned = storage.get_presigned_url(
-        bucket=settings.s3_bucket_evidence,
-        key=evidence.storage_uri,
-        expires_seconds=3600,
-    )
+    try:
+        presigned = storage.get_presigned_url(
+            bucket=settings.s3_bucket_evidence,
+            key=evidence.storage_uri,
+            expires_seconds=3600,
+        )
+    except Exception as e:
+        logger.error("Failed to generate presigned URL for evidence %s: %s", evidence_id, e,
+                     extra={"event": "presigned_url_failed", "evidence_id": evidence_id, "error": str(e)},
+                     exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not generate evidence URL")
     return EvidenceUrlResponse(evidence_id=evidence_id, url=presigned)

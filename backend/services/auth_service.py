@@ -16,6 +16,8 @@ This is stateless - no session storage needed on the server.
 from datetime import datetime, timedelta
 from typing import Optional
 
+import logging
+
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
@@ -23,6 +25,7 @@ from sqlalchemy.orm import Session
 from config import get_settings
 from models import User, UserRole, AuditLog
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # CryptContext handles password hashing.
@@ -78,7 +81,8 @@ def decode_token(token: str) -> Optional[dict]:
             algorithms=[settings.jwt_algorithm],
         )
         return payload
-    except JWTError:
+    except JWTError as e:
+        logger.warning("JWT decode failed: %s", e, extra={"event": "jwt_invalid"})
         return None
 
 
@@ -141,10 +145,10 @@ def ensure_admin_exists(db: Session):
         )
         db.add(admin)
         db.commit()
+        logger.info("Created initial admin user: %s", settings.first_admin_email,
+                    extra={"event": "admin_created"})
     elif existing.username is None:
         existing.username = settings.first_admin_username
         db.commit()
-        import logging
-        logging.getLogger(__name__).info(
-            f"Created initial admin user: {settings.first_admin_email}"
-        )
+        logger.info("Backfilled username for admin user: %s", settings.first_admin_email,
+                    extra={"event": "admin_username_backfilled"})

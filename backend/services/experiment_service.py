@@ -55,14 +55,31 @@ class ExperimentService:
         if experiment.status == ExperimentStatus.running:
             raise ValueError("Experiment is already running")
 
+        logger.info("Experiment started", extra={
+            "event": "experiment_started",
+            "experiment_id": experiment_id,
+            "name": experiment.name,
+        })
         experiment.status = ExperimentStatus.running
         self.db.commit()
 
         try:
             self._execute(experiment)
             experiment.status = ExperimentStatus.done
+            logger.info("Experiment completed", extra={
+                "event": "experiment_completed",
+                "experiment_id": experiment_id,
+                "recall_at_k": experiment.recall_at_k,
+                "mrr": experiment.mrr,
+                "ndcg": experiment.ndcg,
+                "avg_latency_ms": experiment.avg_latency_ms,
+            })
         except Exception as e:
-            logger.exception("Experiment %s failed", experiment_id)
+            logger.exception("Experiment %s failed", experiment_id, extra={
+                "event": "experiment_failed",
+                "experiment_id": experiment_id,
+                "error": str(e),
+            })
             experiment.status = ExperimentStatus.failed
             experiment.error_message = str(e)
         finally:
@@ -80,9 +97,15 @@ class ExperimentService:
         if not queries:
             raise ValueError("Experiment has no queries")
 
+        logger.info("Experiment executing %d queries", len(queries), extra={
+            "event": "experiment_executing",
+            "experiment_id": experiment.id,
+            "query_count": len(queries),
+            "top_k": experiment.top_k,
+        })
         recall_scores, mrr_scores, ndcg_scores, latencies = [], [], [], []
 
-        for eq in queries:
+        for i, eq in enumerate(queries, 1):
             t0 = time.monotonic()
             hits = self.embedding_service.search(
                 query=eq.query_text,
@@ -108,6 +131,15 @@ class ExperimentService:
             mrr_scores.append(m)
             ndcg_scores.append(n)
             latencies.append(latency_ms)
+
+            logger.debug("Experiment query %d/%d done", i, len(queries), extra={
+                "event": "experiment_query_done",
+                "experiment_id": experiment.id,
+                "query_index": i,
+                "total": len(queries),
+                "recall_at_k": round(r, 3),
+                "latency_ms": round(latency_ms),
+            })
 
         self.db.commit()
 

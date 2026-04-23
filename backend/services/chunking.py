@@ -29,8 +29,10 @@ _tokenizer = None
 def get_tokenizer():
     global _tokenizer
     if _tokenizer is None:
+        logger.info("Loading BGE-M3 tokenizer: %s", settings.embedding_model)
         from transformers import AutoTokenizer
         _tokenizer = AutoTokenizer.from_pretrained(settings.embedding_model)
+        logger.info("BGE-M3 tokenizer loaded")
     return _tokenizer
 
 
@@ -217,8 +219,11 @@ def split_prose(html_or_text: str, source_method: str = "html") -> list[TextChun
     if buf_texts:
         flush(buf_section)
 
-    return result if result else [TextChunk(text=html_or_text[:4000], source_method=source_method,
-                                            token_count=count_tokens(html_or_text[:4000]))]
+    final = result if result else [TextChunk(text=html_or_text[:4000], source_method=source_method,
+                                             token_count=count_tokens(html_or_text[:4000]))]
+    logger.debug("split_prose: %d chunks from %d input chars", len(final), len(html_or_text),
+                 extra={"event": "chunking_prose", "chunks": len(final), "source_method": source_method})
+    return final
 
 
 # ─────────────────────────────────────────
@@ -325,6 +330,9 @@ def split_tables(html_or_text: str, source_method: str = "html") -> list[TextChu
                 ))
             # Oversized markdown tables: just keep as-is (row splitting requires HTML)
 
+    logger.debug("split_tables: %d chunks from %d HTML tables + markdown tables",
+                 len(chunks), len(tables),
+                 extra={"event": "chunking_tables", "chunks": len(chunks)})
     return chunks
 
 
@@ -367,9 +375,13 @@ def split_vlm(text: str) -> list[TextChunk]:
                     token_count=count_tokens(part),
                 ))
 
-    return chunks if chunks else [TextChunk(
+    final = chunks if chunks else [TextChunk(
         text=text[:3000],
         chunk_type=ChunkType.block,
         source_method="vlm",
         token_count=count_tokens(text[:3000]),
     )]
+    logger.debug("split_vlm: %d chunks from %d input chars",
+                 len(final), len(text),
+                 extra={"event": "chunking_vlm", "chunks": len(final)})
+    return final

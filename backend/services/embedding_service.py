@@ -185,39 +185,55 @@ class EmbeddingService:
         Hybrid search: prefetch 50 from dense, 50 from sparse, fuse with RRF.
         Fetches chunk text from Postgres by chunk_id (single IN query).
         """
-        model = get_embedding_model()
-        output = model.encode([query], return_dense=True, return_sparse=True)
-        dense_vec = output['dense_vecs'][0].tolist()
-        sparse_weights = output['lexical_weights'][0]
-        sparse_indices = [int(k) for k in sparse_weights.keys()]
-        sparse_values = [float(v) for v in sparse_weights.values()]
+        logger.info("Qdrant hybrid search", extra={
+            "event": "search_start",
+            "query": query[:120],
+            "top_k": top_k,
+            "source_id": source_id,
+        })
+        t0 = time.time()
+        try:
+            model = get_embedding_model()
+            output = model.encode([query], return_dense=True, return_sparse=True)
+            dense_vec = output['dense_vecs'][0].tolist()
+            sparse_weights = output['lexical_weights'][0]
+            sparse_indices = [int(k) for k in sparse_weights.keys()]
+            sparse_values = [float(v) for v in sparse_weights.values()]
 
-        search_filter = None
-        if source_id:
-            search_filter = Filter(
-                must=[FieldCondition(key="source_id", match=MatchValue(value=source_id))]
+            search_filter = None
+            if source_id:
+                search_filter = Filter(
+                    must=[FieldCondition(key="source_id", match=MatchValue(value=source_id))]
+                )
+
+            results = self.qdrant.query_points(
+                collection_name=settings.qdrant_collection,
+                prefetch=[
+                    Prefetch(
+                        query=dense_vec,
+                        using="dense",
+                        limit=50,
+                        filter=search_filter,
+                    ),
+                    Prefetch(
+                        query=SparseVector(indices=sparse_indices, values=sparse_values),
+                        using="sparse",
+                        limit=50,
+                        filter=search_filter,
+                    ),
+                ],
+                query=FusionQuery(fusion=Fusion.RRF),
+                limit=top_k,
+                with_payload=True,
             )
-
-        results = self.qdrant.query_points(
-            collection_name=settings.qdrant_collection,
-            prefetch=[
-                Prefetch(
-                    query=dense_vec,
-                    using="dense",
-                    limit=50,
-                    filter=search_filter,
-                ),
-                Prefetch(
-                    query=SparseVector(indices=sparse_indices, values=sparse_values),
-                    using="sparse",
-                    limit=50,
-                    filter=search_filter,
-                ),
-            ],
-            query=FusionQuery(fusion=Fusion.RRF),
-            limit=top_k,
-            with_payload=True,
-        )
+        except Exception as e:
+            logger.error("Qdrant search failed", extra={
+                "event": "search_failed",
+                "query": query[:120],
+                "source_id": source_id,
+                "error": str(e),
+            }, exc_info=True)
+            raise
 
         hits = results.points
 
@@ -227,6 +243,13 @@ class EmbeddingService:
         if chunk_ids and db is not None:
             rows = db.query(Chunk).filter(Chunk.id.in_(chunk_ids)).all()
             chunk_text_map = {r.id: r.text for r in rows}
+
+        logger.info("Qdrant search complete", extra={
+            "event": "search_complete",
+            "hits": len(hits),
+            "top_k": top_k,
+            "elapsed_ms": round((time.time() - t0) * 1000),
+        })
 
         return [
             {
@@ -242,6 +265,10 @@ class EmbeddingService:
     def delete_chunks(self, chunk_ids: list[str]) -> None:
         """Remove Qdrant points whose payload chunk_id matches any of the given IDs."""
         from qdrant_client.models import Filter, FieldCondition, MatchAny
+        logger.info("Deleting %d chunks from Qdrant", len(chunk_ids), extra={
+            "event": "chunks_delete",
+            "count": len(chunk_ids),
+        })
         self.qdrant.delete(
             collection_name=settings.qdrant_collection,
             points_selector=Filter(

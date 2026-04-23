@@ -2,6 +2,20 @@ function getToken(): string | null {
   return localStorage.getItem('rag_token')
 }
 
+function logError(method: string, path: string, status: number, detail: string, extra?: object) {
+  console.error(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: 'ERROR',
+    service: 'frontend',
+    event: 'api_error',
+    method,
+    path,
+    status,
+    detail,
+    ...extra,
+  }))
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -12,25 +26,39 @@ async function request<T>(
   if (token) headers['Authorization'] = `Bearer ${token}`
   if (body !== undefined) headers['Content-Type'] = 'application/json'
 
-  const res = await fetch(path, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
+  let res: Response
+  try {
+    res = await fetch(path, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+  } catch (networkErr) {
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'ERROR',
+      service: 'frontend',
+      event: 'network_error',
+      method,
+      path,
+      error: String(networkErr),
+    }))
+    throw networkErr
+  }
 
   if (res.status === 401) {
     localStorage.removeItem('rag_token')
     localStorage.removeItem('rag_user')
     window.dispatchEvent(new CustomEvent('auth:expired'))
+    logError(method, path, 401, 'Unauthorized — session expired')
     throw new Error('Unauthorized')
   }
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
-    throw Object.assign(
-      new Error((data as { detail?: string })?.detail ?? `HTTP ${res.status}`),
-      { response: { data } },
-    )
+    const detail = (data as { detail?: string })?.detail ?? `HTTP ${res.status}`
+    logError(method, path, res.status, detail)
+    throw Object.assign(new Error(detail), { response: { data } })
   }
 
   if (res.status === 204) return undefined as T

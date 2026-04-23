@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from alembic.config import Config as AlembicConfig
 from alembic import command as alembic_command
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
@@ -157,6 +157,38 @@ app.include_router(query.router)
 app.include_router(incidents.router)
 app.include_router(documents_router.router)
 app.include_router(experiments_router.router)
+
+
+_SKIP_LOG_PATHS = {"/health", "/metrics"}
+
+
+@app.middleware("http")
+async def _log_requests(request: Request, call_next):
+    if request.url.path in _SKIP_LOG_PATHS:
+        return await call_next(request)
+    t0 = time.monotonic()
+    try:
+        response = await call_next(request)
+        level = logging.WARNING if response.status_code >= 400 else logging.INFO
+        logger.log(level, "%s %s %s", request.method, request.url.path, response.status_code, extra={
+            "event": "http_request",
+            "method": request.method,
+            "path": request.url.path,
+            "query": str(request.url.query) or None,
+            "status": response.status_code,
+            "duration_ms": round((time.monotonic() - t0) * 1000),
+            "client": request.client.host if request.client else None,
+        })
+        return response
+    except Exception as exc:
+        logger.error("%s %s unhandled exception: %s", request.method, request.url.path, exc, extra={
+            "event": "http_error",
+            "method": request.method,
+            "path": request.url.path,
+            "duration_ms": round((time.monotonic() - t0) * 1000),
+            "error": str(exc),
+        }, exc_info=True)
+        raise
 
 
 @app.get("/health")

@@ -131,6 +131,12 @@ def run_experiment(
         session = SessionLocal()
         try:
             ExperimentService(session).run(experiment_id)
+        except Exception as e:
+            logger.error("Background experiment task crashed", extra={
+                "event": "experiment_background_crashed",
+                "experiment_id": experiment_id,
+                "error": str(e),
+            }, exc_info=True)
         finally:
             session.close()
 
