@@ -70,8 +70,7 @@ class Settings(BaseSettings):
     s3_bucket_docs: str = "rag-documents"
 
     # ── Qdrant ────────────────────────────────────
-    qdrant_host: str = "qdrant"
-    qdrant_port: int = 6333
+    qdrant_url: str = "http://qdrant.qdrant.svc:6333"
     qdrant_collection: str = "rag_chunks"
 
     # ── LLM (text generation, e-INFRA AIaaS) ──────

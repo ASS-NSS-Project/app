@@ -45,7 +45,7 @@ def get_embedding_model() -> BGEM3FlagModel:
 
 class EmbeddingService:
     def __init__(self):
-        self.qdrant = QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
+        self.qdrant = QdrantClient(url=settings.qdrant_url)
         self.collection_was_recreated = self._ensure_collection()
 
     def _ensure_collection(self) -> bool:
