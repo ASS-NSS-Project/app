@@ -9,7 +9,7 @@ With RAG:    Ask the LLM a question →
              2. Give those chunks to the LLM as context
              3. LLM answers based on OUR data, with citations
 
-Uses the e-INFRA AIaaS OpenAI-compatible API (LLM_BASE_URL / LLM_MODEL).
+Uses the e-INFRA AIaaS OpenAI-compatible API (AIAAS_BASE_URL / AIAAS_LLM_MODEL).
 """
 
 import logging
@@ -44,8 +44,8 @@ def _get_llm_client() -> AsyncOpenAI:
     global _llm_client
     if _llm_client is None:
         _llm_client = AsyncOpenAI(
-            base_url=settings.llm_base_url,
-            api_key=settings.llm_api_key,
+            base_url=settings.aiaas_base_url,
+            api_key=settings.aiaas_api_key,
             timeout=httpx.Timeout(connect=10.0, read=180.0, write=10.0, pool=5.0),
         )
     return _llm_client
@@ -104,10 +104,10 @@ class RAGService:
         context = "\n\n---\n\n".join(context_parts)
 
         # Step 3: Call LLM
-        logger.info("Sending RAG query to LLM (%s): '%s'", settings.llm_model, question[:80])
+        logger.info("Sending RAG query to LLM (%s): '%s'", settings.aiaas_llm_model, question[:80])
         try:
             response = await self.client.chat.completions.create(
-                model=settings.llm_model,
+                model=settings.aiaas_llm_model,
                 max_tokens=2048,
                 extra_body={"enable_thinking": False},
                 messages=[
@@ -124,17 +124,17 @@ class RAGService:
         except APITimeoutError:
             logger.error("LLM request timed out", extra={
                 "event": "llm_timeout",
-                "model": settings.llm_model,
+                "model": settings.aiaas_llm_model,
                 "mode": "rag",
             })
             raise RuntimeError(
                 f"LLM request timed out after 180 s. "
-                f"Check that LLM_BASE_URL and LLM_MODEL are correct ({settings.llm_model})."
+                f"Check that AIAAS_BASE_URL and AIAAS_LLM_MODEL are correct ({settings.aiaas_llm_model})."
             )
         except APIStatusError as e:
             logger.error("LLM API error", extra={
                 "event": "llm_error",
-                "model": settings.llm_model,
+                "model": settings.aiaas_llm_model,
                 "mode": "rag",
                 "status_code": e.status_code,
                 "detail": e.message,
@@ -162,10 +162,10 @@ class RAGService:
 
     async def _query_no_rag(self, question: str) -> dict:
         """No-RAG mode: ask the LLM directly, no retrieval."""
-        logger.info("Sending no-RAG query to LLM (%s)", settings.llm_model)
+        logger.info("Sending no-RAG query to LLM (%s)", settings.aiaas_llm_model)
         try:
             response = await self.client.chat.completions.create(
-                model=settings.llm_model,
+                model=settings.aiaas_llm_model,
                 max_tokens=2048,
                 extra_body={"enable_thinking": False},
                 messages=[{"role": "user", "content": question}],
@@ -173,17 +173,17 @@ class RAGService:
         except APITimeoutError:
             logger.error("LLM request timed out", extra={
                 "event": "llm_timeout",
-                "model": settings.llm_model,
+                "model": settings.aiaas_llm_model,
                 "mode": "no_rag",
             })
             raise RuntimeError(
                 f"LLM request timed out after 180 s. "
-                f"Check that LLM_BASE_URL and LLM_MODEL are correct ({settings.llm_model})."
+                f"Check that AIAAS_BASE_URL and AIAAS_LLM_MODEL are correct ({settings.aiaas_llm_model})."
             )
         except APIStatusError as e:
             logger.error("LLM API error", extra={
                 "event": "llm_error",
-                "model": settings.llm_model,
+                "model": settings.aiaas_llm_model,
                 "mode": "no_rag",
                 "status_code": e.status_code,
                 "detail": e.message,

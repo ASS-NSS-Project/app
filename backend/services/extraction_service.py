@@ -29,8 +29,8 @@ class ExtractionService:
 
     def __init__(self):
         self.client = AsyncOpenAI(
-            base_url=settings.vlm_base_url,
-            api_key=settings.vlm_api_key,
+            base_url=settings.aiaas_base_url,
+            api_key=settings.aiaas_api_key,
         )
 
     async def extract_from_screenshot(
@@ -43,11 +43,11 @@ class ExtractionService:
         """
         image_b64 = base64.standard_b64encode(screenshot_bytes).decode("utf-8")
 
-        logger.info(f"Sending screenshot to {settings.vlm_model} for URL: {url}")
+        logger.info(f"Sending screenshot to {settings.aiaas_vlm_model} for URL: {url}")
 
         try:
             response = await self.client.chat.completions.create(
-                model=settings.vlm_model,
+                model=settings.aiaas_vlm_model,
                 max_tokens=4096,
                 messages=[
                     {
@@ -82,7 +82,7 @@ class ExtractionService:
         """
         try:
             response = await self.client.chat.completions.create(
-                model=settings.llm_model,
+                model=settings.aiaas_llm_model,
                 max_tokens=4096,
                 messages=[
                     {

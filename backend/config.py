@@ -73,15 +73,15 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://qdrant.qdrant.svc:6333"
     qdrant_collection: str = "rag_chunks"
 
-    # ── LLM (text generation, e-INFRA AIaaS) ──────
-    llm_base_url: str = ""
-    llm_api_key: str = ""
-    llm_model: str = ""
+    # ── AIaaS (e-INFRA, shared base URL + key for LLM and VLM) ──
+    aiaas_base_url: str = ""
+    aiaas_api_key: str = ""
 
-    # ── VLM (vision extraction, e-INFRA AIaaS) ────
-    vlm_base_url: str = ""
-    vlm_api_key: str = ""
-    vlm_model: str = ""
+    # ── LLM (text generation) ─────────────────────
+    aiaas_llm_model: str = ""
+
+    # ── VLM (vision extraction) ───────────────────
+    aiaas_vlm_model: str = ""
 
     # ── Embeddings (local FlagEmbedding / BGE-M3) ─
     embedding_model: str = "BAAI/bge-m3"

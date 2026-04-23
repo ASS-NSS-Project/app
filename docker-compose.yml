@@ -1,18 +1,32 @@
+# Local development only.
+# Production runs on Kubernetes (see infra/).
+#
+# Podman one-time setup (rootless):
+#   Allow binding port 80 (requires root, once per machine):
+#     ```
+#     echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee -a /etc/sysctl.d/99-podman-ports.conf
+#     sudo sysctl -p /etc/sysctl.d/99-podman-ports.conf
+#     ```
+#   Enable user socket:
+#     ```
+#     systemctl --user enable --now podman.socket
+#     ```
+
 services:
   postgres:
     image: postgres:16
     container_name: rag_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_USER: ${POSTGRES_USER:-raguser}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_DB: ${POSTGRES_DB:-ragdb}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - ragnet
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-raguser} -d $${POSTGRES_DB:-ragdb}"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -23,11 +37,24 @@ services:
     container_name: rag_rabbitmq
     restart: unless-stopped
     security_opt:
-      - label=disable   # Podman rootless: allow volume chown for erlang cookie (SELinux)
+      - label=disable   # Podman rootless: allow volume chown for erlang cookie (SELinux); Docker ignores this
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-rabbit}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
       RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:-changeme_erlang_cookie}
+    # Podman rootless: pre-write erlang cookie as UID 999 (rabbitmq user) so it can be read.
+    # On Docker / root Podman this is a no-op — the cookie already has the right owner.
+    entrypoint:
+      - sh
+      - -c
+      - |
+        COOKIE=/var/lib/rabbitmq/.erlang.cookie
+        rm -f "$$COOKIE" 2>/dev/null || true
+        if [ -n "$$RABBITMQ_ERLANG_COOKIE" ]; then
+          echo "$$RABBITMQ_ERLANG_COOKIE" > "$$COOKIE"
+          chmod 400 "$$COOKIE"
+        fi
+        exec docker-entrypoint.sh rabbitmq-server
     ports:
       - "127.0.0.1:15672:15672"   # Management UI: http://localhost:15672
     networks:
@@ -46,37 +73,7 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     ports:
-      - "127.0.0.1:6333:6333"
-    networks:
-      - ragnet
-    # No healthcheck – the endpoint changed between versions.
-    # The API connects lazily and retries on first use.
-
-  traefik:
-    image: traefik:v3
-    container_name: rag_traefik
-    restart: unless-stopped
-    security_opt:
-      - label=disable   # Podman rootless: allow access to container socket (SELinux)
-    command:
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --entrypoints.web.address=:80
-      - --entrypoints.web.http.redirections.entrypoint.to=websecure
-      - --entrypoints.web.http.redirections.entrypoint.scheme=https
-      - --entrypoints.web.http.redirections.entrypoint.permanent=true
-      - --entrypoints.websecure.address=:443
-      # Let's Encrypt via HTTP-01 — activates automatically once DOMAIN points to this server
-      - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
-      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
-      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}
-      - --certificatesresolvers.letsencrypt.acme.storage=/acme.json
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./acme.json:/acme.json
+      - "127.0.0.1:6333:6333"   # Dashboard: http://localhost:6333/dashboard
     networks:
       - ragnet
 
@@ -85,12 +82,14 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: rag_api
+    restart: unless-stopped
     environment:
-      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_USER=${POSTGRES_USER:-raguser}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_DB=${POSTGRES_DB:-ragdb}
       - POSTGRES_HOST=postgres
-      - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
+      - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER:-rabbit}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
+      - QDRANT_URL=http://qdrant:6333
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
       - S3_ACCESS_KEY=${S3_ACCESS_KEY}
       - S3_SECRET_KEY=${S3_SECRET_KEY}
@@ -98,21 +97,13 @@ services:
       - S3_USE_PATH_STYLE=${S3_USE_PATH_STYLE:-true}
       - S3_BUCKET_EVIDENCE=${S3_BUCKET_EVIDENCE:-rag-evidence}
       - S3_BUCKET_DOCS=${S3_BUCKET_DOCS:-rag-documents}
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
-      - LLM_BASE_URL=${LLM_BASE_URL}
-      - LLM_API_KEY=${LLM_API_KEY}
-      - LLM_MODEL=${LLM_MODEL}
-      - VLM_BASE_URL=${VLM_BASE_URL}
-      - VLM_API_KEY=${VLM_API_KEY}
-      - VLM_MODEL=${VLM_MODEL}
+      - AIAAS_BASE_URL=${AIAAS_BASE_URL}
+      - AIAAS_API_KEY=${AIAAS_API_KEY}
+      - AIAAS_LLM_MODEL=${AIAAS_LLM_MODEL}
+      - AIAAS_VLM_MODEL=${AIAAS_VLM_MODEL}
       - JWT_SECRET=${JWT_SECRET}
-      - FIRST_ADMIN_EMAIL=${FIRST_ADMIN_EMAIL}
+      - FIRST_ADMIN_EMAIL=${FIRST_ADMIN_EMAIL:-admin@example.com}
       - FIRST_ADMIN_PASSWORD=${FIRST_ADMIN_PASSWORD}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
-      - FRONTEND_URL=${FRONTEND_URL}
       - API_DOCS=${API_DOCS:-false}
       - SERVICE_NAME=api
     depends_on:
@@ -122,35 +113,36 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_started
+    # TCP wait loop: podman-compose ignores condition: service_healthy on depends_on,
+    # so we poll the Postgres TCP port directly before starting uvicorn.
+    command: >
+      sh -c "
+        until python -c \"import socket; socket.create_connection(('postgres', 5432), timeout=2)\" 2>/dev/null; do
+          echo 'Waiting for postgres TCP…'; sleep 2;
+        done &&
+        uvicorn main:app --host 0.0.0.0 --port 8000 --reload --access-log
+      "
+    ports:
+      - "127.0.0.1:8000:8000"   # API direct access (optional, frontend also proxies via nginx)
     volumes:
       - ./backend:/app:z
       - hf_cache:/root/.cache/huggingface
     networks:
       - ragnet
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload --access-log
-    labels:
-      - traefik.enable=true
-      # HTTP
-      - traefik.http.routers.api.rule=Host(`${DOMAIN}`) && (PathPrefix(`/auth`) || PathPrefix(`/sources`) || PathPrefix(`/query`) || PathPrefix(`/incidents`) || PathPrefix(`/documents`) || PathPrefix(`/experiments`) || PathPrefix(`/health`) || PathPrefix(`/metrics`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`))
-      - traefik.http.routers.api.entrypoints=web
-      # HTTPS (cert obtained automatically once DOMAIN resolves to this server)
-      - traefik.http.routers.api-secure.rule=Host(`${DOMAIN}`) && (PathPrefix(`/auth`) || PathPrefix(`/sources`) || PathPrefix(`/query`) || PathPrefix(`/incidents`) || PathPrefix(`/documents`) || PathPrefix(`/experiments`) || PathPrefix(`/health`) || PathPrefix(`/metrics`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`))
-      - traefik.http.routers.api-secure.entrypoints=websecure
-      - traefik.http.routers.api-secure.tls=true
-      - traefik.http.routers.api-secure.tls.certresolver=letsencrypt
-      - traefik.http.services.api.loadbalancer.server.port=8000
 
   worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: rag_worker
+    restart: unless-stopped
     environment:
-      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_USER=${POSTGRES_USER:-raguser}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_DB=${POSTGRES_DB:-ragdb}
       - POSTGRES_HOST=postgres
-      - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
+      - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER:-rabbit}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
+      - QDRANT_URL=http://qdrant:6333
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
       - S3_ACCESS_KEY=${S3_ACCESS_KEY}
       - S3_SECRET_KEY=${S3_SECRET_KEY}
@@ -158,27 +150,29 @@ services:
       - S3_USE_PATH_STYLE=${S3_USE_PATH_STYLE:-true}
       - S3_BUCKET_EVIDENCE=${S3_BUCKET_EVIDENCE:-rag-evidence}
       - S3_BUCKET_DOCS=${S3_BUCKET_DOCS:-rag-documents}
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
-      - LLM_BASE_URL=${LLM_BASE_URL}
-      - LLM_API_KEY=${LLM_API_KEY}
-      - LLM_MODEL=${LLM_MODEL}
-      - VLM_BASE_URL=${VLM_BASE_URL}
-      - VLM_API_KEY=${VLM_API_KEY}
-      - VLM_MODEL=${VLM_MODEL}
+      - AIAAS_BASE_URL=${AIAAS_BASE_URL}
+      - AIAAS_API_KEY=${AIAAS_API_KEY}
+      - AIAAS_LLM_MODEL=${AIAAS_LLM_MODEL}
+      - AIAAS_VLM_MODEL=${AIAAS_VLM_MODEL}
       - JWT_SECRET=${JWT_SECRET}
       - SERVICE_NAME=worker
     depends_on:
-      rabbitmq:
-        condition: service_healthy
       postgres:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    command: >
+      sh -c "
+        until python -c \"import socket; socket.create_connection(('postgres', 5432), timeout=2)\" 2>/dev/null; do
+          echo 'Waiting for postgres TCP…'; sleep 2;
+        done &&
+        python worker.py
+      "
     volumes:
       - ./backend:/app:z
       - hf_cache:/root/.cache/huggingface
     networks:
       - ragnet
-    command: python worker.py
 
   frontend:
     build:
@@ -187,27 +181,10 @@ services:
     container_name: rag_frontend
     depends_on:
       - api
+    ports:
+      - "80:80"   # UI: http://localhost  (nginx also proxies /auth, /sources, etc. to the api)
     networks:
       - ragnet
-    labels:
-      - traefik.enable=true
-      # HTTP
-      - traefik.http.routers.frontend.rule=Host(`${DOMAIN}`)
-      - traefik.http.routers.frontend.entrypoints=web
-      # HTTPS (cert obtained automatically once DOMAIN resolves to this server)
-      - traefik.http.routers.frontend-secure.rule=Host(`${DOMAIN}`)
-      - traefik.http.routers.frontend-secure.entrypoints=websecure
-      - traefik.http.routers.frontend-secure.tls=true
-      - traefik.http.routers.frontend-secure.tls.certresolver=letsencrypt
-      - traefik.http.services.frontend.loadbalancer.server.port=80
-      - traefik.http.routers.frontend-secure.middlewares=security-headers
-      # Security headers middleware
-      - traefik.http.middlewares.security-headers.headers.stsSeconds=31536000
-      - traefik.http.middlewares.security-headers.headers.stsIncludeSubdomains=true
-      - traefik.http.middlewares.security-headers.headers.stsPreload=true
-      - traefik.http.middlewares.security-headers.headers.contentTypeNosniff=true
-      - traefik.http.middlewares.security-headers.headers.frameDeny=true
-      - traefik.http.middlewares.security-headers.headers.referrerPolicy=strict-origin-when-cross-origin
 
 volumes:
   postgres_data:
