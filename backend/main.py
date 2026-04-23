@@ -18,8 +18,8 @@ from routers import auth_keycloak
 import routers.documents as documents_router
 import routers.experiments as experiments_router
 from services.auth_service import ensure_admin_exists
-from services.embedding_service import EmbeddingService
 from services.logging_config import setup_logging
+from services.rag_service import _get_embedder
 from services.scheduler_service import create_scheduler
 
 setup_logging(os.getenv("LOG_LEVEL", "INFO"))
@@ -93,7 +93,7 @@ async def lifespan(app: FastAPI):
     # If the embedding model changed (different dimension), the collection is recreated
     # and all chunks are marked for re-embedding
     try:
-        embedding_service = EmbeddingService()
+        embedding_service = _get_embedder()
         if embedding_service.collection_was_recreated:
             db = SessionLocal()
             try:
