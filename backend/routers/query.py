@@ -49,31 +49,33 @@ async def query(
     
     Modes:
     - rag: Retrieve relevant chunks first, then answer (recommended)
-    - no_rag: Ask Claude directly (for comparison/benchmarking)
+    - no_rag: Ask model directly (for comparison/benchmarking)
     """
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
     rag_service = RAGService()
-    # try:
-    result = await rag_service.query(
-        question=request.question,
-        mode=request.mode,
-        top_k=request.top_k,
-        source_id=request.source_id,
-        strict_grounding=request.strict_grounding,
-        db=db,
-    )
-    # except RuntimeError as e:
-    #     raise HTTPException(status_code=502, detail=str(e))
+    try:
+        result = await rag_service.query(
+            question=request.question,
+            mode=request.mode,
+            top_k=request.top_k,
+            source_id=request.source_id,
+            strict_grounding=request.strict_grounding,
+            db=db,
+        )
 
-    log_action(
-        db, current_user.id, "QUERY_EXECUTED",
-        extra={
-            "question": request.question[:200],
-            "mode": request.mode,
-            "chunks_retrieved": result["chunks_retrieved"],
-        },
-    )
+        log_action(
+            db, current_user.id, "QUERY_EXECUTED",
+            extra={
+                "question": request.question[:200],
+                "mode": request.mode,
+                "chunks_retrieved": result["chunks_retrieved"],
+            }
+        )
+        
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
 
     return result
