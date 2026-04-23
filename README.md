@@ -41,7 +41,7 @@ cd rag_system
 cp .env.example .env
 ```
 
-Fill in the required values. The mandatory ones:
+Fill in the required values:
 
 ```env
 # PostgreSQL
@@ -55,15 +55,11 @@ S3_ENDPOINT_URL=https://<provided-by-team>
 S3_ACCESS_KEY=<provided-by-team>
 S3_SECRET_KEY=<provided-by-team>
 
-# CERIT-SC AIaaS — text LLM
-LLM_BASE_URL=https://<aiaas-endpoint>/v1
-LLM_API_KEY=<provided-by-team>
-LLM_MODEL=<from /v1/models, e.g. llama-3.3-70b-instruct>
-
-# CERIT-SC AIaaS — vision LLM
-VLM_BASE_URL=https://<aiaas-endpoint>/v1
-VLM_API_KEY=<provided-by-team>
-VLM_MODEL=<from /v1/models, e.g. qwen2.5-vl-7b-instruct>
+# CERIT-SC AIaaS — shared base URL and key for both LLM and VLM
+AIAAS_BASE_URL=https://<aiaas-endpoint>/v1
+AIAAS_API_KEY=<provided-by-team>
+AIAAS_LLM_MODEL=<from /v1/models, e.g. llama-3.3-70b-instruct>
+AIAAS_VLM_MODEL=<from /v1/models, e.g. qwen2.5-vl-7b-instruct>
 
 # JWT signing secret
 # Generate: python -c "import secrets; print(secrets.token_hex(32))"
@@ -74,61 +70,19 @@ FIRST_ADMIN_EMAIL=admin@example.com
 FIRST_ADMIN_PASSWORD=strong-random-password
 ```
 
-#### Optional: Google OAuth2
-
-To enable "Sign in with Google":
-
-```env
-GOOGLE_CLIENT_ID=...your-client-id...
-GOOGLE_CLIENT_SECRET=...your-client-secret...
-# Production:
-GOOGLE_REDIRECT_URI=https://your-domain/auth/google/callback
-FRONTEND_URL=https://your-domain
-# Local dev:
-# GOOGLE_REDIRECT_URI=http://localhost/auth/google/callback
-# FRONTEND_URL=http://localhost
-```
-
-Create OAuth credentials at [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials. Add the redirect URI to **Authorized redirect URIs**. If `GOOGLE_CLIENT_ID` is not set the button returns a `503` and the flow is skipped.
-
-#### Production routing (Traefik + TLS)
-
-```env
-DOMAIN=your-server-ip-or-domain
-ACME_EMAIL=you@example.com
-```
-
-### 3. Create the Traefik certificate file
-
-```bash
-touch acme.json && chmod 600 acme.json
-```
-
-This **must be a file**, not a directory. If Podman created a directory here from a previous run, delete it first: `rm -rf acme.json && touch acme.json && chmod 600 acme.json`.
-
-### 4. Start the system
+### 3. Start the system
 
 **Docker:**
 ```bash
 docker compose up --build
 ```
 
-**Podman** (rootless — exposes port 80 without TLS):
+**Podman** (rootless):
 
-Rootless Podman cannot bind port 80 by default. Allow it once (requires root):
+Allow binding port 80 once (requires root):
 ```bash
 echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee -a /etc/sysctl.d/99-podman-ports.conf
 sudo sysctl -p /etc/sysctl.d/99-podman-ports.conf
-```
-
-Enable the Podman user socket (once — survives reboots):
-```bash
-systemctl --user enable --now podman.socket
-```
-
-Add `DOCKER_SOCK` to your `.env` (replace `1000` with your UID from `id -u`):
-```
-DOCKER_SOCK=/run/user/1000/podman/podman.sock
 ```
 
 Then start the stack:
@@ -136,14 +90,7 @@ Then start the stack:
 podman compose up --build
 ```
 
-> **First-time cleanup**: if you have leftover containers from a previous run, do
-> `podman compose down -v` first.
-
-The `docker-compose.override.yml` is picked up automatically. It:
-- Reconfigures Traefik to run HTTP-only on port 80 (no TLS, no redirect)
-- Adds a TCP wait loop before the API and worker start, ensuring Postgres is fully ready
-- Wraps the RabbitMQ entrypoint to pre-write the erlang cookie with correct ownership (Podman rootless UID mapping fix)
-- Disables SELinux confinement for Traefik and RabbitMQ via `security_opt: label=disable`
+> **First-time cleanup**: if you have leftover containers from a previous run, run `podman compose down -v` first.
 
 You'll know it's ready when you see:
 ```
@@ -151,11 +98,9 @@ rag_api    | INFO: Startup complete. API ready.
 rag_worker | INFO: Worker ready. Listening on queue: ingest
 ```
 
-### 5. Open the UI
+### 4. Open the UI
 
 Open **http://localhost** and log in with `FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_PASSWORD` from your `.env`.
-
-Docker serves on port 80 with automatic TLS. Podman local dev also serves on port 80, HTTP only (no redirect, no ACME).
 
 ---
 
@@ -627,16 +572,16 @@ The worker also exposes Prometheus metrics on port `9090` (configurable via `WOR
 
 | Service | URL | Notes |
 |---------|-----|-------|
-| Main UI | http://localhost | Frontend application |
-| API | http://localhost (proxied) | FastAPI backend via Traefik |
+| Main UI | http://localhost | Frontend (nginx proxies API paths) |
+| API direct | http://localhost:8000 | FastAPI backend (also reachable via localhost) |
 | Swagger UI | http://localhost/docs | Set `API_DOCS=true` in `.env` to enable |
 | ReDoc | http://localhost/redoc | Set `API_DOCS=true` in `.env` to enable |
-| Qdrant Dashboard | http://localhost:6333/dashboard | Browse vector collections (localhost only) |
-| RabbitMQ Management | http://localhost:15672 | Browse queues (localhost only) |
+| Qdrant Dashboard | http://localhost:6333/dashboard | Browse vector collections |
+| RabbitMQ Management | http://localhost:15672 | Browse queues |
 
 RabbitMQ login: `RABBITMQ_DEFAULT_USER` / `RABBITMQ_DEFAULT_PASS` from `.env`.
 
-> Admin ports (6333, 15672) are bound to `127.0.0.1` only and not exposed to the network.
+> Qdrant (6333) and RabbitMQ (15672) are bound to `127.0.0.1` only.
 
 ---
 
@@ -646,31 +591,31 @@ RabbitMQ login: `RABBITMQ_DEFAULT_USER` / `RABBITMQ_DEFAULT_PASS` from `.env`.
 User (Browser)
     │
     ▼
-Traefik (ports 80/443 — TLS termination, routing)
+Frontend / Nginx :80
+    │  (proxies /auth, /sources, /query, … to API)
     │
-    ├──► Frontend / Nginx (Vue 3 SPA)
-    │
-    └──► FastAPI API
+    └──► FastAPI API :8000
             │── Auth (JWT + Google OAuth2)
             │── Sources API
-            │── Query API ──────────────► Qdrant (hybrid vector search)
+            │── Query API ──────────────► Qdrant :6333 (hybrid vector search)
             │── Documents API               ▲
             │── Experiments API             │ embed BGE-M3 (dense + sparse)
             │── Incidents API               │
             │                               │
             ▼                               │
-       RabbitMQ Queue ──────► Worker ──────┘
+       RabbitMQ :5672 ──────► Worker ──────┘
                                   │
                                   ├── HTML fetch (httpx)
                                   ├── Rendered DOM (Playwright/Chrome)
                                   ├── Screenshot (Playwright)
                                   │       └── VLM (CERIT-SC AIaaS)
                                   │
-                                  ├── PostgreSQL (metadata, jobs, audit)
+                                  ├── PostgreSQL :5432 (metadata, jobs, audit)
                                   └── CESNET S3 (screenshots, HTML evidence)
 
 LLM/VLM inference: CERIT-SC AIaaS (OpenAI-compatible API)
 Embeddings: BGE-M3 via FlagEmbedding (runs locally in the worker)
+Production deployment: Kubernetes — see infra/
 ```
 
 ---
@@ -704,10 +649,43 @@ podman compose logs api | grep '"event": "ingest_completed"'
 podman compose logs worker | grep '"event": "embedding_failed"'
 ```
 
+Every log line is JSON. Key fields: `timestamp`, `level`, `logger`, `service`, `event`, `message`.
+
+```bash
+# Follow all logs
+podman compose logs -f api worker
+
+# Filter to a specific event slug
+podman compose logs api | grep '"event": "query_failed"'
+podman compose logs api | grep '"event": "search_failed"'
+```
+
 Event catalogue:
 
 | Event | Service | Meaning |
 |-------|---------|---------|
+| `http_request` | api | Every HTTP request — method, path, status, duration_ms, client |
+| `http_error` | api | Unhandled exception before response was sent |
+| `query_received` | api | /query endpoint received a request |
+| `query_completed` | api | /query returned successfully |
+| `query_failed` | api | /query raised a RuntimeError (→ 502) |
+| `search_start` | api | Qdrant hybrid search starting |
+| `search_complete` | api | Qdrant returned hits |
+| `search_failed` | api | Qdrant unreachable or error |
+| `llm_timeout` | api | LLM request timed out (180 s) |
+| `llm_error` | api | LLM API returned an error status |
+| `jwt_invalid` | api | JWT decode failed (expired or tampered) |
+| `admin_created` | api | Bootstrap admin created on first startup |
+| `scheduler_job_triggered` | api | Crawl job published to queue |
+| `scheduler_crawl_failed` | api | Failed to publish crawl job |
+| `scheduler_run_complete` | api | Scheduler tick finished |
+| `experiment_started` | api | Experiment run started |
+| `experiment_executing` | api | Running individual queries |
+| `experiment_query_done` | api | Single experiment query complete |
+| `experiment_completed` | api | Experiment finished with metrics |
+| `experiment_failed` | api | Experiment raised an exception |
+| `experiment_background_crashed` | api | Background task for experiment crashed |
+| `presigned_url_failed` | api | S3 presigned URL generation failed |
 | `ingest_started` | worker | Job picked up from queue |
 | `ingest_completed` | worker | Full pipeline succeeded |
 | `ingest_failed` | worker | Pipeline raised an exception |
@@ -718,16 +696,19 @@ Event catalogue:
 | `document_created` | worker | Document + chunks saved to DB |
 | `embedding_completed` | worker | Chunks upserted into Qdrant |
 | `embedding_failed` | worker | Qdrant upsert failed |
-| `llm_timeout` | api | LLM request timed out |
-| `llm_error` | api | LLM request raised an error |
-| `scheduler_job_triggered` | api | Crawl job published to queue |
-| `scheduler_crawl_failed` | api | Failed to publish crawl job |
-| `scheduler_run_complete` | api | Scheduler tick finished |
+| `chunks_delete` | worker | Chunks deleted from Qdrant |
+| `chunking_prose` | worker | Prose chunking complete (DEBUG) |
+| `chunking_tables` | worker | Table chunking complete (DEBUG) |
+| `chunking_vlm` | worker | VLM block chunking complete (DEBUG) |
 | `worker_job_started` | worker | Message dequeued |
 | `worker_job_completed` | worker | Job fully processed |
 | `worker_job_incomplete` | worker | Job finished with non-done status |
 | `worker_job_crashed` | worker | Unexpected exception in job |
 | `worker_invalid_message` | worker | Malformed message dropped |
+| `api_error` | frontend | API call returned a non-2xx status |
+| `network_error` | frontend | fetch() failed (no network / DNS) |
+| `vue_error` | frontend | Uncaught Vue component error |
+| `unhandled_promise_rejection` | frontend | Unhandled JS promise rejection |
 
 ### Restart a single service
 
@@ -753,7 +734,7 @@ docker compose down -v       # Stop and delete all data (fresh start)
 → Check `podman compose logs worker`. If it shows import errors, run `podman compose build` again.
 
 **Vision extraction fails**
-→ Verify `VLM_BASE_URL`, `VLM_API_KEY`, and `VLM_MODEL` in `.env`. Test the endpoint with `curl -H "Authorization: Bearer $VLM_API_KEY" $VLM_BASE_URL/models`.
+→ Verify `AIAAS_BASE_URL`, `AIAAS_API_KEY`, and `AIAAS_VLM_MODEL` in `.env`. Test the endpoint with `curl -H "Authorization: Bearer $AIAAS_API_KEY" $AIAAS_BASE_URL/models`.
 
 **S3 upload errors**
 → Verify `S3_ENDPOINT_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`. Check that the buckets in `S3_BUCKET_EVIDENCE` and `S3_BUCKET_DOCS` exist and the credentials have write access.
@@ -762,27 +743,19 @@ docker compose down -v       # Stop and delete all data (fresh start)
 → Screenshot strategy needs Chromium in the worker container. If it fails, rebuild: `docker compose build --no-cache worker`.
 
 **Podman: RabbitMQ fails to start (erlang cookie permission denied)**
-→ In Podman rootless, the container's UID 0 maps to your host user while the RabbitMQ process runs as UID 999 (a subuid-mapped UID). The entrypoint wrapper in `docker-compose.override.yml` handles this by pre-writing the cookie as UID 999 with mode 400 before the main entrypoint runs. If you see `eacces` or "must be accessible by owner only" errors, ensure the override file is being picked up (`podman compose up` from the project root) and that `rabbitmq_data` volume is clean (`podman compose down -v`).
-
-**Podman: Traefik cannot connect to Docker socket (permission denied)**
-→ The socket must be the systemd user socket, not one started with `podman system service` in `/tmp`. Run `systemctl --user enable --now podman.socket` and set `DOCKER_SOCK=/run/user/$(id -u)/podman/podman.sock` in `.env`.
+→ In Podman rootless, the RabbitMQ process runs as UID 999 (a subuid-mapped UID) while the container's UID 0 maps to your host user. The `docker-compose.yml` entrypoint wrapper pre-writes the erlang cookie as mode 400 before the main entrypoint runs. If you see `eacces` or "must be accessible by owner only" errors, ensure `rabbitmq_data` volume is clean: `podman compose down -v`.
 
 **Podman: cannot bind port 80 (permission denied)**
 → Allow rootless binding of low ports once: `echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee -a /etc/sysctl.d/99-podman-ports.conf && sudo sysctl -p /etc/sysctl.d/99-podman-ports.conf`
-
-**acme.json is a directory instead of a file**
-→ Podman creates a directory when a volume-mounted file doesn't exist yet. Fix: `rm -rf acme.json && touch acme.json && chmod 600 acme.json`.
 
 ---
 
 ## Project Structure
 
-```
+```text
 rag_system/
-├── docker-compose.yml          # All services (production config)
-├── docker-compose.override.yml # Local dev overrides (HTTP only, Podman fixes)
+├── docker-compose.yml          # Local dev — all services (Docker + Podman)
 ├── .env.example                # Config template (copy to .env)
-├── acme.json                   # Traefik TLS certificate storage (must be a file, not dir)
 ├── backend/                    # FastAPI Python service
 │   ├── Dockerfile
 │   ├── requirements.txt
@@ -833,41 +806,36 @@ rag_system/
 
 ## CI / CD
 
-Images are built and pushed to **GitHub Container Registry** on every push to `main` or `dev`, and on semver git tags (`v*.*.*`).
+Images are built and pushed to **GitHub Container Registry** on every push to `main` or `kost`, and on semver git tags (`v*.*.*`).
 
 | Trigger | Tags produced |
-|---------|--------------|
-| push to `main` or `dev` | `main-<short-sha>`, `dev-<short-sha>` |
+|---------|---------------|
+| push to `main` | `main-<short-sha>` |
+| push to `kost` | `kost-<short-sha>` |
 | git tag `v1.2.3` | `1.2.3`, `1.2` |
 
 Images:
+
 - `ghcr.io/ass-nss-project/rag-api` — FastAPI backend (also used for the worker, different `command` in k8s)
 - `ghcr.io/ass-nss-project/rag-frontend` — Vue 3 / Nginx SPA
 
-The workflow: commit-message lint → backend tests → frontend build → build & push (main/dev/tags only).
+The workflow: commit-message lint → backend tests → frontend build → build & push (main/kost/tags only).
 
 ---
 
 ## Kubernetes (Production)
 
-The production deployment lives in [ASS-NSS-Project/site-infra](https://github.com/ASS-NSS-Project/site-infra) (branch `kost`), managed by ArgoCD.
+The production deployment lives in [ASS-NSS-Project/infra](https://github.com/ASS-NSS-Project/infra) (branch `kost`), managed by ArgoCD.
 
 | Service | Production URL |
-|---------|---------------|
-| Main UI + API | https://rag.nss.jkzl.eu |
-| RabbitMQ Management | https://rabbitmq-mgmt.nss.jkzl.eu |
+|---------|----------------|
+| Main UI + API | <https://rag.nss.jkzl.eu> |
+| RabbitMQ Management | <https://rabbitmq-mgmt.nss.jkzl.eu> |
 
 ArgoCD sync waves:
+
 - Wave 19 — `rabbitmq-operator` (RabbitMQ Cluster Operator)
 - Wave 20 — `qdrant` (Qdrant via Helm)
 - Wave 21 — `rag-system` (API, worker, frontend, CNPG Postgres, secrets via ESO/Vault)
 
-Secrets are provisioned via `terraform/vault` in site-infra. DNS records are managed via `terraform/cloudflare`.
-
----
-
-## TODO
-
-- [ ] **Frontend end-to-end smoke test** — walk the golden path (login → add source → trigger ingest → wait for completion → run a RAG query) to verify all compose fixes and service wiring hold together
-- [ ] **Migration 0006: drop `rq_job_id`** — `ingest_jobs.rq_job_id` is a dead column left over from an earlier Redis Queue prototype; nothing writes to it; drop it with a clean Alembic migration
-- [ ] **Keycloak OIDC** — replace custom JWT auth with Keycloak OIDC for SSO across all cluster services
+Secrets are provisioned via `terraform/vault` in `infra/`. DNS records are managed via `terraform/cloudflare`.
