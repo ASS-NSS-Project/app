@@ -8,10 +8,13 @@ Example: instead of "SELECT * FROM sources", you write Source.query.all()
 This file sets up the connection pool and session factory.
 """
 
+import logging
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from config import get_settings
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # The "engine" is the actual connection to PostgreSQL.
@@ -23,6 +26,7 @@ engine = create_engine(
     pool_size=10,        # Max 10 simultaneous DB connections
     max_overflow=20,
 )
+logger.debug("Database engine created", extra={"event": "db_engine_created"})
 
 # SessionLocal is a factory for database sessions.
 # Each API request gets its own session (like a transaction context).

@@ -128,6 +128,11 @@ def create_source(
     db.refresh(source)
     log_action(db, current_user.id, "SOURCE_CREATED", "source", source.id,
                {"name": source.name, "url": source.base_url})
+    logger.info("Source created", extra={
+        "event": "source_created", "source_id": source.id,
+        "name": source.name, "url": source.base_url,
+        "user_id": current_user.id,
+    })
     return source
 
 
@@ -161,6 +166,10 @@ def update_source(
     db.refresh(source)
     log_action(db, current_user.id, "SOURCE_UPDATED", "source", source_id,
                {"fields": request.model_dump(exclude_none=True)})
+    logger.info("Source updated", extra={
+        "event": "source_updated", "source_id": source_id,
+        "fields": request.model_dump(exclude_none=True), "user_id": current_user.id,
+    })
     return source
 
 
@@ -196,6 +205,10 @@ def trigger_ingest(
         raise HTTPException(status_code=500, detail="Failed to queue job")
 
     log_action(db, current_user.id, "INGEST_TRIGGERED", "job", job.id, {"url": url})
+    logger.info("Ingest job queued", extra={
+        "event": "ingest_triggered", "job_id": job.id,
+        "source_id": source_id, "url": url, "user_id": current_user.id,
+    })
     return job
 
 
@@ -248,6 +261,7 @@ def cancel_job(
     job.error_message = "Cancelled by user"
     db.commit()
     log_action(db, current_user.id, "JOB_CANCELLED", "job", job_id)
+    logger.info("Job cancelled", extra={"event": "job_cancelled", "job_id": job_id, "user_id": current_user.id})
     return {"message": "Job cancelled"}
 
 
@@ -265,6 +279,7 @@ def delete_job(
     db.delete(job)
     db.commit()
     log_action(db, current_user.id, "JOB_DELETED", "job", job_id)
+    logger.info("Job deleted", extra={"event": "job_deleted", "job_id": job_id, "user_id": current_user.id})
     return {"message": "Job deleted"}
 
 
@@ -295,4 +310,7 @@ def delete_source(
     source.is_active = False
     db.commit()
     log_action(db, current_user.id, "SOURCE_DELETED", "source", source_id)
+    logger.info("Source deactivated", extra={
+        "event": "source_deleted", "source_id": source_id, "user_id": current_user.id,
+    })
     return {"message": "Source deactivated"}

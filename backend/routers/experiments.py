@@ -96,6 +96,10 @@ def create_experiment(
     db.commit()
     db.refresh(experiment)
     log_action(db, current_user.id, "EXPERIMENT_CREATED", "experiment", experiment.id)
+    logger.info("Experiment created", extra={
+        "event": "experiment_created", "experiment_id": experiment.id,
+        "name": experiment.name, "query_count": len(body.queries), "user_id": current_user.id,
+    })
     return experiment
 
 
@@ -125,6 +129,9 @@ def run_experiment(
         raise HTTPException(status_code=409, detail="Experiment is already running — wait for it to finish or restart the API to reset it")
 
     log_action(db, current_user.id, "EXPERIMENT_RUN", "experiment", experiment_id)
+    logger.info("Experiment run triggered", extra={
+        "event": "experiment_run_triggered", "experiment_id": experiment_id, "user_id": current_user.id,
+    })
 
     def _run():
         from database import SessionLocal
@@ -159,3 +166,6 @@ def delete_experiment(
     db.delete(exp)
     db.commit()
     log_action(db, current_user.id, "EXPERIMENT_DELETED", "experiment", experiment_id)
+    logger.info("Experiment deleted", extra={
+        "event": "experiment_deleted", "experiment_id": experiment_id, "user_id": current_user.id,
+    })

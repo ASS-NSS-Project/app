@@ -170,6 +170,12 @@ async def _log_requests(request: Request, call_next):
     if request.url.path in _SKIP_LOG_PATHS:
         return await call_next(request)
     t0 = time.monotonic()
+    logger.info("→ %s %s", request.method, request.url.path, extra={
+        "event": "http_request_start",
+        "method": request.method,
+        "path": request.url.path,
+        "client": request.client.host if request.client else None,
+    })
     try:
         response = await call_next(request)
         level = logging.WARNING if response.status_code >= 400 else logging.INFO

@@ -6,6 +6,8 @@ POST /auth/register → creates a new user (admin only)
 GET  /auth/me     → returns current user info
 """
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
@@ -13,6 +15,8 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from database import get_db
+
+logger = logging.getLogger(__name__)
 from models import User, UserRole, AuditLog, Source, IngestJob, Document, Incident, IncidentStatus
 from services.auth_service import (
     verify_password, create_access_token, get_current_user,
@@ -115,6 +119,7 @@ def login(
     """
     user = db.query(User).filter(User.username == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
+        logger.warning("Login failed", extra={"event": "login_failed", "username": form_data.username})
         log_action(db, None, "LOGIN_FAILED", extra={"username": form_data.username})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -123,6 +128,7 @@ def login(
 
     token = create_access_token(user.id, user.role.value)
     log_action(db, user.id, "LOGIN")
+    logger.info("Login successful", extra={"event": "login_success", "user_id": user.id, "role": user.role.value})
 
     return LoginResponse(
         access_token=token,
@@ -141,6 +147,9 @@ def register(
 ):
     """Create a new user. Admin only."""
     if db.query(User).filter(User.email == request.email).first():
+        logger.warning("Register failed: email already exists", extra={
+            "event": "register_failed", "email": request.email,
+        })
         raise HTTPException(status_code=400, detail="Email already registered")
 
     user = User(
@@ -154,6 +163,7 @@ def register(
     db.commit()
     db.refresh(user)
     log_action(db, current_user.id, "USER_CREATED", "user", user.id)
+    logger.info("User registered", extra={"event": "user_registered", "user_id": user.id, "role": user.role.value})
     return user
 
 
