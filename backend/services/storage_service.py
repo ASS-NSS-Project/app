@@ -43,20 +43,32 @@ class StorageService:
             ),
             region_name=settings.s3_region,
         )
-        self._ensure_buckets()
+        self._check_buckets()
 
-    def _ensure_buckets(self):
-        """Create storage buckets if they don't exist yet."""
+    def _check_buckets(self):
+        """Verify that the required buckets exist and are accessible. Raises on failure."""
         for bucket in [settings.s3_bucket_evidence, settings.s3_bucket_docs]:
             try:
                 self.client.head_bucket(Bucket=bucket)
-            except ClientError:
-                try:
-                    self.client.create_bucket(Bucket=bucket)
-                    logger.info(f"Created S3 bucket: {bucket}")
-                except Exception as e:
-                    logger.error(f"Could not create bucket {bucket}: {e}")
-                    raise
+                logger.debug("S3 bucket accessible", extra={"event": "s3_bucket_ok", "bucket": bucket})
+            except ClientError as e:
+                code = e.response["Error"]["Code"]
+                if code in ("403", "AccessDenied"):
+                    logger.error(
+                        "S3 bucket exists but credentials are rejected — check S3_ACCESS_KEY/S3_SECRET_KEY",
+                        extra={"event": "s3_bucket_auth_error", "bucket": bucket, "code": code},
+                    )
+                elif code in ("404", "NoSuchBucket"):
+                    logger.error(
+                        "S3 bucket does not exist — create it with Terraform (infra/terraform/metacentrum-s3)",
+                        extra={"event": "s3_bucket_missing", "bucket": bucket},
+                    )
+                else:
+                    logger.error(
+                        "S3 bucket check failed: %s", e,
+                        extra={"event": "s3_bucket_error", "bucket": bucket, "code": code},
+                    )
+                raise RuntimeError(f"S3 bucket '{bucket}' is not accessible (code={code})") from e
 
     def upload(
         self,
