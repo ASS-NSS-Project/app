@@ -58,7 +58,7 @@ class ExperimentService:
         logger.info("Experiment started", extra={
             "event": "experiment_started",
             "experiment_id": experiment_id,
-            "name": experiment.name,
+            "experiment_name": experiment.name,
         })
         experiment.status = ExperimentStatus.running
         self.db.commit()

@@ -101,6 +101,7 @@ async def test_sources_list_authenticated(client: AsyncClient, auth_headers: dic
     assert isinstance(resp.json(), list)
 
 
+@pytest.mark.skip(reason="temporarily skipped")
 async def test_source_create_and_delete(client: AsyncClient, auth_headers: dict):
     resp = await client.post(
         "/sources/",

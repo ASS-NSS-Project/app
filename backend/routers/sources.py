@@ -130,7 +130,7 @@ def create_source(
                {"name": source.name, "url": source.base_url})
     logger.info("Source created", extra={
         "event": "source_created", "source_id": source.id,
-        "name": source.name, "url": source.base_url,
+        "source_name": source.name, "url": source.base_url,
         "user_id": current_user.id,
     })
     return source

@@ -98,7 +98,7 @@ def create_experiment(
     log_action(db, current_user.id, "EXPERIMENT_CREATED", "experiment", experiment.id)
     logger.info("Experiment created", extra={
         "event": "experiment_created", "experiment_id": experiment.id,
-        "name": experiment.name, "query_count": len(body.queries), "user_id": current_user.id,
+        "experiment_name": experiment.name, "query_count": len(body.queries), "user_id": current_user.id,
     })
     return experiment
 
