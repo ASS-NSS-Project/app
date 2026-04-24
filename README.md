@@ -50,10 +50,13 @@ POSTGRES_PASSWORD=strong-random-password
 # RabbitMQ
 RABBITMQ_DEFAULT_PASS=strong-random-password
 
-# CESNET S3
-S3_ENDPOINT_URL=https://<provided-by-team>
+# CESNET S3 (dev uses separate buckets — see Object Storage section)
+S3_ENDPOINT_URL=https://s3.cl4.du.cesnet.cz
 S3_ACCESS_KEY=<provided-by-team>
 S3_SECRET_KEY=<provided-by-team>
+S3_USE_PATH_STYLE=true
+S3_BUCKET_EVIDENCE=rag-evidence-dev
+S3_BUCKET_DOCS=rag-documents-dev
 
 # CERIT-SC AIaaS — shared base URL and key for both LLM and VLM
 AIAAS_BASE_URL=https://<aiaas-endpoint>/v1
@@ -72,22 +75,8 @@ FIRST_ADMIN_PASSWORD=strong-random-password
 
 ### 3. Start the system
 
-**Docker:**
 ```bash
 docker compose up --build
-```
-
-**Podman** (rootless):
-
-Allow binding port 80 once (requires root):
-```bash
-echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee -a /etc/sysctl.d/99-podman-ports.conf
-sudo sysctl -p /etc/sysctl.d/99-podman-ports.conf
-```
-
-Then start the stack:
-```bash
-podman compose up --build
 ```
 
 > **First-time cleanup**: if you have leftover containers from a previous run, run `podman compose down -v` first.
@@ -100,7 +89,7 @@ rag_worker | INFO: Worker ready. Listening on queue: ingest
 
 ### 4. Open the UI
 
-Open **http://localhost** and log in with `FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_PASSWORD` from your `.env`.
+Open **http://localhost:8080** and log in with `FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_PASSWORD` from your `.env`.
 
 ---
 
@@ -475,11 +464,11 @@ Incidents are created automatically when a CAPTCHA or access block is detected d
 
 **Testing with a real CAPTCHA page:**
 Google's reCAPTCHA demo is a stable developer test page that always contains CAPTCHA markup:
-1. Create a source with `base_url: https://www.google.com/recaptcha/api2/demo` and `preferred_strategy: html`
-2. Trigger an ingest — the HTML fetcher detects `recaptcha` keywords and creates an incident automatically
+1. Create a source with `base_url: https://www.google.com/recaptcha/api2/demo` and `preferred_strategy: rendered`
+2. Trigger an ingest — the rendered strategy runs Playwright, which detects the reCAPTCHA widget and creates an incident automatically
 3. The incident appears in this list with `detector: html_keyword`
 
-Use `html` strategy (not `rendered` or `screenshot`) — it's the fastest path and sufficient for keyword detection.
+Use `rendered` strategy — the widget is injected by JavaScript so a plain HTML fetch misses it.
 
 #### `GET /incidents/`
 List incidents, newest first (max 100).
@@ -572,10 +561,10 @@ The worker also exposes Prometheus metrics on port `9090` (configurable via `WOR
 
 | Service | URL | Notes |
 |---------|-----|-------|
-| Main UI | http://localhost | Frontend (nginx proxies API paths) |
-| API direct | http://localhost:8000 | FastAPI backend (also reachable via localhost) |
-| Swagger UI | http://localhost/docs | Set `API_DOCS=true` in `.env` to enable |
-| ReDoc | http://localhost/redoc | Set `API_DOCS=true` in `.env` to enable |
+| Main UI | http://localhost:8080 | Frontend (nginx proxies API paths) |
+| API direct | http://localhost:8000 | FastAPI backend (also reachable directly) |
+| Swagger UI | http://localhost:8000/docs | Set `API_DOCS=true` in `.env` to enable |
+| ReDoc | http://localhost:8000/redoc | Set `API_DOCS=true` in `.env` to enable |
 | Qdrant Dashboard | http://localhost:6333/dashboard | Browse vector collections |
 | RabbitMQ Management | http://localhost:15672 | Browse queues |
 
@@ -591,7 +580,7 @@ RabbitMQ login: `RABBITMQ_DEFAULT_USER` / `RABBITMQ_DEFAULT_PASS` from `.env`.
 User (Browser)
     │
     ▼
-Frontend / Nginx :80
+Frontend / Nginx :8080 (host) → :80 (container)
     │  (proxies /auth, /sources, /query, … to API)
     │
     └──► FastAPI API :8000
@@ -620,6 +609,40 @@ Production deployment: Kubernetes — see infra/
 
 ---
 
+## Object Storage (CESNET S3)
+
+The system stores evidence files (screenshots, HTML dumps) and extracted document content in CESNET Metacentrum S3 (Ceph-backed, S3-compatible).
+
+### Local development
+
+Dev uses **separate buckets** so that test data never touches production:
+
+| Variable | Dev value |
+|----------|-----------|
+| `S3_BUCKET_EVIDENCE` | `rag-evidence-dev` |
+| `S3_BUCKET_DOCS` | `rag-documents-dev` |
+| `S3_USE_PATH_STYLE` | `true` |
+
+Create the dev buckets once via the CESNET S3 console or CLI before first run. The app no longer creates buckets automatically — if a bucket is missing or the credentials are wrong, the API logs a structured error on startup (`event: s3_bucket_missing` or `event: s3_bucket_auth_error`) and refuses to start.
+
+### Production (Kubernetes)
+
+Prod buckets are provisioned by Terraform and locked down with a bucket policy that **denies all anonymous requests**:
+
+| Variable | Prod value |
+|----------|-----------|
+| `S3_BUCKET_EVIDENCE` | `rag-evidence` |
+| `S3_BUCKET_DOCS` | `rag-documents` |
+| `S3_USE_PATH_STYLE` | `false` |
+
+Credentials are injected via Vault → ESO → Kubernetes Secret. A random internet user who obtains an object URL gets `403 AccessDenied` — the bucket policy rejects requests without valid HMAC credentials.
+
+### Evidence download URLs
+
+The browser never holds S3 credentials. When the frontend requests an evidence file, the API generates a **presigned URL** — a time-limited URL with a cryptographic signature in the query string. The browser fetches it directly within the expiry window (1 hour) without any credentials. After expiry the URL is useless.
+
+---
+
 ## Development
 
 ### Enable API docs
@@ -630,8 +653,8 @@ Set `API_DOCS=true` in `.env`, then restart the API container:
 docker compose restart api   # or: podman compose restart api
 ```
 
-- Swagger UI: **http://localhost/docs**
-- ReDoc: **http://localhost/redoc**
+- Swagger UI: **http://localhost:8000/docs**
+- ReDoc: **http://localhost:8000/redoc**
 
 ### Logs
 
@@ -737,16 +760,13 @@ docker compose down -v       # Stop and delete all data (fresh start)
 → Verify `AIAAS_BASE_URL`, `AIAAS_API_KEY`, and `AIAAS_VLM_MODEL` in `.env`. Test the endpoint with `curl -H "Authorization: Bearer $AIAAS_API_KEY" $AIAAS_BASE_URL/models`.
 
 **S3 upload errors**
-→ Verify `S3_ENDPOINT_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`. Check that the buckets in `S3_BUCKET_EVIDENCE` and `S3_BUCKET_DOCS` exist and the credentials have write access.
+→ Verify `S3_ENDPOINT_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`. Check that the buckets named in `S3_BUCKET_EVIDENCE` (`rag-evidence-dev` for local dev) and `S3_BUCKET_DOCS` (`rag-documents-dev` for local dev) exist and the credentials have write access. The app does not create buckets — they must exist before startup.
 
 **Playwright/screenshot errors**
 → Screenshot strategy needs Chromium in the worker container. If it fails, rebuild: `docker compose build --no-cache worker`.
 
 **Podman: RabbitMQ fails to start (erlang cookie permission denied)**
 → In Podman rootless, the RabbitMQ process runs as UID 999 (a subuid-mapped UID) while the container's UID 0 maps to your host user. The `docker-compose.yml` entrypoint wrapper pre-writes the erlang cookie as mode 400 before the main entrypoint runs. If you see `eacces` or "must be accessible by owner only" errors, ensure `rabbitmq_data` volume is clean: `podman compose down -v`.
-
-**Podman: cannot bind port 80 (permission denied)**
-→ Allow rootless binding of low ports once: `echo 'net.ipv4.ip_unprivileged_port_start=80' | sudo tee -a /etc/sysctl.d/99-podman-ports.conf && sudo sysctl -p /etc/sysctl.d/99-podman-ports.conf`
 
 ---
 
