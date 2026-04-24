@@ -15,9 +15,11 @@ from alembic import context
 # Load configuration from alembic.ini
 config = context.config
 
-# Configure logging as specified in alembic.ini
+# Configure logging as specified in alembic.ini.
+# disable_existing_loggers=False preserves our JSON root logger setup from
+# logging_config.py — without it, fileConfig() wipes all existing handlers.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Import our models – Alembic needs to know the schema to generate migrations
 import sys, os
