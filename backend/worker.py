@@ -27,7 +27,7 @@ from config import get_settings
 from database import SessionLocal
 from models import IngestJob, JobStatus, Source
 from services.ingest_service import IngestService
-from services.embedding_service import EmbeddingService
+from services.embedding_service import EmbeddingService, get_embedding_model
 from services.logging_config import setup_logging
 from services.queue_service import QUEUE_NAME, wait_for_rabbitmq
 
@@ -158,6 +158,9 @@ if __name__ == "__main__":
     metrics_port = int(os.getenv("WORKER_METRICS_PORT", "9090"))
     start_http_server(metrics_port)
     logger.info("Prometheus metrics server started on port %d", metrics_port)
+
+    # Load BGE-M3 weights before consuming — prevents OOMKill on first embed job
+    get_embedding_model()
 
     # Wait until RabbitMQ is available
     wait_for_rabbitmq()

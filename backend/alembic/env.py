@@ -8,6 +8,7 @@ Alembic needs to know:
 This allows it to auto-generate migrations when models change.
 """
 
+import logging
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
@@ -15,11 +16,13 @@ from alembic import context
 # Load configuration from alembic.ini
 config = context.config
 
-# Configure logging as specified in alembic.ini.
-# disable_existing_loggers=False preserves our JSON root logger setup from
-# logging_config.py — without it, fileConfig() wipes all existing handlers.
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name, disable_existing_loggers=False)
+# Only configure logging via alembic.ini when running alembic CLI standalone
+# (root logger has no handlers yet). When called from main.py / worker.py,
+# setup_logging() has already installed the JSON root handler — calling
+# fileConfig() here would add alembic.ini's stderr handler and produce
+# duplicate plain-text log lines alongside the JSON output.
+if config.config_file_name is not None and not logging.root.handlers:
+    fileConfig(config.config_file_name)
 
 # Import our models – Alembic needs to know the schema to generate migrations
 import sys, os

@@ -18,6 +18,7 @@ from routers import auth_keycloak
 import routers.documents as documents_router
 import routers.experiments as experiments_router
 from services.auth_service import ensure_admin_exists, ensure_default_sources
+from services.embedding_service import get_embedding_model
 from services.logging_config import setup_logging
 from services.rag_service import _get_embedder
 from services.scheduler_service import create_scheduler
@@ -95,6 +96,7 @@ async def lifespan(app: FastAPI):
     # and all chunks are marked for re-embedding
     try:
         embedding_service = _get_embedder()
+        get_embedding_model()  # load BGE-M3 weights eagerly — prevents OOMKill on first query
         if embedding_service.collection_was_recreated:
             db = SessionLocal()
             try:
