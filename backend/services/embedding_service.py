@@ -8,7 +8,9 @@ Qdrant = semantic index only (no chunk text in payload).
 Postgres = source of truth for chunk text (fetched by chunk_id after retrieval).
 """
 
+import glob
 import logging
+import os
 import time
 import uuid
 from typing import Optional
@@ -34,12 +36,40 @@ settings = get_settings()
 _embedding_model: Optional[BGEM3FlagModel] = None
 
 
+def _model_cache_dir(model_name: str) -> str:
+    hf_home = os.environ.get("HF_HOME", "/root/.cache/huggingface")
+    return os.path.join(hf_home, "hub", "models--" + model_name.replace("/", "--"))
+
+
+def _is_model_cached(model_name: str) -> bool:
+    snapshots = os.path.join(_model_cache_dir(model_name), "snapshots")
+    return os.path.isdir(snapshots) and bool(os.listdir(snapshots))
+
+
+def _cleanup_incomplete_blobs(model_name: str) -> None:
+    blobs_dir = os.path.join(_model_cache_dir(model_name), "blobs")
+    for path in glob.glob(os.path.join(blobs_dir, "*.incomplete")):
+        try:
+            os.remove(path)
+            logger.info("Removed incomplete blob: %s", path)
+        except OSError:
+            pass
+
+
 def get_embedding_model() -> BGEM3FlagModel:
     global _embedding_model
     if _embedding_model is None:
-        logger.info(f"Loading BGE-M3 FlagEmbedding model: {settings.embedding_model}")
-        _embedding_model = BGEM3FlagModel(settings.embedding_model, use_fp16=True)
-        logger.info("BGE-M3 model loaded successfully")
+        model_name = settings.embedding_model
+        cached = _is_model_cached(model_name)
+        if not cached:
+            _cleanup_incomplete_blobs(model_name)
+        logger.info("Loading BGE-M3 model", extra={
+            "event": "model_load_start",
+            "model": model_name,
+            "cached": cached,
+        })
+        _embedding_model = BGEM3FlagModel(model_name, use_fp16=True, local_files_only=cached)
+        logger.info("BGE-M3 model loaded", extra={"event": "model_load_complete", "model": model_name})
     return _embedding_model
 
 
