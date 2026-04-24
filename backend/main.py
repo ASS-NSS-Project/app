@@ -17,7 +17,7 @@ from routers import auth, sources, query, incidents
 from routers import auth_keycloak
 import routers.documents as documents_router
 import routers.experiments as experiments_router
-from services.auth_service import ensure_admin_exists
+from services.auth_service import ensure_admin_exists, ensure_default_sources
 from services.logging_config import setup_logging
 from services.rag_service import _get_embedder
 from services.scheduler_service import create_scheduler
@@ -77,6 +77,7 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         ensure_admin_exists(db)
+        ensure_default_sources(db)
 
         # Reset experiments stuck in "running" — they were interrupted by a previous restart
         stuck = db.query(Experiment).filter(Experiment.status == ExperimentStatus.running).all()

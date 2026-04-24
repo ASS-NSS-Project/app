@@ -23,7 +23,7 @@ from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from config import get_settings
-from models import User, UserRole, AuditLog
+from models import User, UserRole, AuditLog, Source, IngestStrategy
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -152,3 +152,23 @@ def ensure_admin_exists(db: Session):
         db.commit()
         logger.info("Backfilled username for admin user: %s", settings.first_admin_email,
                     extra={"event": "admin_username_backfilled"})
+
+
+def ensure_default_sources(db: Session) -> None:
+    if not settings.default_source_urls:
+        return
+    urls = [u.strip() for u in settings.default_source_urls.split(",") if u.strip()]
+    for url in urls:
+        exists = db.query(Source).filter(Source.base_url == url).first()
+        if not exists:
+            source = Source(
+                name=url,
+                base_url=url,
+                permission_type="public",
+                preferred_strategy=IngestStrategy.html,
+                crawl_frequency_hours=24,
+                is_active=True,
+            )
+            db.add(source)
+            logger.info("Seeded default source: %s", url, extra={"event": "source_seeded", "url": url})
+    db.commit()

@@ -105,6 +105,10 @@ class Settings(BaseSettings):
     first_admin_email: str = "admin@example.com"
     first_admin_password: str = "changeme"
 
+    # ── Default sources (seeded on startup) ──────
+    # Comma-separated URLs. Each is created once (idempotent, keyed on base_url).
+    default_source_urls: str = ""
+
     # ── Ingest settings ───────────────────────────
     quality_threshold_chars: int = 200
 
