@@ -157,18 +157,26 @@ def ensure_admin_exists(db: Session):
 def ensure_default_sources(db: Session) -> None:
     if not settings.default_source_urls:
         return
-    urls = [u.strip() for u in settings.default_source_urls.split(",") if u.strip()]
-    for url in urls:
-        exists = db.query(Source).filter(Source.base_url == url).first()
-        if not exists:
-            source = Source(
+    for entry in settings.default_source_urls.split(","):
+        parts = entry.strip().split("|")
+        url = parts[0].strip()
+        if not url:
+            continue
+        strategy_str = parts[1].strip() if len(parts) > 1 else "html"
+        try:
+            strategy = IngestStrategy(strategy_str)
+        except ValueError:
+            logger.warning("Unknown strategy '%s' for %s, defaulting to html", strategy_str, url)
+            strategy = IngestStrategy.html
+        if not db.query(Source).filter(Source.base_url == url).first():
+            db.add(Source(
                 name=url,
                 base_url=url,
                 permission_type="public",
-                preferred_strategy=IngestStrategy.html,
+                preferred_strategy=strategy,
                 crawl_frequency_hours=24,
                 is_active=True,
-            )
-            db.add(source)
-            logger.info("Seeded default source: %s", url, extra={"event": "source_seeded", "url": url})
+            ))
+            logger.info("Seeded default source: %s (%s)", url, strategy.value,
+                        extra={"event": "source_seeded", "url": url, "strategy": strategy.value})
     db.commit()

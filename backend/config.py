@@ -106,7 +106,9 @@ class Settings(BaseSettings):
     first_admin_password: str = "changeme"
 
     # ── Default sources (seeded on startup) ──────
-    # Comma-separated URLs. Each is created once (idempotent, keyed on base_url).
+    # Comma-separated entries of the form "url|strategy" (strategy optional, defaults to html).
+    # Valid strategies: html, rendered, screenshot, api
+    # Example: https://mendelu.cz|html,https://example.com|rendered
     default_source_urls: str = ""
 
     # ── Ingest settings ───────────────────────────
