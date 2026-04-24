@@ -56,7 +56,7 @@ services:
         fi
         exec docker-entrypoint.sh rabbitmq-server
     ports:
-      - "127.0.0.1:15672:15672"   # Management UI: http://localhost:15672
+      - "15672:15672"   # Management UI: http://localhost:15672
     networks:
       - ragnet
     volumes:
@@ -73,7 +73,7 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     ports:
-      - "127.0.0.1:6333:6333"   # Dashboard: http://localhost:6333/dashboard
+      - "6333:6333"   # Dashboard: http://localhost:6333/dashboard
     networks:
       - ragnet
 
@@ -105,6 +105,7 @@ services:
       - FIRST_ADMIN_EMAIL=${FIRST_ADMIN_EMAIL:-admin@example.com}
       - FIRST_ADMIN_PASSWORD=${FIRST_ADMIN_PASSWORD}
       - API_DOCS=${API_DOCS:-false}
+      - DEFAULT_SOURCE_URLS=${DEFAULT_SOURCE_URLS:-}
       - SERVICE_NAME=api
     depends_on:
       postgres:
@@ -123,7 +124,7 @@ services:
         uvicorn main:app --host 0.0.0.0 --port 8000 --reload --access-log
       "
     ports:
-      - "127.0.0.1:8000:8000"   # API direct access (optional, frontend also proxies via nginx)
+      - "8000:8000"   # API direct access (optional, frontend also proxies via nginx)
     volumes:
       - ./backend:/app:z
       - hf_cache:/root/.cache/huggingface
