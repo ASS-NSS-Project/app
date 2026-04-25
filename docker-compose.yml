@@ -127,7 +127,7 @@ services:
       - "8000:8000"   # API direct access (optional, frontend also proxies via nginx)
     volumes:
       - ./backend:/app:z
-      - hf_cache:/root/.cache/huggingface
+      - api:/root/.cache/huggingface
     networks:
       - ragnet
 
@@ -171,7 +171,7 @@ services:
       "
     volumes:
       - ./backend:/app:z
-      - hf_cache:/root/.cache/huggingface
+      - worker:/root/.cache/huggingface
     networks:
       - ragnet
 
@@ -189,9 +189,10 @@ services:
 
 volumes:
   postgres_data:
-  rabbitmq_data:    # Persists erlang cookie and queued messages across restarts
+  rabbitmq_data:  # Persists erlang cookie and queued messages across restarts
   qdrant_data:
-  hf_cache:         # BGE-M3 weights shared between api and worker (~570 MB, downloaded once)
+  api:            # BGE-M3 weights shared between api and worker (~570 MB, downloaded once)
+  worker:         # BGE-M3 weights shared between api and worker (~570 MB, downloaded once)
 
 networks:
   ragnet:
