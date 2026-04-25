@@ -52,6 +52,19 @@
 
         <div v-if="error" class="alert alert-error">{{ error }}</div>
 
+        <div class="filter-bar">
+          <Select
+            v-model="limit"
+            :options="pageSizeOptions"
+            optionLabel="label"
+            optionValue="value"
+            size="small"
+            style="min-width:90px"
+            @change="reloadSources"
+          />
+          <Button label="Refresh" icon="pi pi-refresh" size="small" severity="secondary" @click="reloadSources" :loading="loading" />
+        </div>
+
         <DataTable :value="sources" :loading="loading" size="small" stripedRows>
           <template #empty>
             <div class="empty-state">
@@ -88,6 +101,12 @@
             </template>
           </Column>
         </DataTable>
+
+        <div class="pagination">
+          <Button icon="pi pi-chevron-left" text size="small" @click="prevPage" :disabled="offset === 0" />
+          <span>Page {{ page + 1 }}</span>
+          <Button icon="pi pi-chevron-right" text size="small" @click="nextPage" :disabled="sources.length < limit" />
+        </div>
       </template>
     </div>
 
@@ -138,7 +157,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, reactive, watch } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { get, post, patch, del } from '@/api/client'
@@ -174,6 +193,16 @@ const sources = ref<SourceResponse[]>([])
 const loading = ref(true)
 const error = ref('')
 const jobsPanel = ref<JobsPanel | null>(null)
+const limit = ref(10)
+const offset = ref(0)
+const page = ref(0)
+
+const pageSizeOptions = [
+  { label: '10 / page', value: 10 },
+  { label: '25 / page', value: 25 },
+  { label: '50 / page', value: 50 },
+  { label: '100 / page', value: 100 },
+]
 
 const showAdd = ref(false)
 const addError = ref('')
@@ -198,13 +227,17 @@ async function loadSources() {
   loading.value = true
   error.value = ''
   try {
-    sources.value = await get<SourceResponse[]>('/sources/')
+    sources.value = await get<SourceResponse[]>(`/sources/?limit=${limit.value}&offset=${offset.value}`)
   } catch (e: unknown) {
     error.value = (e as Error).message
   } finally {
     loading.value = false
   }
 }
+
+function reloadSources() { offset.value = 0; page.value = 0; loadSources() }
+function prevPage() { offset.value = Math.max(0, offset.value - limit.value); page.value = Math.max(0, page.value - 1); loadSources() }
+function nextPage() { offset.value += limit.value; page.value += 1; loadSources() }
 
 async function viewJobs(s: SourceResponse) {
   const jobs = await get<JobResponse[]>(`/sources/${s.id}/jobs`)
@@ -283,4 +316,6 @@ onMounted(loadSources)
 
 <style scoped>
 .panel-title { margin-left: 12px; font-size: 14px; font-weight: 600; }
+.filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+.pagination { display: flex; gap: 8px; align-items: center; justify-content: center; margin-top: 12px; color: var(--muted); font-size: 13px; }
 </style>

@@ -8,6 +8,19 @@
 
       <div v-if="error" class="alert alert-error">{{ error }}</div>
 
+      <div class="filter-bar">
+        <Select
+          v-model="limit"
+          :options="pageSizeOptions"
+          optionLabel="label"
+          optionValue="value"
+          size="small"
+          style="min-width:90px"
+          @change="reload"
+        />
+        <Button label="Refresh" icon="pi pi-refresh" size="small" severity="secondary" @click="reload" :loading="loading" />
+      </div>
+
       <DataTable :value="incidents" :loading="loading" size="small" stripedRows>
         <template #empty>
           <div class="empty-state">
@@ -53,6 +66,12 @@
           </template>
         </Column>
       </DataTable>
+
+      <div class="pagination">
+        <Button icon="pi pi-chevron-left" text size="small" @click="prevPage" :disabled="offset === 0" />
+        <span>Page {{ page + 1 }}</span>
+        <Button icon="pi pi-chevron-right" text size="small" @click="nextPage" :disabled="incidents.length < limit" />
+      </div>
     </div>
 
     <!-- Resolve Dialog -->
@@ -87,6 +106,7 @@ import Dialog from 'primevue/dialog'
 import Button from 'primevue/button'
 import Textarea from 'primevue/textarea'
 import Tag from 'primevue/tag'
+import Select from 'primevue/select'
 
 const incidents = ref<IncidentResponse[]>([])
 const loading = ref(true)
@@ -94,18 +114,32 @@ const error = ref('')
 const resolveId = ref<string | null>(null)
 const resolveVisible = ref(false)
 const resolveNote = ref('')
+const limit = ref(10)
+const offset = ref(0)
+const page = ref(0)
+
+const pageSizeOptions = [
+  { label: '10 / page', value: 10 },
+  { label: '25 / page', value: 25 },
+  { label: '50 / page', value: 50 },
+  { label: '100 / page', value: 100 },
+]
 
 async function loadIncidents() {
   loading.value = true
   error.value = ''
   try {
-    incidents.value = await get<IncidentResponse[]>('/incidents/')
+    incidents.value = await get<IncidentResponse[]>(`/incidents/?limit=${limit.value}&offset=${offset.value}`)
   } catch (e: unknown) {
     error.value = (e as Error).message
   } finally {
     loading.value = false
   }
 }
+
+function reload() { offset.value = 0; page.value = 0; loadIncidents() }
+function prevPage() { offset.value = Math.max(0, offset.value - limit.value); page.value = Math.max(0, page.value - 1); loadIncidents() }
+function nextPage() { offset.value += limit.value; page.value += 1; loadIncidents() }
 
 function openResolve(id: string) {
   resolveId.value = id
@@ -126,3 +160,8 @@ async function doResolve() {
 
 onMounted(loadIncidents)
 </script>
+
+<style scoped>
+.filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+.pagination { display: flex; gap: 8px; align-items: center; justify-content: center; margin-top: 12px; color: var(--muted); font-size: 13px; }
+</style>

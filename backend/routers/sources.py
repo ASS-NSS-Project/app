@@ -98,10 +98,19 @@ class JobResponse(BaseModel):
 
 @router.get("/", response_model=list[SourceResponse])
 def list_sources(
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_authenticated_user),
 ):
-    return db.query(Source).filter(Source.is_active == True).all()
+    return (
+        db.query(Source)
+        .filter(Source.is_active == True)
+        .order_by(Source.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
 
 @router.post("/", response_model=SourceResponse)

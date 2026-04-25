@@ -63,12 +63,6 @@ def process_ingest_job(job_id: str) -> None:
 
         if job.status == JobStatus.done:
             _embed_job_chunks(db, job)
-
-            source = db.query(Source).filter(Source.id == job.source_id).first()
-            if source:
-                source.last_crawled_at = datetime.utcnow()
-                db.commit()
-
             logger.info("Worker job fully processed", extra={
                 "event": "worker_job_completed",
                 "job_id": job_id,
@@ -80,6 +74,14 @@ def process_ingest_job(job_id: str) -> None:
                 "job_id": job_id,
                 "status": job.status.value,
             })
+
+        # Always stamp last_crawled_at regardless of outcome — without this the
+        # scheduler would re-queue the source every 5 minutes whenever a job
+        # ends as captcha_blocked or failed.
+        source = db.query(Source).filter(Source.id == job.source_id).first()
+        if source:
+            source.last_crawled_at = datetime.utcnow()
+            db.commit()
 
     except Exception as e:
         logger.exception("Worker job crashed", extra={

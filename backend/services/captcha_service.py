@@ -120,10 +120,24 @@ class CaptchaService:
     ) -> Incident:
         """
         Create a CAPTCHA incident record in the database.
-        
-        This is logged according to the CAPTCHA_DETECTED event schema
-        in section 9.4 of the spec.
+
+        Returns an existing open incident for the same source+URL if one already
+        exists — prevents duplicate incidents when repeated scheduler runs hit
+        the same blocked page before a curator resolves it.
         """
+        existing = self.db.query(Incident).filter(
+            Incident.source_id == job.source_id,
+            Incident.url == job.url,
+            Incident.status == IncidentStatus.open,
+        ).first()
+        if existing:
+            logger.info(
+                "Open incident already exists for %s, skipping duplicate",
+                job.url,
+                extra={"event": "captcha_incident_dedup", "incident_id": existing.id, "url": job.url},
+            )
+            return existing
+
         incident = Incident(
             type=IncidentType.captcha,
             source_id=job.source_id,

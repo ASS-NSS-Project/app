@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from typing import Optional, Literal
@@ -82,13 +82,15 @@ def simulate_incident(
 @router.get("/", response_model=list[IncidentResponse])
 def list_incidents(
     status: Optional[str] = None,
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_authenticated_user),
 ):
     q = db.query(Incident)
     if status:
         q = q.filter(Incident.status == status)
-    return q.order_by(Incident.created_at.desc()).limit(100).all()
+    return q.order_by(Incident.created_at.desc()).offset(offset).limit(limit).all()
 
 
 @router.post("/{incident_id}/resolve", response_model=IncidentResponse)

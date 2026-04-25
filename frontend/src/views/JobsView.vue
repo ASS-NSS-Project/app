@@ -28,6 +28,15 @@
           style="min-width:140px"
           @change="reload"
         />
+        <Select
+          v-model="limit"
+          :options="pageSizeOptions"
+          optionLabel="label"
+          optionValue="value"
+          size="small"
+          style="min-width:90px"
+          @change="reload"
+        />
         <Button label="Refresh" icon="pi pi-refresh" size="small" severity="secondary" @click="reload" :loading="loading" />
         <span class="filter-count" v-if="!loading">{{ jobs.length }} jobs</span>
       </div>
@@ -124,7 +133,7 @@
       <div class="pagination">
         <Button icon="pi pi-chevron-left" text size="small" @click="prevPage" :disabled="offset === 0" />
         <span>Page {{ page + 1 }}</span>
-        <Button icon="pi pi-chevron-right" text size="small" @click="nextPage" :disabled="jobs.length < limit" />
+        <Button icon="pi pi-chevron-right" text size="small" @click="nextPage" :disabled="jobs.length < limit.value" />
       </div>
     </div>
   </AppLayout>
@@ -166,9 +175,16 @@ const actionLoading = ref<string | null>(null)
 const sources = ref<SourceResponse[]>([])
 const filterSource = ref('')
 const filterStatus = ref('')
-const limit = 100
+const limit = ref(10)
 const offset = ref(0)
 const page = ref(0)
+
+const pageSizeOptions = [
+  { label: '10 / page', value: 10 },
+  { label: '25 / page', value: 25 },
+  { label: '50 / page', value: 50 },
+  { label: '100 / page', value: 100 },
+]
 
 const statusOptions = [
   { label: 'All statuses', value: '' },
@@ -200,7 +216,7 @@ async function load() {
   loading.value = true
   error.value = null
   try {
-    const params = new URLSearchParams({ limit: String(limit), offset: String(offset.value) })
+    const params = new URLSearchParams({ limit: String(limit.value), offset: String(offset.value) })
     if (filterSource.value) params.append('source_id', filterSource.value)
     if (filterStatus.value) params.append('status', filterStatus.value)
     jobs.value = await get<JobRow[]>(`/sources/jobs/all?${params}`)
@@ -237,12 +253,12 @@ async function deleteJob(job: JobRow) {
 }
 
 function prevPage() {
-  offset.value = Math.max(0, offset.value - limit)
+  offset.value = Math.max(0, offset.value - limit.value)
   page.value = Math.max(0, page.value - 1)
   load()
 }
 function nextPage() {
-  offset.value += limit
+  offset.value += limit.value
   page.value += 1
   load()
 }

@@ -71,7 +71,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, defineComponent, h, ref as vref } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, defineComponent, h, ref as vref } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { get } from '@/api/client'
@@ -91,6 +91,7 @@ const AnimatedNumber = defineComponent({
       raf = requestAnimationFrame(animate)
     }
     onMounted(animate)
+    watch(() => props.target, () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(animate) })
     onUnmounted(() => cancelAnimationFrame(raf))
     return () => h('span', Math.round(displayed.value))
   },
@@ -134,7 +135,7 @@ async function load() {
     // Fetch stats and sources independently — a stats failure shouldn't blank the activity feed
     const [statsResult, sources] = await Promise.allSettled([
       get<StatsResponse>('/auth/stats'),
-      get<SourceResponse[]>('/sources/'),
+      get<SourceResponse[]>('/sources/?limit=100'),
     ])
     if (statsResult.status === 'fulfilled') stats.value = statsResult.value
     const srcList: SourceResponse[] = sources.status === 'fulfilled' ? sources.value : []
