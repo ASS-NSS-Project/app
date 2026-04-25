@@ -1,4 +1,4 @@
-# RAG System — Multimodal Platform
+# WebRAG — Multimodal RAG Platform
 
 A production system for scraping web content, extracting structured data with AI vision, and answering questions via RAG (Retrieval-Augmented Generation).
 
@@ -177,7 +177,7 @@ Returns the currently authenticated user's profile.
 ---
 
 #### `GET /auth/stats`
-Returns system-wide counts for the dashboard.
+Returns system-wide counts and chart data for the dashboard.
 
 **Response `200`**:
 ```json
@@ -185,9 +185,21 @@ Returns system-wide counts for the dashboard.
   "sources": 12,
   "jobs": 480,
   "incidents": 3,
-  "documents": 950
+  "documents": 950,
+  "strategy_distribution": {
+    "api": 42,
+    "html": 31,
+    "rendered": 16,
+    "screenshot": 11
+  },
+  "activity_7d": [
+    {"date": "2026-04-19", "count": 24},
+    {"date": "2026-04-20", "count": 31}
+  ]
 }
 ```
+
+`strategy_distribution` is a map of strategy name → percentage of completed jobs using that strategy. `activity_7d` contains one entry per day for the last 7 days.
 
 ---
 
@@ -254,9 +266,13 @@ List all active sources.
   "preferred_strategy": "html",
   "crawl_frequency_hours": 24,
   "is_active": true,
-  "created_at": "2026-04-19T10:00:00"
+  "created_at": "2026-04-19T10:00:00",
+  "last_crawled_at": "2026-04-20T08:30:00",
+  "doc_count": 142
 }
 ```
+
+`last_crawled_at` is `null` until the first successful crawl. `doc_count` is the number of indexed documents for this source.
 
 ---
 
@@ -332,11 +348,46 @@ If `url` is omitted, uses the source's `base_url`.
   "strategy_used": null,
   "quality_score": null,
   "error_message": null,
-  "created_at": "2026-04-19T10:00:00"
+  "created_at": "2026-04-19T10:00:00",
+  "started_at": null,
+  "finished_at": null
 }
 ```
 
-`status` progresses through: `pending` → `running` → `done` | `failed` | `captcha_blocked`.
+`status` progresses through: `pending` → `running` → `done` | `failed` | `captcha_blocked`. `started_at` and `finished_at` are populated once the worker picks up and completes the job.
+
+---
+
+#### `GET /sources/pipeline/stats`
+Returns current pipeline queue statistics for the Pipeline dashboard.
+
+**Response `200`**:
+```json
+{
+  "pending": 3,
+  "running": 1,
+  "error_rate_24h": 5.2
+}
+```
+
+`error_rate_24h` is the percentage of jobs created in the last 24 hours that ended in `failed` or `captcha_blocked`.
+
+---
+
+#### `GET /sources/jobs/all`
+List all ingest jobs across all sources. Supports `source_id`, `status`, `limit`, and `offset` query params.
+
+**Response `200`**: array of `JobResponse` extended with `source_name` and `source_base_url`.
+
+---
+
+#### `POST /sources/jobs/{job_id}/cancel` *(admin, curator)*
+Cancel a `pending` or `running` job.
+
+---
+
+#### `DELETE /sources/jobs/{job_id}` *(admin only)*
+Delete a completed/failed job record.
 
 ---
 
@@ -858,9 +909,9 @@ rag_system/
     │   ├── router/             # Vue Router (hash-based routing)
     │   ├── stores/             # Pinia state management (auth, query history)
     │   ├── api/                # Axios API client + TypeScript types
-    │   ├── views/              # Page components (Dashboard, Sources, Query,
-    │   │                       #   Incidents, Audit, Users, Login, Documents,
-    │   │                       #   Experiments)
+    │   ├── views/              # Page components (Dashboard, Sources, Pipeline,
+    │   │                       #   Query, Incidents, Audit, Users, Login,
+    │   │                       #   Documents, Experiments)
     │   └── components/         # Reusable UI components
     └── package.json
 ```
@@ -902,3 +953,37 @@ ArgoCD sync waves:
 - Wave 21 — `rag-system` (API, worker, frontend, CNPG Postgres, secrets via ESO/Vault)
 
 Secrets are provisioned via `terraform/vault` in `infra/`. DNS records are managed via `terraform/cloudflare`.
+
+---
+
+## Recommended Refactors
+
+The current backend is a **monolith**: the same image runs both the FastAPI service (`uvicorn main:app`) and the RabbitMQ consumer (`python worker.py`). Both processes load BGE-M3 (~2.3 GB) into memory independently because every replica needs the model for either embedding (worker) or query-time embedding (API).
+
+### Split the embedding service into its own microservice
+
+**Motivation:**
+
+- **Memory**: today each API replica + each worker replica holds its own BGE-M3 weights. With N API and M worker pods that is `(N + M) × 2.3 GB`. A single embedding service would hold one copy.
+- **Independent scaling**: embedding is CPU-bursty (worker batches), the API is light and steady. They have very different resource profiles and should scale independently.
+- **Fast API startup**: today login (and every other endpoint) waits 15–45 s for BGE-M3 to load in the lifespan startup. An embedding microservice removes that dependency from the API entirely.
+- **Model upgrades**: swapping the embedding model becomes a deploy of one service, not a full backend rebuild.
+
+**Trade-offs:**
+
+- **Network overhead**: every query and every chunk batch becomes an RPC. Negligible at low QPS, real cost at scale — needs batching, timeouts, retries.
+- **Operational surface**: one more pod to monitor, alert on, and recover. Requires a circuit breaker so an embedding outage degrades gracefully instead of taking the API down.
+- **Code complexity**: define a stable HTTP/gRPC contract, serialise tensors, version the API.
+
+**When to do it:** when the project moves beyond student-scale traffic (e.g., dozens of QPS, more than a handful of worker replicas) or when the model needs to change frequently.
+
+### Cheaper interim fix — background model loading
+
+Until the split is justified, the startup-blocking problem can be solved without architectural change:
+
+- Move `get_embedding_model()` out of the FastAPI lifespan startup
+- Spawn it as a background `asyncio.to_thread` task that records a `model_ready` future
+- Have `/query` and embedding-touching endpoints `await` that future on first call
+- Keep the synchronous load in `worker.py` — workers can block, no user is waiting
+
+This keeps the monolith but makes login (and all non-embedding endpoints) responsive within seconds of container start, matching the behaviour you would get from a separate embedding service.

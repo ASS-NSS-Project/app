@@ -21,6 +21,14 @@ export interface StatsResponse {
   jobs: number
   incidents: number
   documents: number
+  strategy_distribution: Record<string, number>
+  activity_7d: { date: string; count: number }[]
+}
+
+export interface PipelineStatsResponse {
+  pending: number
+  running: number
+  error_rate_24h: number
 }
 
 export interface SourceResponse {
@@ -32,6 +40,8 @@ export interface SourceResponse {
   crawl_frequency_hours: number
   is_active: boolean
   created_at: string
+  last_crawled_at: string | null
+  doc_count: number
 }
 
 export interface SourceCreate {
@@ -58,6 +68,8 @@ export interface JobResponse {
   quality_score: number | null
   error_message: string | null
   created_at: string
+  started_at: string | null
+  finished_at: string | null
   source_name?: string | null
   source_base_url?: string | null
 }

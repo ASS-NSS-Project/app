@@ -1,10 +1,10 @@
 <template>
   <nav class="sidebar">
     <div class="sidebar-logo">
-      <span class="logo-mark">✦</span>
+      <span class="logo-mark">◆</span>
       <div>
-        <h1>RAG System</h1>
-        <p>Team APIčáci</p>
+        <h1>WebRAG</h1>
+        <p>AI-powered knowledge base</p>
       </div>
     </div>
 
@@ -14,24 +14,27 @@
         <span class="nav-icon">⬡</span> Dashboard
       </router-link>
 
-      <div class="nav-section">Ingestion</div>
+      <div class="nav-section">Ingest</div>
       <router-link to="/sources" class="nav-item" active-class="active">
         <span class="nav-icon">◈</span> Sources
       </router-link>
-      <router-link to="/jobs" class="nav-item" active-class="active">
-        <span class="nav-icon">◎</span> Jobs
+      <router-link to="/pipeline" class="nav-item" active-class="active">
+        <span class="nav-icon">◎</span> Pipeline
       </router-link>
       <router-link to="/incidents" class="nav-item" active-class="active">
         <span class="nav-icon">⚠</span> Incidents
+        <span v-if="incidentCount > 0" class="incident-badge">{{ incidentCount }}</span>
       </router-link>
 
-      <div class="nav-section">Intelligence</div>
+      <div class="nav-section">Query</div>
       <router-link to="/query" class="nav-item" active-class="active">
-        <span class="nav-icon">◐</span> Query
+        <span class="nav-icon">◐</span> Query RAG
       </router-link>
       <router-link to="/knowledge-base" class="nav-item" active-class="active">
         <span class="nav-icon">◫</span> Knowledge Base
       </router-link>
+
+      <div class="nav-section">Analytics</div>
       <router-link
         v-if="canSeeExperiments"
         to="/experiments"
@@ -51,8 +54,13 @@
         class="nav-item"
         active-class="active"
       >
-        <span class="nav-icon">⊙</span> Users
+        <span class="nav-icon">⊙</span> Users &amp; RBAC
       </router-link>
+    </div>
+
+    <div class="sidebar-footer">
+      <span class="status-dot" :class="systemOnline ? 'online' : 'offline'" />
+      <span class="status-text">{{ systemOnline ? 'System online' : 'Offline' }}</span>
     </div>
   </nav>
 </template>
@@ -72,6 +80,7 @@ const canSeeExperiments = computed(() =>
 )
 
 const systemOnline = ref(false)
+const incidentCount = ref(0)
 let pingInterval: ReturnType<typeof setInterval>
 
 async function ping() {
@@ -83,7 +92,18 @@ async function ping() {
   }
 }
 
-onMounted(() => { ping(); pingInterval = setInterval(ping, 20_000) })
+async function loadIncidentCount() {
+  try {
+    const stats = await get<{ incidents: number }>('/auth/stats')
+    incidentCount.value = stats.incidents
+  } catch { /* ignore */ }
+}
+
+onMounted(() => {
+  ping()
+  loadIncidentCount()
+  pingInterval = setInterval(() => { ping(); loadIncidentCount() }, 30_000)
+})
 onUnmounted(() => clearInterval(pingInterval))
 </script>
 
@@ -102,7 +122,7 @@ onUnmounted(() => clearInterval(pingInterval))
   position: absolute;
   top: 15%; right: -1px;
   width: 1px; height: 70%;
-  background: linear-gradient(180deg, transparent, rgba(0,212,255,.35), transparent);
+  background: linear-gradient(180deg, transparent, rgba(0,230,118,.25), transparent);
   pointer-events: none;
 }
 
@@ -115,21 +135,16 @@ onUnmounted(() => clearInterval(pingInterval))
 }
 .logo-mark {
   font-size: 20px;
-  background: linear-gradient(135deg, var(--accent2), #fcd34d);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--accent);
   flex-shrink: 0;
-  filter: drop-shadow(0 0 8px rgba(245,158,11,.7));
+  filter: drop-shadow(0 0 8px rgba(0,230,118,.7));
 }
 .sidebar-logo h1 {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
-  background: linear-gradient(90deg, var(--text) 40%, var(--accent));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text);
   line-height: 1.2;
+  letter-spacing: -0.3px;
 }
 .sidebar-logo p { font-size: 10px; color: var(--muted); margin-top: 1px; }
 
@@ -161,13 +176,13 @@ onUnmounted(() => clearInterval(pingInterval))
 .nav-item:hover { color: var(--text); background: rgba(255,255,255,.03); }
 .nav-item.active {
   color: var(--accent);
-  background: rgba(0,212,255,.08);
+  background: rgba(0,230,118,.07);
   border-left-color: var(--accent);
   font-weight: 500;
 }
 .nav-item.active .nav-icon {
   opacity: 1;
-  filter: drop-shadow(0 0 5px rgba(0,212,255,.7));
+  filter: drop-shadow(0 0 5px rgba(0,230,118,.7));
 }
 .nav-icon {
   font-size: 14px;
@@ -176,6 +191,17 @@ onUnmounted(() => clearInterval(pingInterval))
   flex-shrink: 0;
   opacity: 0.6;
   transition: opacity 0.15s, filter 0.15s;
+}
+
+.incident-badge {
+  margin-left: auto;
+  background: rgba(248,113,113,.15);
+  color: var(--danger);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 99px;
+  border: 1px solid rgba(248,113,113,.2);
 }
 
 .sidebar-footer {

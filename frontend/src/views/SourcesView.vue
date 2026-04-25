@@ -90,6 +90,18 @@
               <Tag :value="data.permission_type" severity="info" rounded />
             </template>
           </Column>
+          <Column header="Last Ingest" style="width:110px">
+            <template #body="{ data }">
+              <span style="color:var(--muted); font-size:11px">
+                {{ data.last_crawled_at ? relTime(data.last_crawled_at) : '—' }}
+              </span>
+            </template>
+          </Column>
+          <Column header="Docs" style="width:70px">
+            <template #body="{ data }">
+              <span style="font-size:12px; color:var(--text2)">{{ data.doc_count ?? 0 }}</span>
+            </template>
+          </Column>
           <Column header="Actions">
             <template #body="{ data }">
               <div class="flex gap-1 flex-wrap">
@@ -222,6 +234,15 @@ const editVisible = computed({
 })
 const editLoading = ref(false)
 const editForm = reactive({ preferred_strategy: 'html', crawl_frequency_hours: 24 })
+
+function relTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const s = Math.floor(diff / 1000)
+  if (s < 60) return `${s}s ago`
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`
+  return `${Math.floor(s / 86400)}d ago`
+}
 
 async function loadSources() {
   loading.value = true

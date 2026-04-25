@@ -33,13 +33,14 @@ const route = useRoute()
 const routeLabels: Record<string, string> = {
   '/dashboard':     'Dashboard',
   '/sources':       'Sources',
-  '/query':         'Query',
-  '/jobs':          'Ingest Jobs',
+  '/query':         'Query RAG',
+  '/pipeline':      'Pipeline',
+  '/jobs':          'Pipeline',
   '/incidents':     'Incidents',
   '/audit':         'Audit Log',
   '/knowledge-base':'Knowledge Base',
   '/experiments':   'Experiments',
-  '/users':         'Users',
+  '/users':         'Users & RBAC',
 }
 const routeLabel = computed(() => routeLabels[route.path] ?? '')
 

@@ -5,11 +5,12 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from database import get_db
-from models import Source, IngestJob, JobStatus, IngestStrategy, UserRole, User
+from models import Source, IngestJob, JobStatus, IngestStrategy, UserRole, User, Document
 from routers.auth import get_authenticated_user, require_role
 from services.auth_service import log_action
 from services.queue_service import publish_job
@@ -74,6 +75,8 @@ class SourceResponse(BaseModel):
     crawl_frequency_hours: int
     is_active: bool
     created_at: datetime
+    last_crawled_at: Optional[datetime] = None
+    doc_count: int = 0
 
     class Config:
         from_attributes = True
@@ -91,9 +94,28 @@ class JobResponse(BaseModel):
     quality_score: Optional[float]
     error_message: Optional[str]
     created_at: datetime
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
+
+
+@router.get("/pipeline/stats")
+def get_pipeline_stats(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_authenticated_user),
+):
+    pending = db.query(IngestJob).filter(IngestJob.status == JobStatus.pending).count()
+    running = db.query(IngestJob).filter(IngestJob.status == JobStatus.running).count()
+    since = datetime.utcnow() - timedelta(hours=24)
+    total_24h = db.query(IngestJob).filter(IngestJob.created_at >= since).count()
+    failed_24h = db.query(IngestJob).filter(
+        IngestJob.created_at >= since,
+        IngestJob.status.in_([JobStatus.failed, JobStatus.captcha_blocked]),
+    ).count()
+    error_rate = round(failed_24h / total_24h * 100, 1) if total_24h else 0.0
+    return {"pending": pending, "running": running, "error_rate_24h": error_rate}
 
 
 @router.get("/", response_model=list[SourceResponse])
@@ -103,7 +125,7 @@ def list_sources(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_authenticated_user),
 ):
-    return (
+    sources = (
         db.query(Source)
         .filter(Source.is_active == True)
         .order_by(Source.created_at.desc())
@@ -111,6 +133,23 @@ def list_sources(
         .limit(limit)
         .all()
     )
+    source_ids = [s.id for s in sources]
+    doc_counts = (
+        dict(
+            db.query(Document.source_id, func.count(Document.id))
+            .filter(Document.source_id.in_(source_ids))
+            .group_by(Document.source_id)
+            .all()
+        )
+        if source_ids
+        else {}
+    )
+    result = []
+    for s in sources:
+        d = {c.name: getattr(s, c.name) for c in s.__table__.columns}
+        d["doc_count"] = doc_counts.get(s.id, 0)
+        result.append(d)
+    return result
 
 
 @router.post("/", response_model=SourceResponse)

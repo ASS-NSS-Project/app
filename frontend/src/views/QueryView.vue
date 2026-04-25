@@ -489,7 +489,7 @@ onMounted(async () => {
 .chip-toggle:last-child  { border-radius: 0 99px 99px 0; }
 .chip-toggle:hover { color: var(--text); background: var(--surface3); }
 .chip-toggle.chip-active {
-  background: rgba(0,212,255,.15);
+  background: rgba(0,230,118,.12);
   color: var(--accent);
   font-weight: 500;
 }

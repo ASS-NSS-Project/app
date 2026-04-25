@@ -6,25 +6,25 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --bg:       #060e1a;
-  --surface:  #0b1628;
-  --surface2: #0f1e35;
-  --surface3: #152441;
-  --border:   #162035;
-  --border2:  #1c2d4a;
-  --accent:   #00d4ff;
+  --bg:       #0d0f10;
+  --surface:  #13161a;
+  --surface2: #191d23;
+  --surface3: #1f242c;
+  --border:   #222830;
+  --border2:  #2a3240;
+  --accent:   #00e676;
   --accent2:  #f59e0b;
-  --accent3:  #00b4d8;
-  --success:  #34d399;
+  --accent3:  #00c853;
+  --success:  #00e676;
   --warning:  #fbbf24;
   --danger:   #f87171;
-  --text:     #e2e8f0;
-  --text2:    #8aa3c0;
-  --muted:    #3a5070;
+  --text:     #e8edf2;
+  --text2:    #8a9bb0;
+  --muted:    #3a4a5a;
 
-  --glow-accent:  0 0 24px rgba(0,212,255,.22);
+  --glow-accent:  0 0 24px rgba(0,230,118,.18);
   --glow-gold:    0 0 24px rgba(245,158,11,.22);
-  --glow-success: 0 0 20px rgba(52,211,153,.15);
+  --glow-success: 0 0 20px rgba(0,230,118,.15);
   --radius:   10px;
   --radius-sm: 6px;
 }
@@ -36,10 +36,9 @@ body {
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
-  /* Subtle noise grain */
   background-image:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0,180,216,.08) 0%, transparent 60%),
-    radial-gradient(ellipse 40% 30% at 85% 90%, rgba(245,158,11,.05) 0%, transparent 50%);
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0,200,83,.06) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 85% 90%, rgba(245,158,11,.04) 0%, transparent 50%);
 }
 
 /* ── Layout ── */
@@ -104,12 +103,12 @@ body {
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(0,212,255,.3), transparent);
+  background: linear-gradient(90deg, transparent, rgba(0,230,118,.3), transparent);
   opacity: 0;
   transition: opacity 0.2s;
 }
 .card:hover::after, .card:focus-within::after { opacity: 1; }
-.card:focus-within { border-color: rgba(0,212,255,.35); box-shadow: var(--glow-accent); }
+.card:focus-within { border-color: rgba(0,230,118,.35); box-shadow: var(--glow-accent); }
 .card-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
 .card-meta  { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
 
@@ -183,7 +182,7 @@ body {
   font-size: 22px;
   margin-bottom: 12px;
   display: block;
-  filter: drop-shadow(0 0 6px rgba(0,212,255,.4));
+  filter: drop-shadow(0 0 6px rgba(0,230,118,.4));
 }
 .stat-value {
   font-size: 34px;
@@ -252,7 +251,7 @@ body {
 }
 .inline-select:focus, .inline-input:focus {
   outline: none;
-  border-color: rgba(0,212,255,.5);
+  border-color: rgba(0,230,118,.5);
 }
 
 /* ── Badges ── */
@@ -267,7 +266,7 @@ body {
 .badge-green  { background: rgba(52,211,153,.12);  color: var(--success); }
 .badge-yellow { background: rgba(251,191,36,.12);   color: var(--warning); }
 .badge-red    { background: rgba(248,113,113,.12);  color: var(--danger); }
-.badge-blue   { background: rgba(0,212,255,.12);  color: var(--accent); }
+.badge-blue   { background: rgba(0,230,118,.12);  color: var(--accent); }
 .badge-gray   { background: var(--surface2);        color: var(--muted); }
 
 /* ── Activity timeline ── */

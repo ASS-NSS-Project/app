@@ -11,6 +11,7 @@ import UsersView from '@/views/UsersView.vue'
 import KnowledgeBaseView from '@/views/KnowledgeBaseView.vue'
 import ExperimentsView from '@/views/ExperimentsView.vue'
 import JobsView from '@/views/JobsView.vue'
+import PipelineView from '@/views/PipelineView.vue'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -20,12 +21,13 @@ const router = createRouter({
     { path: '/dashboard', component: DashboardView },
     { path: '/sources', component: SourcesView },
     { path: '/query', component: QueryView },
+    { path: '/pipeline', component: PipelineView },
+    { path: '/jobs', redirect: '/pipeline' },
     { path: '/incidents', component: IncidentsView },
     { path: '/audit', component: AuditView },
     { path: '/users', component: UsersView },
     { path: '/knowledge-base', component: KnowledgeBaseView },
     { path: '/experiments', component: ExperimentsView },
-    { path: '/jobs', component: JobsView },
   ],
 })
 

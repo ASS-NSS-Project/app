@@ -7,10 +7,12 @@ GET  /auth/me     → returns current user info
 """
 
 import logging
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -184,11 +186,34 @@ def get_stats(
     Returns basic system statistics for the dashboard.
     One query instead of N+1 calls from the frontend.
     """
+    strategy_counts = dict(
+        db.query(IngestJob.strategy_used, func.count(IngestJob.id))
+        .filter(IngestJob.strategy_used.isnot(None), IngestJob.status == "done")
+        .group_by(IngestJob.strategy_used)
+        .all()
+    )
+    strategy_total = sum(strategy_counts.values()) or 1
+    strategy_distribution = {
+        str(k): round(v / strategy_total * 100) for k, v in strategy_counts.items()
+    }
+
+    seven_days_ago = datetime.utcnow() - timedelta(days=7)
+    daily_jobs_raw = (
+        db.query(func.date(IngestJob.created_at), func.count(IngestJob.id))
+        .filter(IngestJob.created_at >= seven_days_ago)
+        .group_by(func.date(IngestJob.created_at))
+        .order_by(func.date(IngestJob.created_at))
+        .all()
+    )
+    activity_7d = [{"date": str(d), "count": c} for d, c in daily_jobs_raw]
+
     return {
-        "sources":   db.query(Source).count(),
-        "jobs":      db.query(IngestJob).count(),
-        "incidents": db.query(Incident).filter(Incident.status == IncidentStatus.open).count(),
-        "documents": db.query(Document).count(),
+        "sources":               db.query(Source).count(),
+        "jobs":                  db.query(IngestJob).count(),
+        "incidents":             db.query(Incident).filter(Incident.status == IncidentStatus.open).count(),
+        "documents":             db.query(Document).count(),
+        "strategy_distribution": strategy_distribution,
+        "activity_7d":           activity_7d,
     }
 
 
