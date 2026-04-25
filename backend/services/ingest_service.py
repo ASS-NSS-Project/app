@@ -1,17 +1,15 @@
 """
 services/ingest_service.py - The Core Scraping Pipeline
 
-This is the heart of the system.
+For every URL, the fallback chain is tried in order:
+  0. API / Feed  — Jina.ai reader (clean markdown for any URL); falls back
+                    internally to feedparser for RSS/Atom feeds
+  1. HTML fetch  — httpx + BeautifulSoup (fast, static sites)
+  2. Rendered DOM — Playwright headless Chrome (JS-heavy sites)
+  3. Screenshot  — full-page screenshot → vision AI extraction
 
-For every URL, it tries strategies in order:
-  1. HTML fetch (simple HTTP request, parse with BeautifulSoup)
-  2. Rendered DOM (use Playwright/Chrome to load JS, then read the DOM)
-  3. Screenshot (take a picture, send to Claude vision AI to extract text)
-
-If a strategy produces enough content (quality_threshold_chars), it stops.
-If not, it falls back to the next strategy.
-
-CAPTCHA detection happens at each step.
+The chain stops as soon as a strategy returns text above quality_threshold_chars.
+CAPTCHA detection runs at each step.
 """
 
 import hashlib
@@ -25,6 +23,7 @@ from typing import Optional, Tuple
 import feedparser
 import httpx
 from bs4 import BeautifulSoup
+from markdownify import markdownify as html_to_md
 from playwright.async_api import async_playwright, Page
 from sqlalchemy.orm import Session
 
@@ -165,7 +164,7 @@ class IngestService:
             })
             try:
                 if strategy == IngestStrategy.api:
-                    result = await self._strategy_feed(job)
+                    result = await self._strategy_api(job)
                 elif strategy == IngestStrategy.html:
                     result = await self._strategy_html(job)
                 elif strategy == IngestStrategy.rendered:
@@ -231,37 +230,62 @@ class IngestService:
     def _get_strategy_order(self, preferred: IngestStrategy):
         """
         Returns the list of strategies to try, starting with the preferred one.
-        api/feed comes first when preferred; fallback chain is html→rendered→screenshot.
-        When preferred is rendered/screenshot, html is always appended as a last-resort
-        fallback because it works on any publicly accessible page.
+        Full chain: api → html → rendered → screenshot.
+        When preferred is html/rendered/screenshot, api is skipped and the chain
+        starts at that strategy, always ending with screenshot as last resort.
         """
-        fallback_chain = [
+        full_chain = [
+            IngestStrategy.api,
             IngestStrategy.html,
             IngestStrategy.rendered,
             IngestStrategy.screenshot,
         ]
-        if preferred == IngestStrategy.api:
-            return [IngestStrategy.api] + fallback_chain
-        if preferred in fallback_chain:
-            idx = fallback_chain.index(preferred)
-            chain = fallback_chain[idx:]
-            # Always ensure html is reachable as a final fallback
-            if IngestStrategy.html not in chain:
-                chain = chain + [IngestStrategy.html]
-            return chain
-        return fallback_chain
+        if preferred in full_chain:
+            idx = full_chain.index(preferred)
+            return full_chain[idx:]
+        return full_chain
 
     # ─────────────────────────────────────────────
-    # STRATEGY 0: RSS/Atom Feed (API/Feed)
-    # Parse feed entries and concatenate their content.
-    # Fastest and cleanest when a feed is available.
+    # STRATEGY 0: API / Feed
+    # Try Jina.ai reader first — returns clean markdown for any URL.
+    # Falls back to feedparser for RSS/Atom feeds.
     # ─────────────────────────────────────────────
 
-    async def _strategy_feed(self, job: IngestJob) -> Optional[Tuple[str, str]]:
+    async def _strategy_api(self, job: IngestJob) -> Optional[Tuple[str, str]]:
         """
-        Fetch and parse an RSS/Atom feed. Returns concatenated entry content.
-        Falls through (returns None) if the URL is not a valid feed.
+        Primary: fetch https://r.jina.ai/{url} — Jina.ai converts any webpage
+        to clean markdown, including JS-rendered content, without a browser.
+        Secondary: feedparser for RSS/Atom feeds (if Jina.ai returns too little).
         """
+        # ── Jina.ai reader ──────────────────────────────────────────────────
+        jina_url = f"https://r.jina.ai/{job.url}"
+        try:
+            async with httpx.AsyncClient(
+                timeout=30,
+                follow_redirects=True,
+                headers={
+                    "User-Agent": "RAGBot/1.0 (research; contact@example.com)",
+                    "Accept": "text/markdown, text/plain",
+                    "X-No-Cache": "true",
+                },
+            ) as client:
+                resp = await client.get(jina_url)
+
+            if resp.status_code == 200:
+                text = resp.text.strip()
+                if len(text) >= settings.quality_threshold_chars:
+                    evidence_id = await self._save_evidence(
+                        job=job,
+                        data=text.encode("utf-8"),
+                        evidence_type=EvidenceType.html,
+                        filename="jina_reader.md",
+                        content_type="text/markdown",
+                    )
+                    return text, evidence_id
+        except Exception as exc:
+            logger.debug("Jina.ai reader failed, trying feedparser: %s", exc)
+
+        # ── feedparser fallback (RSS/Atom feeds) ─────────────────────────────
         async with httpx.AsyncClient(
             timeout=20,
             follow_redirects=True,
@@ -291,7 +315,6 @@ class IngestService:
             return None
 
         combined = "\n\n".join(parts)
-
         evidence_id = await self._save_evidence(
             job=job,
             data=raw,
@@ -346,10 +369,10 @@ class IngestService:
 
         # Parse with BeautifulSoup: remove nav, footer, scripts, ads
         soup = BeautifulSoup(html, "html.parser")
-        for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
+        for tag in soup(["script", "style", "nav", "footer", "header", "aside", "form"]):
             tag.decompose()
 
-        text = soup.get_text(separator="\n", strip=True)
+        text = html_to_md(str(soup), heading_style="ATX", bullets="-", strip=["a", "img"])
         return text, evidence_id
 
     # ─────────────────────────────────────────────
@@ -383,10 +406,11 @@ class IngestService:
                         detector="rendered_keyword",
                     )
 
-            # Get all visible text
-            text = await page.evaluate(
-                "() => document.body.innerText"
-            )
+            # Convert rendered HTML to Markdown
+            soup = BeautifulSoup(content, "html.parser")
+            for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
+                tag.decompose()
+            text = html_to_md(str(soup), heading_style="ATX", bullets="-", strip=["a", "img"])
 
             # Save HTML snapshot as evidence
             evidence_id = await self._save_evidence(
@@ -550,6 +574,7 @@ class IngestService:
             quality_score=min(1.0, len(text) / 5000),  # Simple proxy
             ingest_strategy=strategy,
             content_hash=content_hash,
+            content_markdown=text,
         )
         self.db.add(doc)
         self.db.commit()

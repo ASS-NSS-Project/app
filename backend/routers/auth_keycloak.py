@@ -126,17 +126,22 @@ async def keycloak_callback(
         raise HTTPException(status_code=400, detail="Invalid or expired state")
 
     # Exchange code for tokens
-    async with httpx.AsyncClient() as client:
-        token_resp = await client.post(
-            f"{_oidc_base()}/token",
-            data={
-                "grant_type": "authorization_code",
-                "code": code,
-                "client_id": settings.keycloak_client_id,
-                "client_secret": settings.keycloak_client_secret,
-                "redirect_uri": settings.keycloak_redirect_uri,
-            },
-        )
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            token_resp = await client.post(
+                f"{_oidc_base()}/token",
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "client_id": settings.keycloak_client_id,
+                    "client_secret": settings.keycloak_client_secret,
+                    "redirect_uri": settings.keycloak_redirect_uri,
+                },
+            )
+    except (httpx.ConnectError, httpx.TimeoutException, httpx.TransportError) as exc:
+        logger.error("Keycloak unreachable during token exchange: %s", exc,
+                     extra={"event": "keycloak_connect_error"})
+        raise HTTPException(status_code=503, detail="Keycloak is currently unreachable. Try again later.")
 
     if token_resp.status_code != 200:
         logger.error("Keycloak token exchange failed: %s", token_resp.text)
@@ -146,11 +151,16 @@ async def keycloak_callback(
     access_token = token_data["access_token"]
 
     # Fetch user info
-    async with httpx.AsyncClient() as client:
-        userinfo_resp = await client.get(
-            f"{_oidc_base()}/userinfo",
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            userinfo_resp = await client.get(
+                f"{_oidc_base()}/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+    except (httpx.ConnectError, httpx.TimeoutException, httpx.TransportError) as exc:
+        logger.error("Keycloak unreachable during userinfo fetch: %s", exc,
+                     extra={"event": "keycloak_connect_error"})
+        raise HTTPException(status_code=503, detail="Keycloak is currently unreachable. Try again later.")
 
     if userinfo_resp.status_code != 200:
         logger.error("Keycloak userinfo failed: %s", userinfo_resp.text)

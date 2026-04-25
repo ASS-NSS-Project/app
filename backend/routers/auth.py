@@ -24,6 +24,7 @@ from services.auth_service import (
     verify_password, create_access_token, get_current_user,
     hash_password, log_action
 )
+from services.keycloak_service import assign_role as keycloak_assign_role
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -194,7 +195,7 @@ def get_stats(
     )
     strategy_total = sum(strategy_counts.values()) or 1
     strategy_distribution = {
-        str(k): round(v / strategy_total * 100) for k, v in strategy_counts.items()
+        k.value: round(v / strategy_total * 100) for k, v in strategy_counts.items()
     }
 
     seven_days_ago = datetime.utcnow() - timedelta(days=7)
@@ -286,22 +287,33 @@ class UserUpdate(BaseModel):
 
 
 @router.patch("/users/{user_id}", response_model=UserResponse)
-def update_user(
+async def update_user(
     user_id: str,
     request: UserUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.admin)),
 ):
-    """Updates a user's role or active status. Admin only."""
+    """Updates a user's role or active status. Admin only.
+    When the target user authenticates via Keycloak, a role change is also
+    synced to Keycloak so it survives the next SSO login."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    role_changed = request.role is not None and request.role != user.role
+
     if request.role is not None:
         user.role = request.role
     if request.is_active is not None:
         user.is_active = request.is_active
+
     db.commit()
     db.refresh(user)
     log_action(db, current_user.id, "USER_UPDATED", "user", user_id,
                request.model_dump(exclude_none=True))
+
+    if role_changed and user.oauth_provider == "keycloak" and user.oauth_id:
+        # assign_role() never raises — failures are logged as warnings inside the service
+        await keycloak_assign_role(user.oauth_id, user.role)
+
     return user

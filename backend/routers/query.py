@@ -25,6 +25,10 @@ class QueryRequest(BaseModel):
     top_k: int = 5                       # How many chunks to retrieve
     source_id: Optional[str] = None      # Restrict to one source
     strict_grounding: bool = True        # Only answer from retrieved context
+    # Optional custom upstream LLM — any OpenAI-compatible endpoint
+    upstream_base_url: Optional[str] = None
+    upstream_api_key: Optional[str] = None
+    upstream_model: Optional[str] = None
 
 
 class CitationResponse(BaseModel):
@@ -76,6 +80,9 @@ async def query(
             source_id=request.source_id,
             strict_grounding=request.strict_grounding,
             db=db,
+            upstream_base_url=request.upstream_base_url,
+            upstream_api_key=request.upstream_api_key,
+            upstream_model=request.upstream_model,
         )
     except RuntimeError as e:
         logger.error("Query failed", extra={

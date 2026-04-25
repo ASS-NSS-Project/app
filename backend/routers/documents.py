@@ -3,6 +3,7 @@ from typing import Optional
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -92,6 +93,38 @@ def list_chunks(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     return db.query(Chunk).filter(Chunk.document_id == doc_id).order_by(Chunk.chunk_index).all()
+
+
+@router.get("/{doc_id}/markdown")
+def get_document_markdown(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_authenticated_user),
+):
+    """Return the document's full Markdown content as a downloadable .md file."""
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if doc.content_markdown:
+        content = doc.content_markdown
+    else:
+        # Fallback: reconstruct from chunks for documents ingested before this feature
+        chunks = (
+            db.query(Chunk)
+            .filter(Chunk.document_id == doc_id)
+            .order_by(Chunk.chunk_index)
+            .all()
+        )
+        content = "\n\n".join(c.text for c in chunks) if chunks else ""
+
+    safe_title = (doc.title or doc.id)[:60].replace("/", "-").replace("\\", "-")
+    filename = f"{safe_title}.md"
+    return Response(
+        content=content,
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/evidence/{evidence_id}/url", response_model=EvidenceUrlResponse)

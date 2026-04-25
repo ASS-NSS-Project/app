@@ -68,12 +68,30 @@ class RAGService:
         source_id: Optional[str] = None,
         strict_grounding: bool = True,
         db: Optional[Session] = None,
+        upstream_base_url: Optional[str] = None,
+        upstream_api_key: Optional[str] = None,
+        upstream_model: Optional[str] = None,
     ) -> dict:
         t0 = time.monotonic()
-        if mode == "rag":
-            result = await self._query_rag(question, top_k, source_id, strict_grounding, db)
+
+        # Custom upstream client (user-provided API key + base URL)
+        if upstream_base_url and upstream_api_key:
+            client = AsyncOpenAI(
+                base_url=upstream_base_url,
+                api_key=upstream_api_key,
+                timeout=httpx.Timeout(connect=10.0, read=180.0, write=10.0, pool=5.0),
+            )
+            model = upstream_model or settings.aiaas_llm_model
+            aiaas_extras = False
         else:
-            result = await self._query_no_rag(question)
+            client = self.client
+            model = upstream_model or settings.aiaas_llm_model
+            aiaas_extras = True
+
+        if mode == "rag":
+            result = await self._query_rag(question, top_k, source_id, strict_grounding, db, client, model, aiaas_extras)
+        else:
+            result = await self._query_no_rag(question, client, model, aiaas_extras)
         QUERY_REQUESTS_TOTAL.labels(mode=mode).inc()
         QUERY_DURATION.labels(mode=mode).observe(time.monotonic() - t0)
         return result
@@ -85,6 +103,9 @@ class RAGService:
         source_id: Optional[str],
         strict_grounding: bool,
         db: Optional[Session] = None,
+        client: Optional[AsyncOpenAI] = None,
+        model: Optional[str] = None,
+        aiaas_extras: bool = True,
     ) -> dict:
         # Step 1: Retrieve relevant chunks (text fetched from Postgres via db)
         chunks = self.embedder.search(query=question, top_k=top_k, source_id=source_id, db=db)
@@ -104,12 +125,15 @@ class RAGService:
         context = "\n\n---\n\n".join(context_parts)
 
         # Step 3: Call LLM
-        logger.info("Sending RAG query to LLM (%s): '%s'", settings.aiaas_llm_model, question[:80])
+        client = client or self.client
+        model = model or settings.aiaas_llm_model
+        logger.info("Sending RAG query to LLM (%s): '%s'", model, question[:80])
+        extra_kwargs = {"extra_body": {"enable_thinking": False}} if aiaas_extras else {}
         try:
-            response = await self.client.chat.completions.create(
-                model=settings.aiaas_llm_model,
+            response = await client.chat.completions.create(
+                model=model,
                 max_tokens=2048,
-                extra_body={"enable_thinking": False},
+                **extra_kwargs,
                 messages=[
                     {"role": "system", "content": self._build_rag_system_prompt(strict_grounding)},
                     {"role": "user", "content": (
@@ -124,17 +148,17 @@ class RAGService:
         except APITimeoutError:
             logger.error("LLM request timed out", extra={
                 "event": "llm_timeout",
-                "model": settings.aiaas_llm_model,
+                "model": model,
                 "mode": "rag",
             })
             raise RuntimeError(
                 f"LLM request timed out after 180 s. "
-                f"Check that AIAAS_BASE_URL and AIAAS_LLM_MODEL are correct ({settings.aiaas_llm_model})."
+                f"Check that the API base URL and model name are correct ({model})."
             )
         except APIStatusError as e:
             logger.error("LLM API error", extra={
                 "event": "llm_error",
-                "model": settings.aiaas_llm_model,
+                "model": model,
                 "mode": "rag",
                 "status_code": e.status_code,
                 "detail": e.message,
@@ -160,30 +184,39 @@ class RAGService:
             "chunks_retrieved": len(chunks),
         }
 
-    async def _query_no_rag(self, question: str) -> dict:
+    async def _query_no_rag(
+        self,
+        question: str,
+        client: Optional[AsyncOpenAI] = None,
+        model: Optional[str] = None,
+        aiaas_extras: bool = True,
+    ) -> dict:
         """No-RAG mode: ask the LLM directly, no retrieval."""
-        logger.info("Sending no-RAG query to LLM (%s)", settings.aiaas_llm_model)
+        client = client or self.client
+        model = model or settings.aiaas_llm_model
+        logger.info("Sending no-RAG query to LLM (%s)", model)
+        extra_kwargs = {"extra_body": {"enable_thinking": False}} if aiaas_extras else {}
         try:
-            response = await self.client.chat.completions.create(
-                model=settings.aiaas_llm_model,
+            response = await client.chat.completions.create(
+                model=model,
                 max_tokens=2048,
-                extra_body={"enable_thinking": False},
+                **extra_kwargs,
                 messages=[{"role": "user", "content": question}],
             )
         except APITimeoutError:
             logger.error("LLM request timed out", extra={
                 "event": "llm_timeout",
-                "model": settings.aiaas_llm_model,
+                "model": model,
                 "mode": "no_rag",
             })
             raise RuntimeError(
                 f"LLM request timed out after 180 s. "
-                f"Check that AIAAS_BASE_URL and AIAAS_LLM_MODEL are correct ({settings.aiaas_llm_model})."
+                f"Check that the API base URL and model name are correct ({model})."
             )
         except APIStatusError as e:
             logger.error("LLM API error", extra={
                 "event": "llm_error",
-                "model": settings.aiaas_llm_model,
+                "model": model,
                 "mode": "no_rag",
                 "status_code": e.status_code,
                 "detail": e.message,

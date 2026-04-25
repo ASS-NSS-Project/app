@@ -119,7 +119,7 @@ class Source(Base):
     permission_ref = Column(Text, nullable=True)       # Reference to the agreement
 
     # How to collect
-    preferred_strategy = Column(Enum(IngestStrategy), default=IngestStrategy.html)
+    preferred_strategy = Column(Enum(IngestStrategy), default=IngestStrategy.api)
     crawl_frequency_hours = Column(Integer, default=24)
     crawl_depth = Column(Integer, default=1)
     rate_limit_rps = Column(Float, default=1.0)  # Requests per second
@@ -215,10 +215,12 @@ class Document(Base):
     # Version tracking: if we re-scrape, version increments
     doc_version = Column(Integer, default=1)
     
-    # The full structured content is stored as JSON in MinIO
-    # (too large for a DB column)
+    # Full document content stored as Markdown (populated at ingest time)
+    content_markdown = Column(Text, nullable=True)
+
+    # Legacy S3 path (unused — kept for future use)
     content_uri = Column(String, nullable=True)
-    
+
     # Quality score of extraction (0.0 to 1.0)
     quality_score = Column(Float, nullable=True)
     

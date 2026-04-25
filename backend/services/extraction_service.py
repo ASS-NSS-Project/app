@@ -107,16 +107,16 @@ class ExtractionService:
 
 This is a screenshot of a webpage from: {url}
 
-Your task is to extract ALL readable content from this image with perfect fidelity.
+Extract ALL readable content and format it as clean Markdown.
 
 Instructions:
-1. Extract ALL text you can see, maintaining the logical reading order
-2. Format headings with # (H1), ## (H2), ### (H3) markers
-3. Keep paragraphs separated by blank lines
-4. Convert any tables to a readable text format (use | for columns)
-5. Keep bullet points and numbered lists intact
-6. DO NOT include: navigation menus, cookie banners, ads, footers with boilerplate
-7. DO NOT add commentary or descriptions - only extract what is actually there
+1. Extract ALL text, maintaining logical reading order
+2. Use # / ## / ### for headings (ATX style)
+3. Separate paragraphs with blank lines
+4. Convert tables to Markdown table syntax (| col | col |)
+5. Preserve bullet points (- item) and numbered lists (1. item)
+6. OMIT: navigation menus, cookie banners, ads, repetitive footers
+7. DO NOT add commentary — only extract what is on the page
 8. If you see a CAPTCHA or verification page, respond only with: CAPTCHA_DETECTED
 
-Return only the extracted content, no preamble."""
+Return only the extracted Markdown content, no preamble."""
