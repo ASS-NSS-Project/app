@@ -9,7 +9,7 @@ LLM and VLM inference runs on **CERIT-SC AIaaS** (e-INFRA). Object storage uses 
 ## What This System Does
 
 1. **Ingests** websites using a multi-strategy pipeline:
-   - HTML fetch → Rendered DOM (Playwright) → Screenshot + vision AI
+   - API/Feed (Jina.ai reader + RSS fallback) → HTML fetch → Rendered DOM (Playwright) → Screenshot Screening + vision AI
 2. **Extracts** structured content from screenshots using a VLM on AIaaS
 3. **Indexes** content in Qdrant using BGE-M3 hybrid embeddings (dense + sparse, RRF fusion)
 4. **Answers** questions using RAG — retrieves relevant passages, then answers with citations via a text LLM on AIaaS
@@ -71,6 +71,17 @@ JWT_SECRET=your-random-hex-string
 # First admin account (created automatically on first startup)
 FIRST_ADMIN_EMAIL=admin@example.com
 FIRST_ADMIN_PASSWORD=strong-random-password
+
+# Keycloak OIDC — leave commented out for pure local dev (JWT login still works)
+# Uncomment to test Keycloak SSO locally against the prod Keycloak instance:
+KEYCLOAK_URL=https://keycloak.nss.jkzl.eu
+KEYCLOAK_REALM=ass-nss-project
+# KEYCLOAK_CLIENT_ID=rag-system
+# KEYCLOAK_CLIENT_SECRET=<Keycloak admin → Clients → rag-system → Credentials>
+# KEYCLOAK_REDIRECT_URI=http://localhost:8080/auth/keycloak/callback
+# FRONTEND_URL=http://localhost:8080
+# KEYCLOAK_ADMIN_CLIENT_ID=rag-rbac-sa
+# KEYCLOAK_ADMIN_CLIENT_SECRET=<Keycloak admin → Clients → rag-rbac-sa → Credentials>
 ```
 
 ### 3. Start the system
@@ -235,7 +246,7 @@ Lists all users.
 ---
 
 #### `PATCH /auth/users/{user_id}` *(admin only)*
-Update a user's role or active status.
+Update a user's role or active status. When the target user authenticates via Keycloak SSO, a role change is also synced to Keycloak group membership (via `rag-rbac-sa` service account) so the new role persists across future SSO logins. Returns `502` if the Keycloak sync fails — the local DB change is rolled back in that case.
 
 **Request** (`application/json`, all fields optional):
 ```json
@@ -263,7 +274,7 @@ List all active sources.
   "name": "Tech Blog",
   "base_url": "https://techblog.example.com",
   "permission_type": "public",
-  "preferred_strategy": "html",
+  "preferred_strategy": "api",
   "crawl_frequency_hours": 24,
   "is_active": true,
   "created_at": "2026-04-19T10:00:00",
@@ -286,7 +297,7 @@ Create a new source.
   "base_url": "https://techblog.example.com",
   "permission_type": "public",
   "permission_ref": null,
-  "preferred_strategy": "html",
+  "preferred_strategy": "api",
   "crawl_frequency_hours": 24,
   "crawl_depth": 1,
   "rate_limit_rps": 1.0,
@@ -294,7 +305,7 @@ Create a new source.
 }
 ```
 
-`preferred_strategy` is one of: `html`, `rendered`, `screenshot`.  
+`preferred_strategy` is one of: `api` (default — Jina.ai reader + RSS fallback), `html`, `rendered`, `screenshot`.  
 URLs pointing to private/loopback addresses are rejected (SSRF protection).
 
 **Response `200`**: `SourceResponse`.
@@ -410,7 +421,10 @@ Ask a question. Returns an answer with citations from the knowledge base.
   "mode": "rag",
   "top_k": 5,
   "source_id": null,
-  "strict_grounding": true
+  "strict_grounding": true,
+  "upstream_base_url": null,
+  "upstream_api_key": null,
+  "upstream_model": null
 }
 ```
 
@@ -421,6 +435,11 @@ Ask a question. Returns an answer with citations from the knowledge base.
 | `top_k` | `5` | Number of chunks to retrieve |
 | `source_id` | `null` | Restrict retrieval to one source (UUID) |
 | `strict_grounding` | `true` | If true, LLM only uses retrieved context; if false, may use general knowledge |
+| `upstream_base_url` | `null` | Override LLM endpoint — any OpenAI-compatible URL (GPT, Gemini, Kimi, etc.) |
+| `upstream_api_key` | `null` | API key for the custom upstream endpoint |
+| `upstream_model` | `null` | Model name for the custom upstream endpoint |
+
+When `upstream_base_url` and `upstream_api_key` are set, the query is routed to that endpoint instead of the configured AIAAS. The `enable_thinking` extra body is only sent to AIAAS — it is suppressed for custom upstreams so GPT/Gemini/etc. don't 400.
 
 **Response `200`**:
 ```json
@@ -463,6 +482,13 @@ Fetch a single document by ID.
 List all chunks for a document.
 
 **Response `200`**: array of `ChunkResponse`.
+
+---
+
+#### `GET /documents/{doc_id}/markdown`
+Download the full document content as a `.md` file. Documents ingested after the 0006 migration have clean Markdown stored natively (HTML/rendered strategies via `markdownify`, VLM via prompt). Older documents fall back to concatenating their chunks.
+
+**Response `200`**: `text/markdown` with `Content-Disposition: attachment`.
 
 ---
 
@@ -806,7 +832,9 @@ Event catalogue:
 | `ingest_strategy_attempt` | worker | Trying a scraping strategy |
 | `ingest_strategy_fallback` | worker | Falling back to next strategy |
 | `ingest_strategy_error` | worker | A strategy raised an error |
-| `captcha_detected` | worker | CAPTCHA found during ingest |
+| `captcha_detected` | worker | CAPTCHA found during ingest — also fires `rag_app=incident` Loki label |
+| `keycloak_role_synced` | api | Role change synced to Keycloak successfully |
+| `keycloak_sync_failed` | api | Keycloak sync failed (role change rejected with 502) |
 | `document_created` | worker | Document + chunks saved to DB |
 | `embedding_completed` | worker | Chunks upserted into Qdrant |
 | `embedding_failed` | worker | Qdrant upsert failed |
@@ -881,7 +909,7 @@ rag_system/
 │   ├── alembic.ini             # Database migration config
 │   ├── alembic/                # Migration scripts (0001–0005)
 │   ├── routers/
-│   │   ├── auth.py             # Login, register, JWT tokens, audit log, user management
+│   │   ├── auth.py             # Login, register, JWT tokens, audit log, user management + Keycloak RBAC sync
 │   │   ├── auth_google.py      # Google OAuth2 (HMAC-signed stateless state tokens)
 │   │   ├── sources.py          # Source management + ingest trigger (SSRF-protected)
 │   │   ├── query.py            # RAG query endpoint
@@ -897,6 +925,7 @@ rag_system/
 │       ├── storage_service.py    # CESNET S3 file storage
 │       ├── captcha_service.py    # CAPTCHA detection + incident creation
 │       ├── auth_service.py       # JWT + bcrypt password hashing
+│       ├── keycloak_service.py   # Keycloak Admin REST API — syncs role changes to Keycloak
 │       ├── scheduler_service.py  # APScheduler: periodic crawls + evidence/index cleanup
 │       ├── logging_config.py     # Structured JSON logging (python-json-logger)
 │       └── queue_service.py      # RabbitMQ job publisher
