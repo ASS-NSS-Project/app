@@ -80,6 +80,9 @@ export interface QueryRequest {
   top_k: number
   strict_grounding: boolean
   source_id?: string | null
+  upstream_base_url?: string | null
+  upstream_api_key?: string | null
+  upstream_model?: string | null
 }
 
 export interface Citation {

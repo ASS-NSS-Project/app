@@ -7,7 +7,7 @@ import Aura from '@primevue/themes/aura'
 import 'primeicons/primeicons.css'
 import './assets/main.css'
 
-// Handle Google OAuth2 token that arrives as ?token=... query param.
+// Handle Keycloak OIDC token that arrives as ?token=... query param after OAuth callback.
 // Must run before the router guard, otherwise the guard sees an unauthenticated
 // user and immediately redirects to /login, losing the token.
 const searchParams = new URLSearchParams(window.location.search)

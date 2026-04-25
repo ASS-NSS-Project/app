@@ -1,117 +1,195 @@
 <template>
   <AppLayout>
     <div class="page">
+
+      <!-- Page header -->
       <div class="page-header">
-        <h2>Knowledge Base</h2>
-        <p>Browse ingested documents and their chunks</p>
+        <div>
+          <h2>Knowledge Base</h2>
+          <p>Browse indexed documents and their text chunks</p>
+        </div>
       </div>
 
-      <div v-if="error" class="alert alert-error">{{ error }}</div>
+      <!-- Stat strip -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Documents</div>
+          <div class="stat-value">{{ stats.documents }}</div>
+          <div class="stat-sub">indexed pages</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Chunks</div>
+          <div class="stat-value">{{ stats.chunks }}</div>
+          <div class="stat-sub">text segments</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Embedded</div>
+          <div class="stat-value accent">{{ stats.embeddedPct }}%</div>
+          <div class="stat-sub">ready for RAG</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Sources</div>
+          <div class="stat-value">{{ stats.sources }}</div>
+          <div class="stat-sub">data origins</div>
+        </div>
+      </div>
 
+      <!-- Filter toolbar -->
       <div class="toolbar">
-        <InputText v-model="sourceFilter" placeholder="Filter by source ID..." style="width:260px" />
-        <Button label="Load" @click="loadDocuments" :loading="loading" />
+        <div class="search-wrap">
+          <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          <InputText
+            v-model="titleFilter"
+            placeholder="Search documents…"
+            class="search-input"
+            @keydown.enter="applyFilter"
+          />
+        </div>
+        <InputText v-model="sourceFilter" placeholder="Source ID…" style="width:180px" />
+        <Button label="Search" size="small" @click="applyFilter" :loading="loading" />
+        <Button label="Clear" size="small" severity="secondary" text @click="clearFilter" v-if="titleFilter || sourceFilter" />
       </div>
 
-      <DataTable
-        :value="documents"
-        :loading="loading"
-        size="small"
-        stripedRows
-        selectionMode="single"
-        v-model:selection="selectedDoc"
-        @row-select="onDocSelect"
-        style="margin-top: 12px"
-      >
-        <template #empty>
-          <div class="empty-state">
-            <div class="icon">📄</div>
-            <p>No documents yet. Add sources and trigger ingestion.</p>
+      <!-- Documents table card -->
+      <div class="table-card">
+        <div class="card-header">
+          <span class="card-title">ALL DOCUMENTS</span>
+          <span class="card-count">({{ documents.length }}{{ documents.length === limit ? '+' : '' }})</span>
+          <div class="pagination-row">
+            <button class="pg-btn" @click="prevPage" :disabled="offset === 0">‹</button>
+            <span class="pg-label">Page {{ page + 1 }}</span>
+            <button class="pg-btn" @click="nextPage" :disabled="documents.length < limit">›</button>
           </div>
-        </template>
-        <Column field="title" header="Title">
-          <template #body="{ data }">
-            <span style="font-size:13px">{{ data.title ?? data.url }}</span>
-          </template>
-        </Column>
-        <Column field="ingest_strategy" header="Strategy">
-          <template #body="{ data }">
-            <Tag :value="data.ingest_strategy ?? '?'" severity="info" rounded />
-          </template>
-        </Column>
-        <Column field="doc_version" header="Version" style="width:80px" />
-        <Column field="quality_score" header="Quality" style="width:90px">
-          <template #body="{ data }">
-            {{ data.quality_score != null ? (data.quality_score * 100).toFixed(0) + '%' : '—' }}
-          </template>
-        </Column>
-        <Column field="created_at" header="Ingested" style="width:140px">
-          <template #body="{ data }">
-            <span style="color:var(--muted);font-size:11px">
-              {{ data.created_at.slice(0, 16).replace('T', ' ') }}
-            </span>
-          </template>
-        </Column>
-      </DataTable>
+        </div>
 
-      <div class="pagination">
-        <Button icon="pi pi-chevron-left" text @click="prevPage" :disabled="offset === 0" />
-        <span>Page {{ page + 1 }}</span>
-        <Button icon="pi pi-chevron-right" text @click="nextPage" :disabled="documents.length < limit" />
+        <div v-if="error" class="error-bar">{{ error }}</div>
+
+        <DataTable
+          :value="documents"
+          :loading="loading"
+          size="small"
+          stripedRows
+          selectionMode="single"
+          v-model:selection="selectedDoc"
+          @row-select="onDocSelect"
+          :rowClass="() => 'kb-row'"
+        >
+          <template #empty>
+            <div class="empty-state">
+              <div class="empty-icon">◫</div>
+              <p>No documents found.<br>Add sources and trigger an ingest to populate the knowledge base.</p>
+            </div>
+          </template>
+
+          <Column field="title" header="Document">
+            <template #body="{ data }">
+              <div class="doc-cell">
+                <span class="doc-title">{{ data.title ?? urlShort(data.url) }}</span>
+                <a :href="data.url" target="_blank" class="doc-url" @click.stop>{{ urlShort(data.url) }}</a>
+              </div>
+            </template>
+          </Column>
+
+          <Column field="ingest_strategy" header="Strategy" style="width:110px">
+            <template #body="{ data }">
+              <span class="strategy-badge" :class="`strat-${data.ingest_strategy}`">
+                {{ data.ingest_strategy ?? '?' }}
+              </span>
+            </template>
+          </Column>
+
+          <Column field="quality_score" header="Quality" style="width:80px">
+            <template #body="{ data }">
+              <span v-if="data.quality_score != null" :class="qualityClass(data.quality_score)" class="quality-val">
+                {{ (data.quality_score * 100).toFixed(0) }}%
+              </span>
+              <span v-else class="muted">—</span>
+            </template>
+          </Column>
+
+          <Column header="Chunks" style="width:70px">
+            <template #body="{ data }">
+              <span class="muted" style="font-size:12px">{{ data.chunk_count ?? '—' }}</span>
+            </template>
+          </Column>
+
+          <Column field="created_at" header="Ingested" style="width:110px">
+            <template #body="{ data }">
+              <span class="time-cell">{{ relTime(data.created_at) }}</span>
+            </template>
+          </Column>
+
+          <Column style="width:80px">
+            <template #body="{ data }">
+              <button class="view-btn" @click.stop="openChunks(data)">Chunks</button>
+            </template>
+          </Column>
+        </DataTable>
       </div>
+
     </div>
 
-    <!-- Chunks Dialog -->
+    <!-- Chunks side panel -->
     <Dialog
       v-model:visible="chunksVisible"
-      :header="`Chunks — ${selectedDoc?.title ?? selectedDoc?.url}`"
+      :header="chunksHeader"
       modal
-      style="width: 720px; max-height: 80vh"
+      style="width: min(760px, 95vw); max-height: 82vh"
     >
-      <div v-if="chunksLoading" class="loading-center">Loading chunks…</div>
-      <DataTable v-else :value="chunks" size="small" stripedRows scrollable scrollHeight="500px">
-        <Column field="chunk_index" header="#" style="width:50px" />
-        <Column field="chunk_type" header="Type" style="width:80px">
-          <template #body="{ data }">
-            <Tag :value="data.chunk_type" severity="secondary" rounded />
-          </template>
-        </Column>
-        <Column field="text" header="Text">
-          <template #body="{ data }">
-            <span style="font-size:12px;white-space:pre-wrap">{{ data.text.slice(0, 300) }}{{ data.text.length > 300 ? '…' : '' }}</span>
-          </template>
-        </Column>
-        <Column field="is_embedded" header="Embedded" style="width:90px">
-          <template #body="{ data }">
-            <span :style="`color: ${data.is_embedded ? 'var(--success)' : 'var(--muted)'}`">
-              {{ data.is_embedded ? '✓' : '✗' }}
-            </span>
-          </template>
-        </Column>
-        <Column field="citation_evidence_id" header="Evidence" style="width:90px">
-          <template #body="{ data }">
-            <Button
-              v-if="data.citation_evidence_id"
-              label="View"
-              size="small"
-              text
-              @click="openEvidence(data.citation_evidence_id)"
-            />
-          </template>
-        </Column>
-      </DataTable>
+      <div v-if="chunksLoading" class="chunks-loading">Loading chunks…</div>
+
+      <div v-else>
+        <div class="chunks-meta">
+          <span>{{ chunks.length }} chunk{{ chunks.length !== 1 ? 's' : '' }}</span>
+          <span class="muted">·</span>
+          <span>{{ chunks.filter(c => c.is_embedded).length }} embedded</span>
+        </div>
+
+        <DataTable :value="chunks" size="small" stripedRows scrollable scrollHeight="440px">
+          <Column field="chunk_index" header="#" style="width:44px">
+            <template #body="{ data }">
+              <span class="muted" style="font-size:11px">{{ data.chunk_index }}</span>
+            </template>
+          </Column>
+          <Column field="chunk_type" header="Type" style="width:72px">
+            <template #body="{ data }">
+              <span class="strategy-badge">{{ data.chunk_type }}</span>
+            </template>
+          </Column>
+          <Column field="text" header="Text">
+            <template #body="{ data }">
+              <span class="chunk-text">{{ data.text.slice(0, 320) }}{{ data.text.length > 320 ? '…' : '' }}</span>
+            </template>
+          </Column>
+          <Column field="is_embedded" header="Emb." style="width:50px">
+            <template #body="{ data }">
+              <span :style="`color:${data.is_embedded ? 'var(--success)' : 'var(--muted)'}`">
+                {{ data.is_embedded ? '✓' : '—' }}
+              </span>
+            </template>
+          </Column>
+          <Column style="width:56px">
+            <template #body="{ data }">
+              <button v-if="data.citation_evidence_id" class="view-btn" @click="openEvidence(data.citation_evidence_id)">
+                Src
+              </button>
+            </template>
+          </Column>
+        </DataTable>
+      </div>
     </Dialog>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
-import Tag from 'primevue/tag'
 import InputText from 'primevue/inputtext'
 import { get } from '@/api/client'
 import type { DocumentResponse, ChunkResponse } from '@/api/types'
@@ -120,14 +198,44 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const documents = ref<DocumentResponse[]>([])
 const selectedDoc = ref<DocumentResponse | null>(null)
+const titleFilter = ref('')
 const sourceFilter = ref('')
-const limit = 50
+const limit = 25
 const offset = ref(0)
 const page = ref(0)
 
 const chunksVisible = ref(false)
 const chunksLoading = ref(false)
 const chunks = ref<ChunkResponse[]>([])
+
+const stats = ref({ documents: 0, chunks: 0, embeddedPct: 0, sources: 0 })
+
+const chunksHeader = computed(() =>
+  selectedDoc.value
+    ? (selectedDoc.value.title ?? urlShort(selectedDoc.value.url))
+    : 'Chunks'
+)
+
+function urlShort(url: string) {
+  try { return new URL(url).hostname + new URL(url).pathname.replace(/\/$/, '').slice(0, 30) }
+  catch { return url.slice(0, 45) }
+}
+
+function relTime(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime()
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  return `${Math.floor(h / 24)}d ago`
+}
+
+function qualityClass(score: number) {
+  if (score >= 0.75) return 'quality-hi'
+  if (score >= 0.45) return 'quality-mid'
+  return 'quality-lo'
+}
 
 async function loadDocuments() {
   loading.value = true
@@ -136,11 +244,24 @@ async function loadDocuments() {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset.value) })
     if (sourceFilter.value.trim()) params.append('source_id', sourceFilter.value.trim())
     documents.value = await get<DocumentResponse[]>(`/documents/?${params}`)
+    stats.value.documents = offset.value + documents.value.length
   } catch (e: any) {
     error.value = e.message ?? 'Failed to load documents'
   } finally {
     loading.value = false
   }
+}
+
+function applyFilter() {
+  offset.value = 0
+  page.value = 0
+  loadDocuments()
+}
+
+function clearFilter() {
+  titleFilter.value = ''
+  sourceFilter.value = ''
+  applyFilter()
 }
 
 function prevPage() {
@@ -155,17 +276,26 @@ function nextPage() {
   loadDocuments()
 }
 
-async function onDocSelect() {
-  if (!selectedDoc.value) return
+async function openChunks(doc: DocumentResponse) {
+  selectedDoc.value = doc
   chunksVisible.value = true
   chunksLoading.value = true
   try {
-    chunks.value = await get<ChunkResponse[]>(`/documents/${selectedDoc.value.id}/chunks`)
+    chunks.value = await get<ChunkResponse[]>(`/documents/${doc.id}/chunks`)
+    const embedded = chunks.value.filter(c => c.is_embedded).length
+    stats.value.chunks = Math.max(stats.value.chunks, chunks.value.length)
+    stats.value.embeddedPct = chunks.value.length
+      ? Math.round((embedded / chunks.value.length) * 100)
+      : 0
   } catch (e: any) {
     error.value = e.message ?? 'Failed to load chunks'
   } finally {
     chunksLoading.value = false
   }
+}
+
+async function onDocSelect() {
+  if (selectedDoc.value) openChunks(selectedDoc.value)
 }
 
 async function openEvidence(evidenceId: string) {
@@ -177,11 +307,211 @@ async function openEvidence(evidenceId: string) {
   }
 }
 
-loadDocuments()
+onMounted(loadDocuments)
 </script>
 
 <style scoped>
-.toolbar { display: flex; gap: 8px; align-items: center; }
-.pagination { display: flex; gap: 8px; align-items: center; justify-content: center; margin-top: 12px; color: var(--muted); font-size: 13px; }
-.loading-center { text-align: center; padding: 24px; color: var(--muted); }
+/* Page header */
+.page-header {
+  margin-bottom: 20px;
+}
+.page-header h2 {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.page-header p {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Stat strip */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.stat-label {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.stat-value {
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1;
+}
+.stat-value.accent { color: var(--accent); }
+.stat-sub {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.search-wrap {
+  position: relative;
+  flex: 1;
+  max-width: 320px;
+}
+.search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+.search-input { padding-left: 30px !important; width: 100%; }
+
+/* Table card */
+.table-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.card-title {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--muted);
+}
+.card-count {
+  font-size: 11px;
+  color: var(--muted);
+}
+.pagination-row {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pg-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text2);
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.pg-btn:hover:not(:disabled) { background: rgba(255,255,255,.05); }
+.pg-btn:disabled { opacity: 0.35; cursor: default; }
+.pg-label { font-size: 11px; color: var(--muted); }
+
+.error-bar {
+  padding: 8px 16px;
+  background: rgba(248,113,113,.1);
+  border-bottom: 1px solid rgba(248,113,113,.2);
+  color: var(--danger);
+  font-size: 12px;
+}
+
+/* Document rows */
+.doc-cell { display: flex; flex-direction: column; gap: 1px; }
+.doc-title { font-size: 13px; color: var(--text); font-weight: 450; }
+.doc-url { font-size: 11px; color: var(--muted); text-decoration: none; }
+.doc-url:hover { color: var(--accent); }
+
+/* Strategy badge */
+.strategy-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(255,255,255,.06);
+  color: var(--text2);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.strat-api       { background: rgba(0,230,118,.1); color: var(--accent); border-color: rgba(0,230,118,.2); }
+.strat-html      { background: rgba(96,165,250,.1); color: #60a5fa; border-color: rgba(96,165,250,.2); }
+.strat-rendered  { background: rgba(167,139,250,.1); color: var(--accent2); border-color: rgba(167,139,250,.2); }
+.strat-screenshot { background: rgba(251,191,36,.1); color: var(--warning); border-color: rgba(251,191,36,.2); }
+
+/* Quality */
+.quality-val { font-size: 12px; font-weight: 500; }
+.quality-hi  { color: var(--success); }
+.quality-mid { color: var(--warning); }
+.quality-lo  { color: var(--danger); }
+
+.time-cell { font-size: 11px; color: var(--muted); }
+.muted { color: var(--muted); }
+
+.view-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text2);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.view-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Empty */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+}
+.empty-icon { font-size: 32px; margin-bottom: 10px; }
+.empty-state p { font-size: 13px; line-height: 1.6; }
+
+/* Chunks dialog */
+.chunks-loading { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
+.chunks-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text2);
+  margin-bottom: 12px;
+}
+.chunk-text {
+  font-size: 12px;
+  color: var(--text2);
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+:deep(.kb-row) { cursor: pointer; }
+:deep(.kb-row:hover td) { background: rgba(0,230,118,.03) !important; }
 </style>

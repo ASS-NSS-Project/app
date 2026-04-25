@@ -8,7 +8,7 @@
         </div>
         <div class="page-actions">
           <Button label="Refresh" icon="pi pi-refresh" size="small" severity="secondary" @click="load" :loading="loadingStats" />
-          <Button label="+ New Source" size="small" @click="$router.push('/sources')" />
+          <Button label="+ New Ingest Job" size="small" @click="$router.push('/sources')" />
         </div>
       </div>
 
@@ -57,7 +57,7 @@
             <div v-for="item in strategyList" :key="item.key" class="strategy-row">
               <div class="strategy-name">{{ item.label }}</div>
               <div class="strategy-bar-wrap">
-                <div class="strategy-bar" :style="`width: ${item.pct}%`" />
+                <div class="strategy-bar" :style="`width: ${item.pct}%; background: ${item.color}`" />
               </div>
               <div class="strategy-pct">{{ item.pct }}%</div>
             </div>
@@ -198,9 +198,18 @@ const maxActivity = computed(() => Math.max(...activity7d.value.map(d => d.count
 
 const strategyLabels: Record<string, string> = {
   api: 'API / Feed',
-  html: 'HTML fetch',
+  html: 'HTML',
   rendered: 'Rendered DOM',
-  screenshot: 'Screenshot + AI',
+  screenshot: 'Screenshot Screening',
+  upstream_ai: 'Upstream AI',
+}
+
+const strategyColors: Record<string, string> = {
+  api:          'var(--accent)',
+  html:         '#3b82f6',
+  rendered:     'var(--warning)',
+  screenshot:   '#a855f7',
+  upstream_ai:  'var(--muted)',
 }
 
 const strategyList = computed(() => {
@@ -211,6 +220,7 @@ const strategyList = computed(() => {
       key,
       label: strategyLabels[key] ?? key,
       pct,
+      color: strategyColors[key] ?? 'var(--accent)',
     }))
 })
 
@@ -359,7 +369,6 @@ onUnmounted(() => clearInterval(ticker))
 .strategy-bar-wrap { flex: 1; height: 6px; background: var(--border); border-radius: 99px; overflow: hidden; }
 .strategy-bar {
   height: 100%;
-  background: var(--accent);
   border-radius: 99px;
   transition: width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
 }

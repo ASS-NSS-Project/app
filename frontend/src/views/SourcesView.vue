@@ -196,9 +196,10 @@ const permissionOptions = [
   { label: 'API (contractual access)', value: 'api' },
 ]
 const strategyOptions = [
-  { label: 'HTML fetch (fast, static sites)', value: 'html' },
+  { label: 'API / Feed (default — Jina.ai reader + RSS fallback)', value: 'api' },
+  { label: 'HTML (fast, static sites)', value: 'html' },
   { label: 'Rendered DOM (JS-heavy sites)', value: 'rendered' },
-  { label: 'Screenshot + AI (complex layouts)', value: 'screenshot' },
+  { label: 'Screenshot Screening (complex layouts)', value: 'screenshot' },
 ]
 
 const sources = ref<SourceResponse[]>([])
@@ -223,7 +224,7 @@ const addForm = reactive({
   name: '',
   base_url: '',
   permission_type: 'public',
-  preferred_strategy: 'html',
+  preferred_strategy: 'api',
   crawl_frequency_hours: 24,
 })
 
@@ -233,7 +234,7 @@ const editVisible = computed({
   set: (v) => { if (!v) editSource.value = null },
 })
 const editLoading = ref(false)
-const editForm = reactive({ preferred_strategy: 'html', crawl_frequency_hours: 24 })
+const editForm = reactive({ preferred_strategy: 'api', crawl_frequency_hours: 24 })
 
 function relTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()

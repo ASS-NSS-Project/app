@@ -29,19 +29,36 @@
 
       <!-- Fallback chain -->
       <div class="card chain-card">
-        <div class="section-title">Fallback Chain</div>
-        <p class="chain-subtitle">Automatic strategy escalation — stops at first extraction above quality threshold</p>
-        <div class="chain-steps">
-          <div
-            v-for="(step, i) in chainSteps"
-            :key="i"
-            class="chain-step"
-            :class="{ 'chain-step-active': step.active }"
-          >
-            <span class="step-num">{{ i + 1 }}</span>
-            <span class="step-label">{{ step.label }}</span>
-            <span v-if="i < chainSteps.length - 1" class="step-arrow">→</span>
+        <div class="chain-header">
+          <div>
+            <div class="section-title">Fallback Chain</div>
+            <p class="chain-subtitle">
+              <template v-if="selectedJob">
+                Job <span class="chain-job-id">#{{ selectedJob.id.slice(0, 6) }}</span>
+                · {{ selectedJob.source_name ?? selectedJob.url.slice(0, 40) }}
+                <button class="chain-clear" @click="selectedJob = null">✕ deselect</button>
+              </template>
+              <template v-else>Click a row to inspect a specific job — or showing global running state</template>
+            </p>
           </div>
+        </div>
+        <div class="chain-steps">
+          <template v-for="(step, i) in chainSteps" :key="i">
+            <div
+              class="chain-step"
+              :class="{
+                'chain-step-done':    step.status === 'done',
+                'chain-step-current': step.status === 'current',
+                'chain-step-waiting': step.status === 'waiting',
+                'chain-step-failed':  step.status === 'failed',
+              }"
+            >
+              <span class="step-num">{{ i + 1 }}</span>
+              <span class="step-label">{{ step.label }}</span>
+              <span class="step-status">{{ step.status }}</span>
+            </div>
+            <span v-if="i < chainSteps.length - 1" class="step-arrow">→</span>
+          </template>
         </div>
       </div>
 
@@ -84,7 +101,17 @@
 
       <div v-if="error" class="alert alert-error">{{ error }}</div>
 
-      <DataTable :value="jobs" :loading="loading" size="small" stripedRows>
+      <DataTable
+        :value="jobs"
+        :loading="loading"
+        size="small"
+        stripedRows
+        selectionMode="single"
+        :selection="selectedJob"
+        dataKey="id"
+        @row-click="onRowClick"
+        :rowClass="(r) => r.id === selectedJob?.id ? 'row-selected' : ''"
+      >
         <template #empty>
           <div class="empty-state">
             <div class="icon">📭</div>
@@ -235,6 +262,7 @@ const filterStatus = ref('')
 const limit = ref(10)
 const offset = ref(0)
 const page = ref(0)
+const selectedJob = ref<JobRow | null>(null)
 
 const pageSizeOptions = [
   { label: '10 / page', value: 10 },
@@ -258,20 +286,38 @@ const sourceOptions = computed(() => [
 ])
 
 const chainSteps = computed(() => {
-  const strategies = new Set(jobs.value.map(j => j.strategy_used).filter(Boolean))
   const steps = [
-    { label: 'API / Feed', key: 'api', active: false },
-    { label: 'HTML fetch', key: 'html', active: false },
-    { label: 'Rendered DOM', key: 'rendered', active: false },
-    { label: 'Screenshot + AI', key: 'screenshot', active: false },
-    { label: 'Upstream AI', key: 'upstream', active: false },
+    { label: 'API / Feed',           key: 'api' },
+    { label: 'HTML',                 key: 'html' },
+    { label: 'Rendered DOM',         key: 'rendered' },
+    { label: 'Screenshot + AI',      key: 'screenshot' },
   ]
-  const running = jobs.value.find(j => j.status === 'running')
-  if (running?.strategy_used) {
-    steps.forEach(s => { s.active = s.key === running.strategy_used })
+
+  const job = selectedJob.value ?? jobs.value.find(j => j.status === 'running') ?? null
+
+  if (!job) {
+    return steps.map(s => ({ ...s, status: 'ready' }))
   }
-  return steps
+
+  const strategyKey = job.strategy_used ?? null
+  const strategyIdx = strategyKey ? steps.findIndex(s => s.key === strategyKey) : -1
+
+  return steps.map((s, i) => {
+    if (strategyIdx === -1) return { ...s, status: 'ready' }
+    if (i < strategyIdx) return { ...s, status: 'done' }
+    if (i === strategyIdx) {
+      if (job.status === 'running') return { ...s, status: 'current' }
+      if (job.status === 'done') return { ...s, status: 'done' }
+      if (job.status === 'failed' || job.status === 'captcha_blocked') return { ...s, status: 'failed' }
+      return { ...s, status: 'current' }
+    }
+    return { ...s, status: 'waiting' }
+  })
 })
+
+function onRowClick(event: { data: JobRow }) {
+  selectedJob.value = selectedJob.value?.id === event.data.id ? null : event.data
+}
 
 function qualityClass(q: number) {
   if (q >= 0.7) return 'quality-good'
@@ -412,11 +458,23 @@ onMounted(async () => {
 .pstat-danger .pstat-value { color: var(--danger); }
 
 .chain-card { margin-bottom: 20px; }
+.chain-header { margin-bottom: 14px; }
 .chain-subtitle {
   font-size: 12px;
   color: var(--muted);
-  margin-bottom: 16px;
+  margin-top: 4px;
 }
+.chain-job-id { font-family: monospace; color: var(--accent); }
+.chain-clear {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 4px;
+  margin-left: 6px;
+}
+.chain-clear:hover { color: var(--text); }
 .chain-steps {
   display: flex;
   align-items: center;
@@ -426,41 +484,66 @@ onMounted(async () => {
 }
 .chain-step {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 8px 14px;
-  font-size: 13px;
-  color: var(--text2);
+  padding: 10px 16px;
+  min-width: 110px;
   transition: all 0.2s;
 }
-.chain-step-active {
-  background: rgba(0,230,118,.1);
-  border-color: rgba(0,230,118,.4);
-  color: var(--accent);
-  box-shadow: 0 0 12px rgba(0,230,118,.15);
+.chain-step-done {
+  background: rgba(0,230,118,.06);
+  border-color: rgba(0,230,118,.2);
 }
+.chain-step-current {
+  background: var(--surface3);
+  border-color: rgba(0,230,118,.5);
+  box-shadow: 0 0 14px rgba(0,230,118,.15);
+}
+.chain-step-waiting { opacity: 0.5; }
+.chain-step-failed {
+  background: rgba(239,68,68,.06);
+  border-color: rgba(239,68,68,.3);
+}
+.chain-step-failed .step-num { background: rgba(239,68,68,.2); color: var(--danger); }
+.chain-step-failed .step-label { color: var(--danger); }
+.chain-step-failed .step-status { color: var(--danger); }
+
 .step-num {
   font-size: 10px;
   font-weight: 700;
   color: var(--muted);
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  margin-bottom: 2px;
 }
-.chain-step-active .step-num {
-  background: var(--accent);
-  color: #000;
+.chain-step-current .step-num { background: var(--accent); color: #000; }
+.chain-step-done .step-num    { background: rgba(0,230,118,.3); color: var(--accent); }
+
+.step-label { font-size: 12px; font-weight: 500; color: var(--text2); text-align: center; }
+.chain-step-current .step-label { color: var(--text); }
+.chain-step-done .step-label    { color: var(--accent); }
+
+.step-status {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  margin-top: 2px;
 }
-.step-label { font-size: 12px; font-weight: 500; }
-.step-arrow { color: var(--muted); font-size: 12px; margin: 0 4px; }
+.chain-step-current .step-status { color: var(--accent); }
+.chain-step-done .step-status    { color: var(--accent); opacity: 0.7; }
+
+.step-arrow { color: var(--muted); font-size: 14px; margin: 0 2px; padding-bottom: 16px; }
 
 .filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
 .filter-count { font-size: 12px; color: var(--muted); margin-left: auto; }
@@ -474,4 +557,5 @@ onMounted(async () => {
 .quality-bad { color: var(--danger); font-size: 12px; font-weight: 600; }
 .pagination { display: flex; gap: 8px; align-items: center; justify-content: center; margin-top: 12px; color: var(--muted); font-size: 13px; }
 .row-actions { display: flex; gap: 2px; justify-content: flex-end; }
+:deep(.row-selected) { background: rgba(0,230,118,.06) !important; }
 </style>
