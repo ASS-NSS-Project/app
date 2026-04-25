@@ -603,7 +603,7 @@ Frontend / Nginx :8080 (host) → :80 (container)
                                   └── CESNET S3 (screenshots, HTML evidence)
 
 LLM/VLM inference: CERIT-SC AIaaS (OpenAI-compatible API)
-Embeddings: BGE-M3 via FlagEmbedding (runs locally in the worker)
+Embeddings: BGE-M3 via FlagEmbedding (runs locally in the API and worker)
 Production deployment: Kubernetes — see infra/
 ```
 
@@ -640,6 +640,46 @@ Credentials are injected via Vault → ESO → Kubernetes Secret. A random inter
 ### Evidence download URLs
 
 The browser never holds S3 credentials. When the frontend requests an evidence file, the API generates a **presigned URL** — a time-limited URL with a cryptographic signature in the query string. The browser fetches it directly within the expiry window (1 hour) without any credentials. After expiry the URL is useless.
+
+---
+
+## Embedding Model (BGE-M3)
+
+The system uses **BAAI/bge-m3** via [FlagEmbedding](https://github.com/FlagOpen/FlagEmbedding) for both dense and sparse vector generation. The model runs entirely locally — no API key or external service required for embeddings.
+
+| Property | Value |
+|----------|-------|
+| Model | `BAAI/bge-m3` (fp16) |
+| Download size | ~570 MB |
+| RAM when loaded | ~2.3 GB |
+| Used by | API (query embedding) and worker (chunk embedding) |
+
+### First run — model download
+
+On the very first startup the model is downloaded from Hugging Face Hub (~570 MB). Subsequent starts load it from the `hf_cache` Docker volume, which is shared between the `api` and `worker` containers so the download happens only once.
+
+```
+rag_api    | {"event": "model_load_start", ...}
+rag_api    | {"event": "model_load_complete", ...}   ← ready after this line
+```
+
+`HF_HUB_DISABLE_PROGRESS_BARS=1` is set in all environments so the download does not pollute the structured JSON logs with tqdm progress bars.
+
+### Slow startup
+
+Loading BGE-M3 from disk into memory (~2.3 GB) takes **15–45 seconds** depending on disk speed. This is normal. The API does not accept requests until the model is fully loaded and the readiness probe passes (`GET /health` returns 200).
+
+If startup feels stuck, watch the logs:
+
+```bash
+podman compose logs -f api | grep '"event"'
+```
+
+You should see `model_load_start` followed by `model_load_complete`, then `startup`.
+
+### Build time
+
+`sentence-transformers` and `FlagEmbedding` transitively depend on PyTorch. The Dockerfile explicitly installs the **CPU-only** PyTorch wheel before the rest of the requirements, preventing pip from pulling the ~2 GB CUDA variant (which would never be used in the container). The BuildKit pip cache (`--mount=type=cache`) keeps downloaded wheels across rebuilds — changing a single package in `requirements.txt` no longer triggers a full re-download.
 
 ---
 
@@ -749,6 +789,9 @@ docker compose down -v       # Stop and delete all data (fresh start)
 ---
 
 ## Troubleshooting
+
+**API or worker is slow to start (15–45 s after Postgres is ready)**
+→ Normal — BGE-M3 (~2.3 GB) is being loaded from disk into memory. Watch `podman compose logs -f api | grep '"event"'` and wait for `model_load_complete`. On the very first run it also downloads ~570 MB from Hugging Face before loading; subsequent starts use the `hf_cache` volume.
 
 **API stays on "Waiting for Postgres/RabbitMQ"**
 → Give it 30–60 seconds on first run. Databases take time to initialize. The API and worker use a TCP socket poll loop that waits up to 100 s total before failing.
