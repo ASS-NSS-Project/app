@@ -126,6 +126,7 @@ import { ref, computed, onMounted } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
 import { get, post } from '@/api/client'
 import type { IncidentResponse } from '@/api/types'
+import { relTime } from '@/utils/time'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Dialog from 'primevue/dialog'
@@ -166,7 +167,8 @@ const openIncidents = computed(() =>
 const resolvedIncidents = computed(() =>
   incidents.value.filter(i => {
     if (i.status !== 'resolved') return false
-    return new Date(i.created_at) >= sevenDaysAgo.value
+    const t = i.created_at.endsWith('Z') || i.created_at.includes('+') ? i.created_at : i.created_at + 'Z'
+    return new Date(t) >= sevenDaysAgo.value
   })
 )
 
@@ -178,15 +180,6 @@ function truncateUrl(url: string): string {
   } catch {
     return url.length > 48 ? url.slice(0, 48) + '…' : url
   }
-}
-
-function relTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const s = Math.floor(diff / 1000)
-  if (s < 60) return `${s}s ago`
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`
-  return `${Math.floor(s / 86400)}d ago`
 }
 
 async function loadIncidents() {

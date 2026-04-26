@@ -1,17 +1,26 @@
 """
-services/scheduler_service.py - Automatic crawl scheduling and evidence cleanup
+services/scheduler_service.py - Automatic crawl scheduling, cleanup, and sync
 
-Contains two periodic tasks:
+Periodic tasks:
 
 1. _schedule_due_sources (every CHECK_INTERVAL_MINUTES minutes)
    Checks which sources are "due" and schedules their crawl.
-   A source is due when:
-     last_crawled_at IS NULL
-     OR last_crawled_at + crawl_frequency_hours <= now()
+   A source is due when last_crawled_at IS NULL or
+   last_crawled_at + crawl_frequency_hours <= now().
 
 2. _cleanup_expired_evidence (once every CLEANUP_INTERVAL_HOURS hours)
    Deletes evidence records (DB + files in MinIO) whose retention period
    defined on the source (retention_days_evidence) has elapsed.
+
+3. _cleanup_expired_index (once every CLEANUP_INTERVAL_HOURS hours, offset 2 h)
+   Deletes documents and chunks past their index retention period.
+
+4. _refresh_gauges (every CHECK_INTERVAL_MINUTES minutes)
+   Updates Prometheus gauges that reflect current DB state.
+
+5. _sync_keycloak_users (every 10 minutes)
+   Pulls all Keycloak realm users into the local DB so RBAC is accurate
+   before anyone logs in for the first time.
 """
 
 import logging
@@ -23,7 +32,8 @@ from sqlalchemy import func, text
 
 from config import get_settings
 from database import SessionLocal
-from models import Chunk, Document, Evidence, IngestJob, Source, JobStatus
+from models import Chunk, Document, Evidence, Incident, IncidentStatus, IngestJob, Source, JobStatus
+from services.metrics import ACTIVE_SOURCES, OPEN_INCIDENTS, QDRANT_COLLECTION_SIZE
 from services.queue_service import publish_job
 from services.storage_service import StorageService
 
@@ -227,6 +237,31 @@ def _cleanup_expired_index() -> None:
         db.close()
 
 
+def _refresh_gauges() -> None:
+    """Update Prometheus gauges that reflect current DB/Qdrant state."""
+    db = SessionLocal()
+    try:
+        ACTIVE_SOURCES.set(db.query(Source).filter(Source.is_active == True).count())
+        OPEN_INCIDENTS.set(db.query(Incident).filter(Incident.status == IncidentStatus.open).count())
+        QDRANT_COLLECTION_SIZE.set(db.query(Chunk).filter(Chunk.is_embedded == True).count())
+    except Exception:
+        logger.exception("Failed to refresh Prometheus gauges")
+    finally:
+        db.close()
+
+
+async def _sync_keycloak_users() -> None:
+    """Pull all Keycloak realm users into the local DB. No-op if Keycloak is not configured."""
+    from services.keycloak_service import sync_users_from_keycloak
+    db = SessionLocal()
+    try:
+        await sync_users_from_keycloak(db)
+    except Exception:
+        logger.exception("Keycloak user sync task failed")
+    finally:
+        db.close()
+
+
 def create_scheduler() -> AsyncIOScheduler:
     """
     Creates and configures an APScheduler instance.
@@ -268,6 +303,28 @@ def create_scheduler() -> AsyncIOScheduler:
         name="Expired index/document cleanup",
         replace_existing=True,
         next_run_time=datetime.utcnow() + timedelta(hours=2),
+    )
+
+    # Task 4: refresh Prometheus gauges every 5 minutes
+    scheduler.add_job(
+        _refresh_gauges,
+        trigger="interval",
+        minutes=CHECK_INTERVAL_MINUTES,
+        id="gauge_refresh",
+        name="Prometheus gauge refresh",
+        replace_existing=True,
+        next_run_time=datetime.utcnow(),
+    )
+
+    # Task 5: sync Keycloak users every 10 minutes (async job, runs on event loop)
+    # Ensures the app DB mirrors Keycloak before anyone logs in for the first time.
+    scheduler.add_job(
+        _sync_keycloak_users,
+        trigger="interval",
+        minutes=10,
+        id="keycloak_sync",
+        name="Keycloak user sync",
+        replace_existing=True,
     )
 
     return scheduler

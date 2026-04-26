@@ -2,8 +2,20 @@
   <AppLayout>
     <div class="page">
       <div class="page-header">
-        <h2>Users</h2>
-        <p>User accounts and roles</p>
+        <h2>Users &amp; RBAC</h2>
+        <p>User accounts and role assignments</p>
+      </div>
+
+      <!-- Role reference -->
+      <div class="role-grid">
+        <div v-for="r in roleDefinitions" :key="r.name" class="role-card">
+          <div class="role-header">
+            <span class="role-badge" :class="`role-${r.name}`">{{ r.name }}</span>
+          </div>
+          <ul class="role-perms">
+            <li v-for="perm in r.perms" :key="perm">{{ perm }}</li>
+          </ul>
+        </div>
       </div>
 
       <div v-if="error" class="alert alert-error">{{ error }}</div>
@@ -71,6 +83,40 @@ const loading = ref(true)
 const error = ref('')
 const roles = ['admin', 'curator', 'analyst', 'user']
 
+const roleDefinitions = [
+  {
+    name: 'admin',
+    perms: [
+      'Manage users and roles',
+      'Manage sources and pipeline',
+      'View incidents and audit log',
+      'Run experiments',
+      'Query the RAG system',
+    ],
+  },
+  {
+    name: 'curator',
+    perms: [
+      'Manage sources and pipeline',
+      'View incidents and audit log',
+      'Query the RAG system',
+    ],
+  },
+  {
+    name: 'analyst',
+    perms: [
+      'Run and view experiments',
+      'Query the RAG system',
+    ],
+  },
+  {
+    name: 'user',
+    perms: [
+      'Query the RAG system',
+    ],
+  },
+]
+
 const isAdmin = computed(() => auth.user?.role === 'admin')
 const currentUserId = computed(() => auth.user?.id)
 
@@ -106,3 +152,61 @@ async function toggleActive(userId: string, isActive: boolean) {
 
 onMounted(loadUsers)
 </script>
+
+<style scoped>
+.role-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+@media (max-width: 900px) {
+  .role-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.role-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.role-header {
+  margin-bottom: 10px;
+}
+
+.role-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 3px 10px;
+  border-radius: 99px;
+}
+.role-admin   { background: rgba(239,68,68,.15);  color: #f87171; }
+.role-curator { background: rgba(59,130,246,.15); color: #60a5fa; }
+.role-analyst { background: rgba(168,85,247,.15); color: #c084fc; }
+.role-user    { background: rgba(107,114,128,.15); color: var(--muted); }
+
+.role-perms {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.role-perms li {
+  font-size: 12px;
+  color: var(--text2);
+  padding-left: 12px;
+  position: relative;
+}
+.role-perms li::before {
+  content: '·';
+  position: absolute;
+  left: 2px;
+  color: var(--muted);
+}
+</style>

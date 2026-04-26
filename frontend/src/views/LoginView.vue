@@ -35,15 +35,11 @@
           severity="secondary"
           outlined
           class="w-full mb-4 oidc-btn"
-          label="Sign in with SSO"
+          label="Sign in with OIDC"
           @click="loginWithOIDC"
         >
           <template #icon>
-            <svg width="18" height="18" viewBox="0 0 32 32" style="margin-right:8px;flex-shrink:0" xmlns="http://www.w3.org/2000/svg">
-              <polygon points="16,2 28,9 28,23 16,30 4,23 4,9" fill="#4A90D9" />
-              <polygon points="16,7 24,11.5 24,20.5 16,25 8,20.5 8,11.5" fill="#2B5FA3" />
-              <polygon points="16,12 20,14.5 20,19.5 16,22 12,19.5 12,14.5" fill="#6BB8F5" />
-            </svg>
+            <img :src="keycloakLogo" width="20" height="20" style="margin-right:8px;flex-shrink:0" alt="Keycloak" />
           </template>
         </Button>
 
@@ -309,6 +305,7 @@ import Password from 'primevue/password'
 import Message from 'primevue/message'
 import { get } from '@/api/client'
 import type { ProvidersResponse } from '@/api/types'
+import keycloakLogo from '@/assets/keycloak-logo.png'
 
 const auth = useAuthStore()
 const router = useRouter()

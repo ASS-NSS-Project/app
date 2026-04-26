@@ -27,16 +27,25 @@ _PROVIDER_BASE_URLS = {
 
 _PROVIDER_MODELS = {
     "openai": [
-        {"id": "openai:gpt-4o",      "label": "GPT-4o",      "model": "gpt-4o"},
-        {"id": "openai:gpt-4o-mini", "label": "GPT-4o Mini", "model": "gpt-4o-mini"},
+        {"id": "openai:gpt-4.1",      "label": "GPT-4.1",       "model": "gpt-4.1"},
+        {"id": "openai:gpt-4.1-mini", "label": "GPT-4.1 Mini",  "model": "gpt-4.1-mini"},
+        {"id": "openai:gpt-4.1-nano", "label": "GPT-4.1 Nano",  "model": "gpt-4.1-nano"},
+        {"id": "openai:gpt-4o",       "label": "GPT-4o",         "model": "gpt-4o"},
+        {"id": "openai:gpt-4o-mini",  "label": "GPT-4o Mini",    "model": "gpt-4o-mini"},
+        {"id": "openai:o4-mini",      "label": "o4-mini",        "model": "o4-mini"},
+        {"id": "openai:o3",           "label": "o3",             "model": "o3"},
     ],
     "gemini": [
         {"id": "gemini:gemini-2.5-pro",   "label": "Gemini 2.5 Pro",   "model": "gemini-2.5-pro"},
         {"id": "gemini:gemini-2.5-flash", "label": "Gemini 2.5 Flash", "model": "gemini-2.5-flash"},
+        {"id": "gemini:gemini-2.0-flash", "label": "Gemini 2.0 Flash", "model": "gemini-2.0-flash"},
+        {"id": "gemini:gemini-3.0-flash", "label": "Gemini 3.0 Flash", "model": "gemini-3.0-flash"},
+        {"id": "gemini:gemini-3.1-pro",   "label": "Gemini 3.1 Pro",   "model": "gemini-3.1-pro"},
     ],
     "anthropic": [
-        {"id": "anthropic:claude-opus-4-7",   "label": "Claude Opus 4.7",   "model": "claude-opus-4-7"},
-        {"id": "anthropic:claude-sonnet-4-6", "label": "Claude Sonnet 4.6", "model": "claude-sonnet-4-6"},
+        {"id": "anthropic:claude-opus-4-7",        "label": "Claude Opus 4.7",   "model": "claude-opus-4-7"},
+        {"id": "anthropic:claude-sonnet-4-6",      "label": "Claude Sonnet 4.6", "model": "claude-sonnet-4-6"},
+        {"id": "anthropic:claude-haiku-4-5-20251001", "label": "Claude Haiku 4.5", "model": "claude-haiku-4-5-20251001"},
     ],
 }
 

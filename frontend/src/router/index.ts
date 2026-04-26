@@ -19,15 +19,15 @@ const router = createRouter({
     { path: '/', redirect: '/dashboard' },
     { path: '/login', component: LoginView, meta: { public: true } },
     { path: '/dashboard', component: DashboardView },
-    { path: '/sources', component: SourcesView },
+    { path: '/sources', component: SourcesView, meta: { roles: ['admin', 'curator'] } },
     { path: '/query', component: QueryView },
-    { path: '/pipeline', component: PipelineView },
+    { path: '/pipeline', component: PipelineView, meta: { roles: ['admin', 'curator'] } },
     { path: '/jobs', redirect: '/pipeline' },
-    { path: '/incidents', component: IncidentsView },
-    { path: '/audit', component: AuditView },
-    { path: '/users', component: UsersView },
+    { path: '/incidents', component: IncidentsView, meta: { roles: ['admin', 'curator'] } },
+    { path: '/audit', component: AuditView, meta: { roles: ['admin', 'curator'] } },
+    { path: '/users', component: UsersView, meta: { roles: ['admin', 'curator'] } },
     { path: '/knowledge-base', component: KnowledgeBaseView },
-    { path: '/experiments', component: ExperimentsView },
+    { path: '/experiments', component: ExperimentsView, meta: { roles: ['admin', 'analyst'] } },
   ],
 })
 
@@ -37,6 +37,10 @@ router.beforeEach((to) => {
     return '/login'
   }
   if (to.path === '/login' && auth.isAuthenticated()) {
+    return '/dashboard'
+  }
+  const roles = to.meta.roles as string[] | undefined
+  if (roles && auth.user && !roles.includes(auth.user.role)) {
     return '/dashboard'
   }
 })

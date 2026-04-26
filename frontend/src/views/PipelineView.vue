@@ -227,6 +227,7 @@ import StatusBadge from '@/components/StatusBadge.vue'
 import { get, post, del } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import type { SourceResponse, PipelineStatsResponse } from '@/api/types'
+import { relTime } from '@/utils/time'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Button from 'primevue/button'
@@ -325,19 +326,11 @@ function qualityClass(q: number) {
   return 'quality-bad'
 }
 
-function relTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const s = Math.floor(diff / 1000)
-  if (s < 60) return `${s}s ago`
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`
-  return `${Math.floor(s / 86400)}d ago`
-}
-
 function jobDuration(job: JobRow): string {
   if (!job.started_at) return '—'
-  const end = job.finished_at ? new Date(job.finished_at) : new Date()
-  const ms = end.getTime() - new Date(job.started_at).getTime()
+  const toDate = (iso: string) => new Date(iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z')
+  const end = job.finished_at ? toDate(job.finished_at) : new Date()
+  const ms = end.getTime() - toDate(job.started_at).getTime()
   if (ms < 1000) return `${ms}ms`
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
   return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`

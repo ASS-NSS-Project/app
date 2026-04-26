@@ -76,7 +76,7 @@
         </Column>
         <Column field="created_at" header="Created" style="width:120px">
           <template #body="{ data }">
-            <span style="color:var(--muted);font-size:11px">{{ data.created_at.slice(0,16).replace('T',' ') }}</span>
+            <span style="color:var(--muted);font-size:11px">{{ fmtDatetime(data.created_at) }}</span>
           </template>
         </Column>
         <Column header="Actions" style="width:150px">
@@ -120,11 +120,11 @@
         <InputText v-model="form.description" style="width:100%" placeholder="Short notes about this run" />
       </div>
       <div class="field-row">
-        <div class="field field-narrow">
+        <div class="field field-half">
           <label>Top K</label>
-          <InputNumber v-model="form.top_k" :min="1" :max="50" style="width:80px" />
+          <InputNumber v-model="form.top_k" :min="1" :max="50" style="width:100%" />
         </div>
-        <div class="field" style="flex:1;min-width:0">
+        <div class="field field-half">
           <label>Model <span class="opt-label">(optional — for tracking only)</span></label>
           <select v-model="form.model_name" class="model-select">
             <option value="">Default (system setting)</option>
@@ -228,6 +228,7 @@ import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
 import { get, post, del } from '@/api/client'
 import type { ExperimentResponse, ExperimentCreate, ModelInfo } from '@/api/types'
+import { fmtDatetime } from '@/utils/time'
 
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -444,7 +445,7 @@ get<ModelInfo[]>('/query/models').then(m => { availableModels.value = m }).catch
 .field label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
 .opt-label { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); font-size: 10px; }
 .field-row { display: flex; gap: 14px; align-items: flex-start; }
-.field-narrow { flex: 0 0 auto; }
+.field-half { flex: 1; min-width: 0; }
 .model-select {
   background: var(--surface2);
   border: 1px solid var(--border2);

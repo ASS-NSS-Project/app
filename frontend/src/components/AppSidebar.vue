@@ -9,10 +9,10 @@
       <div class="nav-section">Overview</div>
       <router-link to="/dashboard" class="nav-item" active-class="active">Dashboard</router-link>
 
-      <div class="nav-section">Ingest</div>
-      <router-link to="/sources" class="nav-item" active-class="active">Sources</router-link>
-      <router-link to="/pipeline" class="nav-item" active-class="active">Pipeline</router-link>
-      <router-link to="/incidents" class="nav-item" active-class="active">
+      <div v-if="canManageSources" class="nav-section">Ingest</div>
+      <router-link v-if="canManageSources" to="/sources" class="nav-item" active-class="active">Sources</router-link>
+      <router-link v-if="canManageSources" to="/pipeline" class="nav-item" active-class="active">Pipeline</router-link>
+      <router-link v-if="canManageSources" to="/incidents" class="nav-item" active-class="active">
         Incidents
         <span v-if="incidentCount > 0" class="nav-badge badge-danger">{{ incidentCount }}</span>
       </router-link>
@@ -32,13 +32,8 @@
         <span v-if="experimentCount > 0" class="nav-badge badge-amber">{{ experimentCount }}</span>
       </router-link>
 
-      <a href="https://grafana.nss.jkzl.eu" target="_blank" class="nav-item nav-external">
-        Grafana
-        <span class="ext-icon">↗</span>
-      </a>
-
-      <div class="nav-section">Admin</div>
-      <router-link to="/audit" class="nav-item" active-class="active">Audit Log</router-link>
+      <div v-if="canSeeAudit || canSeeUsers" class="nav-section">Admin</div>
+      <router-link v-if="canSeeAudit" to="/audit" class="nav-item" active-class="active">Audit Log</router-link>
       <router-link
         v-if="canSeeUsers"
         to="/users"
@@ -77,6 +72,12 @@ const canSeeUsers = computed(() =>
 )
 const canSeeExperiments = computed(() =>
   auth.user?.role === 'admin' || auth.user?.role === 'analyst'
+)
+const canManageSources = computed(() =>
+  auth.user?.role === 'admin' || auth.user?.role === 'curator'
+)
+const canSeeAudit = computed(() =>
+  auth.user?.role === 'admin' || auth.user?.role === 'curator'
 )
 
 const systemOnline = ref(false)

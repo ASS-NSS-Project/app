@@ -98,7 +98,7 @@
 
         <Column field="created_at" header="Created" style="width:130px">
           <template #body="{ data }">
-            <span class="time-cell">{{ data.created_at.slice(0, 16).replace('T', ' ') }}</span>
+            <span class="time-cell">{{ fmtDatetime(data.created_at) }}</span>
           </template>
         </Column>
 
@@ -151,6 +151,7 @@ import Column from 'primevue/column'
 import Button from 'primevue/button'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
+import { fmtDatetime } from '@/utils/time'
 
 const auth = useAuthStore()
 const canDelete = computed(() => auth.user?.role === 'admin')

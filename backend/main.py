@@ -19,6 +19,7 @@ import routers.documents as documents_router
 import routers.experiments as experiments_router
 from services.auth_service import ensure_admin_exists, ensure_default_sources
 from services.embedding_service import get_embedding_model
+from services.keycloak_service import sync_users_from_keycloak
 from services.logging_config import setup_logging
 from services.rag_service import _get_embedder
 from services.scheduler_service import create_scheduler
@@ -88,6 +89,14 @@ async def lifespan(app: FastAPI):
         if stuck:
             db.commit()
             logger.info("Reset %d stuck experiment(s) to failed", len(stuck))
+
+        # Initial Keycloak user sync — populates local DB from Keycloak before first logins
+        result = await sync_users_from_keycloak(db)
+        if result["created"] or result["updated"]:
+            logger.info(
+                "Startup Keycloak sync: created=%d updated=%d",
+                result["created"], result["updated"],
+            )
     finally:
         db.close()
 

@@ -85,9 +85,9 @@ class Settings(BaseSettings):
 
     # ── Optional external LLM providers ──────────
     # Set these to enable the corresponding models in the query UI.
-    openai_api_key: str = ""     # enables GPT-4o, GPT-4o Mini
-    gemini_api_key: str = ""     # enables Gemini 2.5 Pro, Gemini 2.5 Flash
-    anthropic_api_key: str = ""  # enables Claude Opus 4.7, Sonnet 4.6
+    openai_api_key: str = ""     # enables GPT-4.1, GPT-4o, o4-mini, o3 family
+    gemini_api_key: str = ""     # enables Gemini 2.5, 3.0, 3.1 family
+    anthropic_api_key: str = ""  # enables Claude Opus 4.7, Sonnet 4.6, Haiku 4.5
 
     # ── Embeddings (local FlagEmbedding / BGE-M3) ─
     embedding_model: str = "BAAI/bge-m3"

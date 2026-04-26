@@ -2,8 +2,13 @@
   <AppLayout>
     <div class="page">
       <div class="page-header">
-        <h2>Audit Log</h2>
-        <p>All system actions with timestamps and user attribution</p>
+        <div>
+          <h2>Audit Log</h2>
+          <p>All system actions with timestamps and user attribution</p>
+        </div>
+        <a href="https://grafana.nss.jkzl.eu/d/rag-logs" target="_blank" class="grafana-link">
+          Logs in Grafana ↗
+        </a>
       </div>
 
       <div v-if="error" class="alert alert-error">{{ error }}</div>
@@ -18,7 +23,7 @@
         <Column field="created_at" header="Time">
           <template #body="{ data }">
             <span style="color: var(--muted); font-size:11px; white-space:nowrap">
-              {{ data.created_at.slice(0, 19).replace('T', ' ') }}
+              {{ fmtDatetime(data.created_at) }}
             </span>
           </template>
         </Column>
@@ -57,6 +62,7 @@ import type { AuditLogEntry } from '@/api/types'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Tag from 'primevue/tag'
+import { fmtDatetime } from '@/utils/time'
 
 const entries = ref<AuditLogEntry[]>([])
 const loading = ref(true)
@@ -72,3 +78,18 @@ onMounted(async () => {
   }
 })
 </script>
+
+<style scoped>
+.grafana-link {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--warning);
+  text-decoration: none;
+  padding: 4px 10px;
+  border: 1px solid rgba(245,158,11,.35);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.grafana-link:hover { background: rgba(245,158,11,.1); }
+</style>

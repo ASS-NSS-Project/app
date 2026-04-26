@@ -65,9 +65,9 @@ AIAAS_LLM_MODEL=<from /v1/models, e.g. llama-3.3-70b-instruct>
 AIAAS_VLM_MODEL=<from /v1/models, e.g. qwen2.5-vl-7b-instruct>
 
 # Optional external LLM providers — set any to unlock those models in the query UI
-# OPENAI_API_KEY=sk-...        # enables GPT-4o, GPT-4o Mini
-# GEMINI_API_KEY=AIza...       # enables Gemini 2.5 Pro, Gemini 2.5 Flash
-# ANTHROPIC_API_KEY=sk-ant-... # enables Claude Opus 4.7, Sonnet 4.6 (direct Anthropic API)
+# OPENAI_API_KEY=sk-...        # enables GPT-4.1, GPT-4.1-mini, GPT-4.1-nano, GPT-4o, o4-mini, o3
+# GEMINI_API_KEY=AIza...       # enables Gemini 2.5 Pro/Flash, 2.0 Flash, 3.0 Flash, 3.1 Pro
+# ANTHROPIC_API_KEY=sk-ant-... # enables Claude Opus 4.7, Sonnet 4.6, Haiku 4.5 (direct Anthropic API)
 # OPENROUTER_API_KEY=sk-or-... # enables Claude Opus 4.7, Sonnet 4.6 via OpenRouter
 
 # JWT signing secret
@@ -120,6 +120,18 @@ Authorization: Bearer <token>
 
 Obtain a token via `POST /auth/login`. Roles control access: **admin** > **curator** > **analyst** > **user**.
 
+**Frontend navigation visibility by role:**
+
+| Section | admin | curator | analyst | user |
+|---------|-------|---------|---------|------|
+| Dashboard, Query, Knowledge Base | ✓ | ✓ | ✓ | ✓ |
+| Sources, Pipeline, Incidents | ✓ | ✓ | — | — |
+| Experiments | ✓ | — | ✓ | — |
+| Audit Log, Users & RBAC | ✓ | ✓ | — | — |
+| Grafana (external link) | ✓ | ✓ | ✓ | ✓ |
+
+The router also enforces these roles server-side (redirects to `/dashboard` if role is insufficient).
+
 Enable Swagger UI by setting `API_DOCS=true` in `.env`, then visit `/docs`.
 
 ---
@@ -154,6 +166,12 @@ Redirects to Google's OAuth2 consent page. No body required.
 
 #### `GET /auth/google/callback`
 OAuth2 callback — handled automatically by Google after user consent. Redirects to the frontend with the JWT token as a query parameter.
+
+#### `GET /auth/keycloak`
+Redirects to the Keycloak OIDC authorization endpoint. Shown as the **"Sign in with OIDC"** button on the login page when `KEYCLOAK_URL` is configured. The button uses the Keycloak logo (`src/assets/keycloak-logo.png`).
+
+#### `GET /auth/keycloak/callback`
+OIDC callback — handled automatically by Keycloak after user consent. Redirects to the frontend with the JWT token as a query parameter.
 
 ---
 
@@ -253,6 +271,8 @@ Lists all users.
 
 #### `PATCH /auth/users/{user_id}` *(admin only)*
 Update a user's role or active status. When the target user authenticates via Keycloak SSO, a role change is also synced to Keycloak group membership (via `rag-rbac-sa` service account) so the new role persists across future SSO logins. If Keycloak is unreachable or not configured, the sync is skipped with a warning — the local DB change is always committed.
+
+> **Keycloak RBAC proactive sync:** At startup and every 10 minutes, the API pulls all realm users from Keycloak via the Admin REST API and upserts them into the local DB (matched by `oauth_id`, fallback by email). This means all Keycloak users and their current roles are visible in Users & RBAC before anyone logs in for the first time. Requires `KEYCLOAK_ADMIN_CLIENT_ID` and `KEYCLOAK_ADMIN_CLIENT_SECRET` to be set.
 
 **Request** (`application/json`, all fields optional):
 ```json
@@ -423,9 +443,9 @@ Returns the list of available LLM models. AIaaS models are always present; exter
 | Provider | Env var | Models exposed |
 |----------|---------|----------------|
 | AIaaS — e-INFRA | always on | Qwen3.5 122B, DeepSeek V3.2, GPT-OSS 120B |
-| OpenAI | `OPENAI_API_KEY` | GPT-4o, GPT-4o Mini |
-| Gemini | `GEMINI_API_KEY` | Gemini 2.5 Pro, Gemini 2.5 Flash |
-| Anthropic (direct) | `ANTHROPIC_API_KEY` | Claude Opus 4.7, Claude Sonnet 4.6 |
+| OpenAI | `OPENAI_API_KEY` | GPT-4.1, GPT-4.1 Mini, GPT-4.1 Nano, GPT-4o, GPT-4o Mini, o4-mini, o3 |
+| Gemini | `GEMINI_API_KEY` | Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.0 Flash, Gemini 3.0 Flash, Gemini 3.1 Pro |
+| Anthropic (direct) | `ANTHROPIC_API_KEY` | Claude Opus 4.7, Claude Sonnet 4.6, Claude Haiku 4.5 |
 | OpenRouter | `OPENROUTER_API_KEY` | Claude Opus 4.7, Claude Sonnet 4.6 (via OpenRouter) |
 
 Each entry in the response has `id` (e.g. `"anthropic:claude-opus-4-7"`), `label`, `model` (raw model name), and `group`. The frontend uses this list to populate the model selector — no API keys are ever sent to or stored by the frontend.
@@ -649,8 +669,24 @@ No authentication required. Returns `200` if the API is running.
 ```
 
 #### `GET /metrics`
-Prometheus metrics endpoint (no authentication). Scraped by PodMonitor.
-The worker also exposes Prometheus metrics on port `9090` (configurable via `WORKER_METRICS_PORT`).
+Prometheus metrics endpoint (no authentication). Scraped by the `rag-api` ServiceMonitor (`infra/argocd/apps/rag-system/config/rag-api-ServiceMonitor.yaml`) every 30 s.
+
+Exported metrics:
+
+| Metric | Type | Labels |
+|--------|------|--------|
+| `rag_ingest_jobs_total` | Counter | `status`, `strategy` |
+| `rag_ingest_duration_seconds` | Histogram | `strategy` |
+| `rag_query_requests_total` | Counter | `mode` |
+| `rag_query_latency_seconds` | Histogram | `mode` |
+| `rag_chunks_embedded_total` | Counter | — |
+| `rag_embedding_duration_seconds` | Histogram | — |
+| `rag_captcha_incidents_total` | Counter | `strategy` |
+| `rag_active_sources` | Gauge | — |
+| `rag_open_incidents` | Gauge | — |
+| `rag_qdrant_collection_size` | Gauge | — |
+
+The three Gauges (`rag_active_sources`, `rag_open_incidents`, `rag_qdrant_collection_size`) are refreshed every 5 minutes by the APScheduler `gauge_refresh` job in `scheduler_service.py`.
 
 ---
 
@@ -855,6 +891,8 @@ Event catalogue:
 | `captcha_detected` | worker | CAPTCHA found during ingest — also fires `rag_app=incident` Loki label |
 | `keycloak_role_synced` | api | Role change synced to Keycloak successfully |
 | `keycloak_sync_failed` | api | Keycloak unreachable or not configured — role saved locally, sync skipped |
+| `keycloak_user_sync` | api | Proactive user sync complete (created/updated/skipped counts) |
+| `keycloak_sync_skipped` | api | Keycloak unreachable during user sync — will retry on next tick |
 | `document_created` | worker | Document + chunks saved to DB |
 | `embedding_completed` | worker | Chunks upserted into Qdrant |
 | `embedding_failed` | worker | Qdrant upsert failed |
@@ -945,8 +983,8 @@ rag_system/
 │       ├── storage_service.py    # CESNET S3 file storage
 │       ├── captcha_service.py    # CAPTCHA detection + incident creation
 │       ├── auth_service.py       # JWT + bcrypt password hashing
-│       ├── keycloak_service.py   # Keycloak Admin REST API — syncs role changes to Keycloak
-│       ├── scheduler_service.py  # APScheduler: periodic crawls + evidence/index cleanup
+│       ├── keycloak_service.py   # Keycloak Admin REST API — assign_role() + sync_users_from_keycloak()
+│       ├── scheduler_service.py  # APScheduler: periodic crawls, evidence/index cleanup, Keycloak sync
 │       ├── logging_config.py     # Structured JSON logging (python-json-logger)
 │       └── queue_service.py      # RabbitMQ job publisher
 └── frontend/                   # Vue 3 + TypeScript SPA
@@ -994,6 +1032,27 @@ The production deployment lives in [ASS-NSS-Project/infra](https://github.com/AS
 |---------|----------------|
 | Main UI + API | <https://rag.nss.jkzl.eu> |
 | RabbitMQ Management | <https://rabbitmq-mgmt.nss.jkzl.eu> |
+
+The API is accessible via the `/api` prefix on `rag.nss.jkzl.eu` — Traefik rewrites `/api/*` → `/*` before forwarding to the backend. This lets cURL clients target a stable public endpoint without needing to know the internal path layout.
+
+**cURL example (production):**
+```bash
+# Obtain a JWT token
+TOKEN=$(curl -s -X POST https://rag.nss.jkzl.eu/api/auth/login \
+  -d "username=user@example.com&password=YOUR_PASSWORD" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+# Query the RAG system
+curl -s -X POST https://rag.nss.jkzl.eu/api/query/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What are the latest findings?", "top_k": 5}' \
+  | python3 -m json.tool
+
+# List available models
+curl -s https://rag.nss.jkzl.eu/api/query/models \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+```
 
 ArgoCD sync waves:
 
