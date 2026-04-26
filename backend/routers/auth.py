@@ -16,6 +16,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional
 
+from config import get_settings
 from database import get_db
 
 logger = logging.getLogger(__name__)
@@ -109,6 +110,15 @@ def require_role(*roles: UserRole):
 
 # ── Routes ───────────────────────────────────────────────────────
 
+@router.get("/providers")
+def get_providers():
+    """Public endpoint — tells the frontend which SSO providers are configured."""
+    settings = get_settings()
+    return {
+        "keycloak": bool(settings.keycloak_client_id and settings.keycloak_url),
+    }
+
+
 @router.post("/login", response_model=LoginResponse)
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -198,15 +208,15 @@ def get_stats(
         k.value: round(v / strategy_total * 100) for k, v in strategy_counts.items()
     }
 
-    seven_days_ago = datetime.utcnow() - timedelta(days=7)
-    daily_jobs_raw = (
-        db.query(func.date(IngestJob.created_at), func.count(IngestJob.id))
-        .filter(IngestJob.created_at >= seven_days_ago)
-        .group_by(func.date(IngestJob.created_at))
-        .order_by(func.date(IngestJob.created_at))
+    twenty_four_hours_ago = datetime.utcnow() - timedelta(hours=24)
+    hourly_jobs_raw = (
+        db.query(func.date_trunc('hour', IngestJob.created_at), func.count(IngestJob.id))
+        .filter(IngestJob.created_at >= twenty_four_hours_ago)
+        .group_by(func.date_trunc('hour', IngestJob.created_at))
+        .order_by(func.date_trunc('hour', IngestJob.created_at))
         .all()
     )
-    activity_7d = [{"date": str(d), "count": c} for d, c in daily_jobs_raw]
+    activity_24h = [{"hour": d.strftime('%H:00'), "count": c} for d, c in hourly_jobs_raw]
 
     return {
         "sources":               db.query(Source).count(),
@@ -214,7 +224,7 @@ def get_stats(
         "incidents":             db.query(Incident).filter(Incident.status == IncidentStatus.open).count(),
         "documents":             db.query(Document).count(),
         "strategy_distribution": strategy_distribution,
-        "activity_7d":           activity_7d,
+        "activity_24h":          activity_24h,
     }
 
 

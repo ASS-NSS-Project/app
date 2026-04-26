@@ -1,14 +1,42 @@
 import logging
 import math
+import re
 import time
 from datetime import datetime
 
+import httpx
 from sqlalchemy.orm import Session
 
+from config import get_settings
 from models import Experiment, ExperimentQuery, ExperimentStatus
 from services.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
+
+
+def _generate_answer(question: str, retrieved_texts: list[str]) -> str | None:
+    """Synchronous LLM call to produce a RAG answer for experiment evaluation."""
+    settings = get_settings()
+    if not settings.aiaas_base_url or not settings.aiaas_api_key:
+        return None
+    context = "\n\n---\n\n".join(retrieved_texts[:5])
+    messages = [
+        {"role": "system", "content": "Answer based only on the provided context. Be concise."},
+        {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"},
+    ]
+    try:
+        resp = httpx.post(
+            f"{settings.aiaas_base_url.rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {settings.aiaas_api_key}"},
+            json={"model": settings.aiaas_llm_model, "messages": messages, "max_tokens": 512},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
+        return re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+    except Exception as exc:
+        logger.warning("LLM answer generation skipped in experiment: %s", exc)
+        return None
 
 
 def _recall_at_k(retrieved: list[str], keywords: list[str]) -> float:
@@ -52,8 +80,6 @@ class ExperimentService:
         experiment = self.db.query(Experiment).filter(Experiment.id == experiment_id).first()
         if not experiment:
             raise ValueError(f"Experiment {experiment_id} not found")
-        if experiment.status == ExperimentStatus.running:
-            raise ValueError("Experiment is already running")
 
         logger.info("Experiment started", extra={
             "event": "experiment_started",
@@ -126,6 +152,7 @@ class ExperimentService:
             eq.ndcg = n
             eq.latency_ms = latency_ms
             eq.retrieved_chunk_ids = retrieved_ids
+            eq.generated_answer = _generate_answer(eq.query_text, retrieved_texts)
 
             recall_scores.append(r)
             mrr_scores.append(m)

@@ -26,6 +26,7 @@ class ExperimentCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = None
     top_k: int = Field(5, ge=1, le=50)
+    model_name: Optional[str] = None
     queries: list[ExperimentQueryIn] = Field(..., min_length=1)
 
 
@@ -38,6 +39,7 @@ class ExperimentQueryResponse(BaseModel):
     ndcg: Optional[float]
     latency_ms: Optional[float]
     retrieved_chunk_ids: Optional[list[str]]
+    generated_answer: Optional[str]
 
     class Config:
         from_attributes = True
@@ -49,6 +51,7 @@ class ExperimentResponse(BaseModel):
     description: Optional[str]
     status: str
     top_k: int
+    model_name: Optional[str]
     recall_at_k: Optional[float]
     mrr: Optional[float]
     ndcg: Optional[float]
@@ -81,6 +84,7 @@ def create_experiment(
         description=body.description,
         created_by=current_user.id,
         top_k=body.top_k,
+        model_name=body.model_name,
         status=ExperimentStatus.pending,
     )
     db.add(experiment)

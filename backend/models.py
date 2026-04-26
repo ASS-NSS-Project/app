@@ -360,6 +360,7 @@ class Experiment(Base):
     avg_latency_ms = Column(Float, nullable=True)
 
     top_k = Column(Integer, default=5)
+    model_name = Column(String, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     finished_at = Column(DateTime, nullable=True)
@@ -382,5 +383,6 @@ class ExperimentQuery(Base):
     ndcg = Column(Float, nullable=True)
     latency_ms = Column(Float, nullable=True)
     retrieved_chunk_ids = Column(JSON, nullable=True)
+    generated_answer = Column(Text, nullable=True)
 
     experiment = relationship("Experiment", back_populates="queries")

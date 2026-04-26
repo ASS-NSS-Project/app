@@ -1,3 +1,7 @@
+export interface ProvidersResponse {
+  keycloak: boolean
+}
+
 export interface LoginResponse {
   access_token: string
   token_type: string
@@ -22,7 +26,7 @@ export interface StatsResponse {
   incidents: number
   documents: number
   strategy_distribution: Record<string, number>
-  activity_7d: { date: string; count: number }[]
+  activity_24h: { hour: string; count: number }[]
 }
 
 export interface PipelineStatsResponse {
@@ -74,12 +78,20 @@ export interface JobResponse {
   source_base_url?: string | null
 }
 
+export interface ModelInfo {
+  id: string
+  label: string
+  model: string
+  group: string
+}
+
 export interface QueryRequest {
   question: string
   mode: 'rag' | 'no_rag'
   top_k: number
   strict_grounding: boolean
   source_id?: string | null
+  model_id?: string | null
   upstream_base_url?: string | null
   upstream_api_key?: string | null
   upstream_model?: string | null
@@ -160,6 +172,7 @@ export interface ExperimentCreate {
   name: string
   description?: string
   top_k: number
+  model_name?: string | null
   queries: ExperimentQueryIn[]
 }
 
@@ -172,6 +185,7 @@ export interface ExperimentQueryResponse {
   ndcg: number | null
   latency_ms: number | null
   retrieved_chunk_ids: string[] | null
+  generated_answer: string | null
 }
 
 export interface ExperimentResponse {
@@ -180,6 +194,7 @@ export interface ExperimentResponse {
   description: string | null
   status: string
   top_k: number
+  model_name: string | null
   recall_at_k: number | null
   mrr: number | null
   ndcg: number | null

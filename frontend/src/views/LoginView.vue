@@ -31,6 +31,7 @@
         <Message v-if="error" severity="error" class="mb-4">{{ error }}</Message>
 
         <Button
+          v-if="keycloakEnabled"
           severity="secondary"
           outlined
           class="w-full mb-4 oidc-btn"
@@ -46,7 +47,7 @@
           </template>
         </Button>
 
-        <div class="divider-row">
+        <div v-if="keycloakEnabled" class="divider-row">
           <span class="divider-line" />
           <span class="divider-text">or</span>
           <span class="divider-line" />
@@ -299,13 +300,15 @@
 </style>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Password from 'primevue/password'
 import Message from 'primevue/message'
+import { get } from '@/api/client'
+import type { ProvidersResponse } from '@/api/types'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -315,10 +318,18 @@ const password = ref('')
 const error = ref('')
 const loading = ref(false)
 const rememberMe = ref(false)
+const keycloakEnabled = ref(false)
 
 function loginWithOIDC() {
   window.location.href = '/auth/keycloak'
 }
+
+onMounted(async () => {
+  try {
+    const providers = await get<ProvidersResponse>('/auth/providers')
+    keycloakEnabled.value = providers.keycloak
+  } catch { /* if endpoint unreachable, hide SSO button */ }
+})
 
 async function doLogin() {
   if (!username.value && !password.value) {

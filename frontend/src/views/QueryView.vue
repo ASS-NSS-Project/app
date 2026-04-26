@@ -35,44 +35,19 @@
         <div class="model-select-wrap">
           <label class="model-label">MODEL</label>
           <select v-model="selectedModelId" class="model-select">
-            <optgroup label="AIaaS — e-INFRA (no key required)">
-              <option value="aiaas:qwen3.5-122b">Qwen3.5 122B · 256k</option>
-              <option value="aiaas:deepseek-v3.2-thinking">DeepSeek V3.2 · 160k</option>
-              <option value="aiaas:gpt-oss-120b">GPT-OSS 120B · 128k</option>
-            </optgroup>
-            <optgroup label="OpenAI (API key required)">
-              <option value="openai:gpt-4o">GPT-4o</option>
-              <option value="openai:gpt-4o-mini">GPT-4o Mini</option>
-              <option value="openai:o3-mini">o3-mini</option>
-            </optgroup>
-            <optgroup label="Gemini (API key required)">
-              <option value="gemini:gemini-2.5-pro">Gemini 2.5 Pro</option>
-              <option value="gemini:gemini-2.0-flash">Gemini 2.0 Flash</option>
-            </optgroup>
-            <optgroup label="Claude via OpenRouter (API key required)">
-              <option value="openrouter:anthropic/claude-opus-4-7">Claude Opus 4.7</option>
-              <option value="openrouter:anthropic/claude-sonnet-4-6">Claude Sonnet 4.6</option>
-            </optgroup>
+            <template v-for="[group, models] in modelGroups" :key="group">
+              <optgroup :label="group">
+                <option v-for="m in models" :key="m.id" :value="m.id">{{ m.label }}</option>
+              </optgroup>
+            </template>
             <optgroup label="Custom">
               <option value="custom:">Custom endpoint…</option>
             </optgroup>
           </select>
         </div>
 
-        <!-- API key field — shown for all non-AIaaS presets -->
-        <div v-if="activePreset && activePreset.requiresKey && !activePreset.isCustom" class="model-key-wrap">
-          <label class="model-label">{{ activePreset.group.toUpperCase() }} API KEY</label>
-          <input
-            v-model="providerApiKey"
-            type="password"
-            class="model-key-input"
-            :placeholder="activePreset.keyPlaceholder"
-            autocomplete="off"
-          />
-        </div>
-
         <!-- Custom endpoint fields -->
-        <template v-if="activePreset?.isCustom">
+        <template v-if="isCustom">
           <div class="model-key-wrap">
             <label class="model-label">BASE URL</label>
             <input v-model="customBaseUrl" class="model-key-input mono" placeholder="https://api.openai.com/v1" spellcheck="false" />
@@ -98,7 +73,7 @@
         <span class="ctx-sep">·</span>
         <span class="ctx-label">Strict: {{ store.strictGrounding ? 'on' : 'off' }}</span>
         <span class="ctx-sep">·</span>
-        <span class="ctx-label">{{ activePreset?.label ?? selectedModelId }}</span>
+        <span class="ctx-label">{{ activePreset?.label ?? (isCustom ? 'Custom endpoint' : selectedModelId) }}</span>
       </div>
 
       <!-- Loading state -->
@@ -178,38 +153,11 @@
 import { ref, computed, onMounted } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
 import { get, post } from '@/api/client'
-import type { SourceResponse, QueryResponse } from '@/api/types'
+import type { SourceResponse, QueryResponse, ModelInfo } from '@/api/types'
 import { useQueryStore } from '@/stores/query'
 import Button from 'primevue/button'
 import Textarea from 'primevue/textarea'
 import Tag from 'primevue/tag'
-
-// ─── Model presets ────────────────────────────────────────────────────────────
-
-interface ModelPreset {
-  id: string
-  group: string
-  label: string
-  model: string
-  baseUrl: string | null   // null = use AIAAS endpoint (no key needed)
-  requiresKey: boolean
-  keyPlaceholder?: string
-  isCustom?: boolean
-}
-
-const MODEL_PRESETS: ModelPreset[] = [
-  { id: 'aiaas:qwen3.5-122b',              group: 'AIaaS',   label: 'Qwen3.5 122B · 256k',    model: 'qwen3.5-122b',                   baseUrl: null,                                                        requiresKey: false },
-  { id: 'aiaas:deepseek-v3.2-thinking',    group: 'AIaaS',   label: 'DeepSeek V3.2 · 160k',   model: 'deepseek-v3.2-thinking',         baseUrl: null,                                                        requiresKey: false },
-  { id: 'aiaas:gpt-oss-120b',              group: 'AIaaS',   label: 'GPT-OSS 120B · 128k',    model: 'gpt-oss-120b',                   baseUrl: null,                                                        requiresKey: false },
-  { id: 'openai:gpt-4o',                   group: 'OpenAI',  label: 'GPT-4o',                  model: 'gpt-4o',                         baseUrl: 'https://api.openai.com/v1',                                 requiresKey: true, keyPlaceholder: 'sk-...' },
-  { id: 'openai:gpt-4o-mini',              group: 'OpenAI',  label: 'GPT-4o Mini',             model: 'gpt-4o-mini',                    baseUrl: 'https://api.openai.com/v1',                                 requiresKey: true, keyPlaceholder: 'sk-...' },
-  { id: 'openai:o3-mini',                  group: 'OpenAI',  label: 'o3-mini',                 model: 'o3-mini',                        baseUrl: 'https://api.openai.com/v1',                                 requiresKey: true, keyPlaceholder: 'sk-...' },
-  { id: 'gemini:gemini-2.5-pro',           group: 'Gemini',  label: 'Gemini 2.5 Pro',          model: 'gemini-2.5-pro',                 baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/', requiresKey: true, keyPlaceholder: 'AIza...' },
-  { id: 'gemini:gemini-2.0-flash',         group: 'Gemini',  label: 'Gemini 2.0 Flash',        model: 'gemini-2.0-flash',               baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/', requiresKey: true, keyPlaceholder: 'AIza...' },
-  { id: 'openrouter:anthropic/claude-opus-4-7',    group: 'Claude',  label: 'Claude Opus 4.7',         model: 'anthropic/claude-opus-4-7',      baseUrl: 'https://openrouter.ai/api/v1',                              requiresKey: true, keyPlaceholder: 'sk-or-...' },
-  { id: 'openrouter:anthropic/claude-sonnet-4-6',  group: 'Claude',  label: 'Claude Sonnet 4.6',       model: 'anthropic/claude-sonnet-4-6',    baseUrl: 'https://openrouter.ai/api/v1',                              requiresKey: true, keyPlaceholder: 'sk-or-...' },
-  { id: 'custom:',                         group: 'Custom',  label: 'Custom endpoint…',        model: '',                               baseUrl: '',                                                          requiresKey: true, isCustom: true },
-]
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -218,13 +166,13 @@ const store = useQueryStore()
 const loading = ref(false)
 const queryError = ref('')
 const sources = ref<SourceResponse[]>([])
+const availableModels = ref<ModelInfo[]>([])
 const sessionStartIndex = ref(0)
 const showPrevious = ref(false)
 const shareCopied = ref(false)
 
 // Model selection
 const selectedModelId = ref('aiaas:qwen3.5-122b')
-const providerApiKey = ref('')   // key for preset providers
 const customBaseUrl = ref('')
 const customApiKey = ref('')
 const customModel = ref('')
@@ -233,7 +181,17 @@ const customModel = ref('')
 
 const previousTurns = computed(() => store.history.slice(0, sessionStartIndex.value))
 const activeTurn = computed(() => store.history.length ? store.history[store.history.length - 1] : null)
-const activePreset = computed(() => MODEL_PRESETS.find(p => p.id === selectedModelId.value) ?? null)
+const activePreset = computed(() => availableModels.value.find(m => m.id === selectedModelId.value) ?? null)
+const isCustom = computed(() => selectedModelId.value === 'custom:')
+
+const modelGroups = computed(() => {
+  const groups = new Map<string, ModelInfo[]>()
+  for (const m of availableModels.value) {
+    if (!groups.has(m.group)) groups.set(m.group, [])
+    groups.get(m.group)!.push(m)
+  }
+  return [...groups.entries()]
+})
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -260,25 +218,6 @@ async function doQuery() {
   loading.value = true
   queryError.value = ''
 
-  const preset = activePreset.value
-  let upstreamBaseUrl: string | null = null
-  let upstreamApiKey: string | null = null
-  let upstreamModel: string | null = null
-
-  if (preset?.isCustom) {
-    upstreamBaseUrl = customBaseUrl.value || null
-    upstreamApiKey  = customApiKey.value || null
-    upstreamModel   = customModel.value || null
-  } else if (preset && preset.baseUrl !== null) {
-    // External provider (OpenAI, Gemini, Claude via OpenRouter)
-    upstreamBaseUrl = preset.baseUrl
-    upstreamApiKey  = providerApiKey.value || null
-    upstreamModel   = preset.model
-  } else if (preset && preset.baseUrl === null) {
-    // AIaaS — just override the model name, no custom URL/key
-    upstreamModel = preset.model
-  }
-
   try {
     const result = await post<QueryResponse>('/query/', {
       question: q,
@@ -286,9 +225,9 @@ async function doQuery() {
       top_k: store.topK,
       strict_grounding: store.strictGrounding,
       source_id: store.sourceId || null,
-      upstream_base_url: upstreamBaseUrl,
-      upstream_api_key: upstreamApiKey,
-      upstream_model: upstreamModel,
+      ...(isCustom.value
+        ? { upstream_base_url: customBaseUrl.value || null, upstream_api_key: customApiKey.value || null, upstream_model: customModel.value || null }
+        : { model_id: selectedModelId.value }),
     })
     store.addTurn(q, result)
   } catch (e: unknown) {
@@ -308,7 +247,7 @@ function exportMd() {
   const turn = activeTurn.value
   if (!turn) return
   const ts = timestampFilename()
-  const modelLabel = activePreset.value?.label ?? selectedModelId.value
+  const modelLabel = activePreset.value?.label ?? (isCustom.value ? 'Custom endpoint' : selectedModelId.value)
   const lines: string[] = [
     `# WebRAG Query Export`,
     ``,
@@ -347,7 +286,7 @@ function exportPdf() {
   const turn = activeTurn.value
   if (!turn) return
   const ts = timestampFilename()
-  const modelLabel = activePreset.value?.label ?? selectedModelId.value
+  const modelLabel = activePreset.value?.label ?? (isCustom.value ? 'Custom endpoint' : selectedModelId.value)
 
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const citHtml = turn.result.citations.map(c => `
@@ -431,6 +370,7 @@ function onClearChat() {
 onMounted(async () => {
   sessionStartIndex.value = store.history.length
   try { sources.value = await get<SourceResponse[]>('/sources/') } catch { /* ignore */ }
+  try { availableModels.value = await get<ModelInfo[]>('/query/models') } catch { /* ignore */ }
 })
 </script>
 

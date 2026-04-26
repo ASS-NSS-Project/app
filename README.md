@@ -64,6 +64,12 @@ AIAAS_API_KEY=<provided-by-team>
 AIAAS_LLM_MODEL=<from /v1/models, e.g. llama-3.3-70b-instruct>
 AIAAS_VLM_MODEL=<from /v1/models, e.g. qwen2.5-vl-7b-instruct>
 
+# Optional external LLM providers — set any to unlock those models in the query UI
+# OPENAI_API_KEY=sk-...        # enables GPT-4o, GPT-4o Mini
+# GEMINI_API_KEY=AIza...       # enables Gemini 2.5 Pro, Gemini 2.5 Flash
+# ANTHROPIC_API_KEY=sk-ant-... # enables Claude Opus 4.7, Sonnet 4.6 (direct Anthropic API)
+# OPENROUTER_API_KEY=sk-or-... # enables Claude Opus 4.7, Sonnet 4.6 via OpenRouter
+
 # JWT signing secret
 # Generate: python -c "import secrets; print(secrets.token_hex(32))"
 JWT_SECRET=your-random-hex-string
@@ -203,14 +209,14 @@ Returns system-wide counts and chart data for the dashboard.
     "rendered": 16,
     "screenshot": 11
   },
-  "activity_7d": [
-    {"date": "2026-04-19", "count": 24},
-    {"date": "2026-04-20", "count": 31}
+  "activity_24h": [
+    {"hour": "08:00", "count": 12},
+    {"hour": "09:00", "count": 7}
   ]
 }
 ```
 
-`strategy_distribution` is a map of strategy name → percentage of completed jobs using that strategy. `activity_7d` contains one entry per day for the last 7 days.
+`strategy_distribution` is a map of strategy name → percentage of completed jobs using that strategy. `activity_24h` contains one entry per hour for the last 24 hours.
 
 ---
 
@@ -246,7 +252,7 @@ Lists all users.
 ---
 
 #### `PATCH /auth/users/{user_id}` *(admin only)*
-Update a user's role or active status. When the target user authenticates via Keycloak SSO, a role change is also synced to Keycloak group membership (via `rag-rbac-sa` service account) so the new role persists across future SSO logins. Returns `502` if the Keycloak sync fails — the local DB change is rolled back in that case.
+Update a user's role or active status. When the target user authenticates via Keycloak SSO, a role change is also synced to Keycloak group membership (via `rag-rbac-sa` service account) so the new role persists across future SSO logins. If Keycloak is unreachable or not configured, the sync is skipped with a warning — the local DB change is always committed.
 
 **Request** (`application/json`, all fields optional):
 ```json
@@ -411,6 +417,19 @@ List the 50 most recent ingest jobs for a source.
 
 ### Query — `/query`
 
+#### `GET /query/models`
+Returns the list of available LLM models. AIaaS models are always present; external provider models are included only when the corresponding API key is configured in the backend environment.
+
+| Provider | Env var | Models exposed |
+|----------|---------|----------------|
+| AIaaS — e-INFRA | always on | Qwen3.5 122B, DeepSeek V3.2, GPT-OSS 120B |
+| OpenAI | `OPENAI_API_KEY` | GPT-4o, GPT-4o Mini |
+| Gemini | `GEMINI_API_KEY` | Gemini 2.5 Pro, Gemini 2.5 Flash |
+| Anthropic (direct) | `ANTHROPIC_API_KEY` | Claude Opus 4.7, Claude Sonnet 4.6 |
+| OpenRouter | `OPENROUTER_API_KEY` | Claude Opus 4.7, Claude Sonnet 4.6 (via OpenRouter) |
+
+Each entry in the response has `id` (e.g. `"anthropic:claude-opus-4-7"`), `label`, `model` (raw model name), and `group`. The frontend uses this list to populate the model selector — no API keys are ever sent to or stored by the frontend.
+
 #### `POST /query/`
 Ask a question. Returns an answer with citations from the knowledge base.
 
@@ -422,9 +441,7 @@ Ask a question. Returns an answer with citations from the knowledge base.
   "top_k": 5,
   "source_id": null,
   "strict_grounding": true,
-  "upstream_base_url": null,
-  "upstream_api_key": null,
-  "upstream_model": null
+  "model_id": "aiaas:qwen3.5-122b"
 }
 ```
 
@@ -435,11 +452,12 @@ Ask a question. Returns an answer with citations from the knowledge base.
 | `top_k` | `5` | Number of chunks to retrieve |
 | `source_id` | `null` | Restrict retrieval to one source (UUID) |
 | `strict_grounding` | `true` | If true, LLM only uses retrieved context; if false, may use general knowledge |
-| `upstream_base_url` | `null` | Override LLM endpoint — any OpenAI-compatible URL (GPT, Gemini, Kimi, etc.) |
+| `model_id` | `null` | Preset model ID from `GET /query/models` (e.g. `"anthropic:claude-opus-4-7"`). Backend resolves URL and API key. |
+| `upstream_base_url` | `null` | Custom endpoint — any OpenAI-compatible URL (overrides `model_id`) |
 | `upstream_api_key` | `null` | API key for the custom upstream endpoint |
 | `upstream_model` | `null` | Model name for the custom upstream endpoint |
 
-When `upstream_base_url` and `upstream_api_key` are set, the query is routed to that endpoint instead of the configured AIAAS. The `enable_thinking` extra body is only sent to AIAAS — it is suppressed for custom upstreams so GPT/Gemini/etc. don't 400.
+When `model_id` is set, the backend resolves the provider URL and API key from its environment. For a fully custom endpoint, set `upstream_base_url` + `upstream_api_key` + `upstream_model` instead. The `enable_thinking` extra body is only sent to AIaaS — suppressed for all other providers.
 
 **Response `200`**:
 ```json
@@ -517,9 +535,11 @@ Create a new experiment.
 {
   "name": "Pricing Q&A benchmark",
   "description": "Tests retrieval accuracy on pricing-related questions",
+  "top_k": 5,
+  "model_name": "qwen3.5-122b",
   "queries": [
-    {"question": "What are the pricing tiers?"},
-    {"question": "Is there a free plan?"}
+    {"query_text": "What are the pricing tiers?", "expected_keywords": ["tier", "price", "plan"]},
+    {"query_text": "Is there a free plan?", "expected_keywords": ["free", "trial"]}
   ]
 }
 ```
@@ -834,7 +854,7 @@ Event catalogue:
 | `ingest_strategy_error` | worker | A strategy raised an error |
 | `captcha_detected` | worker | CAPTCHA found during ingest — also fires `rag_app=incident` Loki label |
 | `keycloak_role_synced` | api | Role change synced to Keycloak successfully |
-| `keycloak_sync_failed` | api | Keycloak sync failed (role change rejected with 502) |
+| `keycloak_sync_failed` | api | Keycloak unreachable or not configured — role saved locally, sync skipped |
 | `document_created` | worker | Document + chunks saved to DB |
 | `embedding_completed` | worker | Chunks upserted into Qdrant |
 | `embedding_failed` | worker | Qdrant upsert failed |
@@ -907,7 +927,7 @@ rag_system/
 │   ├── models.py               # All database tables (ORM)
 │   ├── worker.py               # Background job processor (RabbitMQ consumer)
 │   ├── alembic.ini             # Database migration config
-│   ├── alembic/                # Migration scripts (0001–0005)
+│   ├── alembic/                # Migration scripts (0001–0007)
 │   ├── routers/
 │   │   ├── auth.py             # Login, register, JWT tokens, audit log, user management + Keycloak RBAC sync
 │   │   ├── auth_google.py      # Google OAuth2 (HMAC-signed stateless state tokens)

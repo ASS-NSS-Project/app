@@ -83,6 +83,12 @@ class Settings(BaseSettings):
     # ── VLM (vision extraction) ───────────────────
     aiaas_vlm_model: str = ""
 
+    # ── Optional external LLM providers ──────────
+    # Set these to enable the corresponding models in the query UI.
+    openai_api_key: str = ""     # enables GPT-4o, GPT-4o Mini
+    gemini_api_key: str = ""     # enables Gemini 2.5 Pro, Gemini 2.5 Flash
+    anthropic_api_key: str = ""  # enables Claude Opus 4.7, Sonnet 4.6
+
     # ── Embeddings (local FlagEmbedding / BGE-M3) ─
     embedding_model: str = "BAAI/bge-m3"
     embedding_dim: int = 1024

@@ -84,6 +84,7 @@ services:
     container_name: rag_api
     restart: unless-stopped
     environment:
+      # Must provide!
       - POSTGRES_USER=${POSTGRES_USER:-raguser}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB:-ragdb}
@@ -95,18 +96,38 @@ services:
       - S3_SECRET_KEY=${S3_SECRET_KEY}
       - S3_REGION=${S3_REGION:-us-east-1}
       - S3_USE_PATH_STYLE=${S3_USE_PATH_STYLE:-true}
-      - S3_BUCKET_EVIDENCE=${S3_BUCKET_EVIDENCE:-rag-evidence}
-      - S3_BUCKET_DOCS=${S3_BUCKET_DOCS:-rag-documents}
+      - S3_BUCKET_EVIDENCE=${S3_BUCKET_EVIDENCE:-rag-evidence-dev}
+      - S3_BUCKET_DOCS=${S3_BUCKET_DOCS:-rag-documents-dev}
       - AIAAS_BASE_URL=${AIAAS_BASE_URL}
       - AIAAS_API_KEY=${AIAAS_API_KEY}
       - AIAAS_LLM_MODEL=${AIAAS_LLM_MODEL}
       - AIAAS_VLM_MODEL=${AIAAS_VLM_MODEL}
-      - JWT_SECRET=${JWT_SECRET}
+      
+      - FIRST_ADMIN_USERNAME=${FIRST_ADMIN_USERNAME:-admin}
       - FIRST_ADMIN_EMAIL=${FIRST_ADMIN_EMAIL:-admin@example.com}
       - FIRST_ADMIN_PASSWORD=${FIRST_ADMIN_PASSWORD}
+
+      - JWT_SECRET=${JWT_SECRET}
       - API_DOCS=${API_DOCS:-false}
       - DEFAULT_SOURCE_URLS=${DEFAULT_SOURCE_URLS:-}
+      
       - SERVICE_NAME=api
+
+      # Optional: external LLM providers (set any to unlock in query UI)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+
+      # Optional: Keycloak OIDC (leave empty to disable SSO in local dev)
+      - KEYCLOAK_URL=${KEYCLOAK_URL:-}
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-}
+      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-}
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-}
+      - KEYCLOAK_REDIRECT_URI=${KEYCLOAK_REDIRECT_URI:-http://localhost:8080/auth/keycloak/callback}
+      - KEYCLOAK_ADMIN_CLIENT_ID=${KEYCLOAK_ADMIN_CLIENT_ID:-}
+      - KEYCLOAK_ADMIN_CLIENT_SECRET=${KEYCLOAK_ADMIN_CLIENT_SECRET:-}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8080}
+
     depends_on:
       postgres:
         condition: service_healthy

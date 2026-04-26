@@ -28,14 +28,14 @@
 
       <!-- Charts row -->
       <div class="charts-row">
-        <!-- 7-day activity bar chart -->
+        <!-- 24-hour activity bar chart -->
         <div class="card chart-card">
-          <div class="section-title">Ingest Activity — 7 Days</div>
-          <div v-if="!activity7d.length" class="chart-empty">No activity data yet</div>
+          <div class="section-title">Ingest Activity — 24 Hours</div>
+          <div v-if="!activity24h.length" class="chart-empty">No activity data yet</div>
           <div v-else class="bar-chart">
             <div
-              v-for="bar in activity7d"
-              :key="bar.date"
+              v-for="bar in activity24h"
+              :key="bar.hour"
               class="bar-col"
             >
               <div class="bar-fill-wrap">
@@ -44,7 +44,7 @@
                   :style="`height: ${maxActivity > 0 ? Math.round((bar.count / maxActivity) * 100) : 0}%`"
                 />
               </div>
-              <div class="bar-label">{{ shortDay(bar.date) }}</div>
+              <div class="bar-label">{{ bar.hour }}</div>
             </div>
           </div>
         </div>
@@ -170,8 +170,8 @@ const statCards = computed(() => [
   {
     label: 'DOCUMENTS',
     value: stats.value?.documents ?? 0,
-    delta: stats.value?.activity_7d?.reduce((a, b) => a + b.count, 0)
-      ? `+${stats.value!.activity_7d.reduce((a, b) => a + b.count, 0)} this week`
+    delta: stats.value?.activity_24h?.reduce((a, b) => a + b.count, 0)
+      ? `+${stats.value!.activity_24h.reduce((a, b) => a + b.count, 0)} last 24h`
       : null,
     suffix: null,
     deltaUp: true,
@@ -192,9 +192,9 @@ const statCards = computed(() => [
   },
 ])
 
-const activity7d = computed(() => stats.value?.activity_7d ?? [])
+const activity24h = computed(() => stats.value?.activity_24h ?? [])
 
-const maxActivity = computed(() => Math.max(...activity7d.value.map(d => d.count), 1))
+const maxActivity = computed(() => Math.max(...activity24h.value.map(d => d.count), 1))
 
 const strategyLabels: Record<string, string> = {
   api: 'API / Feed',
@@ -223,11 +223,6 @@ const strategyList = computed(() => {
       color: strategyColors[key] ?? 'var(--accent)',
     }))
 })
-
-function shortDay(dateStr: string): string {
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('en', { weekday: 'short' })
-}
 
 function relTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()

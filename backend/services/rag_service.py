@@ -75,6 +75,12 @@ class RAGService:
         t0 = time.monotonic()
 
         # Custom upstream client (user-provided API key + base URL)
+        if upstream_base_url and not upstream_api_key:
+            raise RuntimeError(
+                f"An API key is required for external provider ({upstream_base_url}). "
+                "Enter your key in the API KEY field."
+            )
+
         if upstream_base_url and upstream_api_key:
             client = AsyncOpenAI(
                 base_url=upstream_base_url,
@@ -83,6 +89,8 @@ class RAGService:
             )
             model = upstream_model or settings.aiaas_llm_model
             aiaas_extras = False
+            logger.info("Using upstream provider %s model=%s", upstream_base_url, model,
+                        extra={"event": "upstream_provider", "base_url": upstream_base_url, "model": model})
         else:
             client = self.client
             model = upstream_model or settings.aiaas_llm_model

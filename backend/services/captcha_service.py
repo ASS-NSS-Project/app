@@ -11,10 +11,11 @@ This fulfills section 9 of the spec.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from playwright.async_api import Page
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from config import get_settings
@@ -121,19 +122,28 @@ class CaptchaService:
         """
         Create a CAPTCHA incident record in the database.
 
-        Returns an existing open incident for the same source+URL if one already
-        exists — prevents duplicate incidents when repeated scheduler runs hit
-        the same blocked page before a curator resolves it.
+        Suppresses duplicates in two cases:
+        - An open incident already exists for this source+URL (curator hasn't resolved it yet).
+        - An incident was created within the source's crawl-frequency window (prevents a burst
+          of new incidents if the curator resolves one quickly and the next crawl immediately
+          triggers another, or if multiple workers race to create incidents simultaneously).
         """
+        source = getattr(job, 'source', None)
+        cooldown_hours = source.crawl_frequency_hours if source else 2
+        cutoff = datetime.utcnow() - timedelta(hours=cooldown_hours)
+
         existing = self.db.query(Incident).filter(
             Incident.source_id == job.source_id,
             Incident.url == job.url,
-            Incident.status == IncidentStatus.open,
+            or_(
+                Incident.status == IncidentStatus.open,
+                Incident.created_at >= cutoff,
+            ),
         ).first()
         if existing:
             logger.info(
-                "Open incident already exists for %s, skipping duplicate",
-                job.url,
+                "Incident suppressed for %s (open or within %dh cooldown)",
+                job.url, cooldown_hours,
                 extra={"event": "captcha_incident_dedup", "incident_id": existing.id, "url": job.url},
             )
             return existing

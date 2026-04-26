@@ -32,6 +32,11 @@
         <span v-if="experimentCount > 0" class="nav-badge badge-amber">{{ experimentCount }}</span>
       </router-link>
 
+      <a href="https://grafana.nss.jkzl.eu" target="_blank" class="nav-item nav-external">
+        Grafana
+        <span class="ext-icon">↗</span>
+      </a>
+
       <div class="nav-section">Admin</div>
       <router-link to="/audit" class="nav-item" active-class="active">Audit Log</router-link>
       <router-link
@@ -179,6 +184,9 @@ onUnmounted(() => clearInterval(pingInterval))
   border-left-color: var(--accent);
   font-weight: 500;
 }
+.nav-external { color: var(--muted); }
+.nav-external:hover { color: var(--accent); }
+.ext-icon { font-size: 10px; opacity: 0.5; }
 
 /* Badges */
 .nav-badge {
