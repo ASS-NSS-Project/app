@@ -10,9 +10,9 @@ logger = logging.getLogger(__name__)
 from database import get_db
 from models import User, Incident, IncidentType, IncidentStatus, IngestStrategy, Source, UserRole
 from routers.auth import get_authenticated_user, require_role
-from services.captcha_service import CaptchaService
-from services.auth_service import log_action
-from services.queue_service import publish_job
+from services.captcha import CaptchaService
+from services.auth import log_action
+from services.queue import publish_job
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
 

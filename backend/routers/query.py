@@ -13,8 +13,8 @@ from config import get_settings
 from database import get_db
 from models import User
 from routers.auth import get_authenticated_user
-from services.rag_service import RAGService
-from services.auth_service import log_action
+from services.rag import RAGService
+from services.auth import log_action
 
 
 # ── Provider resolution ───────────────────────────────────────────────────────

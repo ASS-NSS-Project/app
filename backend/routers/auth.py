@@ -1,40 +1,38 @@
 """
 routers/auth.py - Authentication Endpoints
 
-POST /auth/login  → returns JWT token
-POST /auth/register → creates a new user (admin only)
-GET  /auth/me     → returns current user info
+POST /auth/local-login → password-only login for the local admin account
+POST /auth/login       → OAuth2 form login (username + password, for API/script access)
+GET  /auth/me          → current user info
+POST /auth/refresh     → re-issue JWT with current DB role
+GET  /auth/providers   → which SSO providers are configured
+GET  /auth/stats       → system statistics for the dashboard
 """
 
 import logging
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from typing import Optional
 
 from config import get_settings
 from database import get_db
 
 logger = logging.getLogger(__name__)
-from models import User, UserRole, AuditLog, Source, IngestJob, Document, Incident, IncidentStatus
-from services.auth_service import (
-    verify_password, create_access_token, get_current_user,
-    hash_password, log_action
+from models import User, UserRole, Source, IngestJob, Document, Incident, IncidentStatus
+from services.auth import (
+    verify_password, create_access_token, get_current_user, log_action
 )
-from services.keycloak_service import assign_role as keycloak_assign_role
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-# OAuth2PasswordBearer extracts the token from the Authorization header.
-# When you send "Authorization: Bearer <token>", this extracts the token.
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
-# ── Pydantic schemas (request/response shapes) ────────────────────
+# ── Schemas ───────────────────────────────────────────────────────
 
 class LoginResponse(BaseModel):
     access_token: str
@@ -43,14 +41,6 @@ class LoginResponse(BaseModel):
     role: str
     email: str
     username: str | None
-
-
-class RegisterRequest(BaseModel):
-    username: str = Field(..., min_length=2, max_length=64)
-    email: str = Field(..., max_length=254)
-    password: str = Field(..., min_length=12, max_length=128)
-    full_name: str = Field("", max_length=128)
-    role: UserRole = UserRole.rag_user
 
 
 class UserResponse(BaseModel):
@@ -65,20 +55,16 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 
-# ── Dependency: get current authenticated user ────────────────────
+class LocalLoginRequest(BaseModel):
+    password: str
+
+
+# ── Dependencies ──────────────────────────────────────────────────
 
 def get_authenticated_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
-    """
-    FastAPI dependency: inject the current user into any route.
-    
-    Usage:
-        @router.get("/protected")
-        def my_route(current_user: User = Depends(get_authenticated_user)):
-            ...
-    """
     user = get_current_user(token, db)
     if not user:
         raise HTTPException(
@@ -90,14 +76,6 @@ def get_authenticated_user(
 
 
 def require_role(*roles: UserRole):
-    """
-    Role-based access control dependency factory.
-    
-    Usage:
-        @router.post("/admin-only")
-        def admin_route(user: User = Depends(require_role(UserRole.rag_admin))):
-            ...
-    """
     def checker(current_user: User = Depends(get_authenticated_user)) -> User:
         if current_user.role not in roles:
             raise HTTPException(
@@ -108,11 +86,11 @@ def require_role(*roles: UserRole):
     return checker
 
 
-# ── Routes ───────────────────────────────────────────────────────
+# ── Routes ────────────────────────────────────────────────────────
 
 @router.get("/providers")
 def get_providers():
-    """Public endpoint — tells the frontend which SSO providers are configured."""
+    """Public — tells the frontend which SSO providers are configured."""
     settings = get_settings()
     return {
         "keycloak": bool(settings.keycloak_client_id and settings.keycloak_url),
@@ -124,31 +102,18 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
-    """Standard OAuth2 login (username + password). Kept for API/script access."""
+    """OAuth2 form login (username + password). For API/script access."""
     user = db.query(User).filter(User.username == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         logger.warning("Login failed", extra={"event": "login_failed", "username": form_data.username})
         log_action(db, None, "LOGIN_FAILED", extra={"username": form_data.username})
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect password",
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password")
 
     token = create_access_token(user.id, user.role.value)
     log_action(db, user.id, "LOGIN")
     logger.info("Login successful", extra={"event": "login_success", "user_id": user.id, "role": user.role.value})
-
-    return LoginResponse(
-        access_token=token,
-        user_id=user.id,
-        role=user.role.value,
-        email=user.email,
-        username=user.username,
-    )
-
-
-class LocalLoginRequest(BaseModel):
-    password: str
+    return LoginResponse(access_token=token, user_id=user.id, role=user.role.value,
+                         email=user.email, username=user.username)
 
 
 @router.post("/local-login", response_model=LoginResponse)
@@ -156,92 +121,42 @@ def local_login(
     request: LocalLoginRequest,
     db: Session = Depends(get_db),
 ):
-    """Password-only login for the local admin account (the one with a hashed_password set).
-    Used by the UI login form — no username needed since there is exactly one local account."""
+    """Password-only login for the local admin account. Used by the UI login form."""
     user = db.query(User).filter(User.hashed_password.isnot(None)).first()
     if not user or not verify_password(request.password, user.hashed_password):
         logger.warning("Local login failed", extra={"event": "login_failed"})
         log_action(db, None, "LOGIN_FAILED", extra={"source": "local"})
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect password",
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password")
 
     token = create_access_token(user.id, user.role.value)
     log_action(db, user.id, "LOGIN")
     logger.info("Local login successful", extra={"event": "login_success", "user_id": user.id})
-
-    return LoginResponse(
-        access_token=token,
-        user_id=user.id,
-        role=user.role.value,
-        email=user.email,
-        username=user.username,
-    )
-
-
-@router.post("/register", response_model=UserResponse)
-def register(
-    request: RegisterRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.rag_admin)),
-):
-    """Create a new user. Admin only."""
-    if db.query(User).filter(User.email == request.email).first():
-        logger.warning("Register failed: email already exists", extra={
-            "event": "register_failed", "email": request.email,
-        })
-        raise HTTPException(status_code=400, detail="Email already registered")
-
-    user = User(
-        username=request.username,
-        email=request.email,
-        hashed_password=hash_password(request.password),
-        full_name=request.full_name,
-        role=request.role,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    log_action(db, current_user.id, "USER_CREATED", "user", user.id)
-    logger.info("User registered", extra={"event": "user_registered", "user_id": user.id, "role": user.role.value})
-    return user
+    return LoginResponse(access_token=token, user_id=user.id, role=user.role.value,
+                         email=user.email, username=user.username)
 
 
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_authenticated_user)):
-    """Get the currently logged-in user's info."""
+    """Current user info."""
     return current_user
 
 
 @router.post("/refresh", response_model=LoginResponse)
-def refresh_token(
-    current_user: User = Depends(get_authenticated_user),
-):
-    """Re-issue a JWT using the current DB role.
-    Called by the frontend when it detects a role mismatch — lets admin role
-    changes propagate to the affected user without requiring a re-login."""
+def refresh_token(current_user: User = Depends(get_authenticated_user)):
+    """Re-issue JWT with current DB role. Called by frontend on role mismatch."""
     token = create_access_token(current_user.id, current_user.role.value)
-    return LoginResponse(
-        access_token=token,
-        user_id=current_user.id,
-        role=current_user.role.value,
-        email=current_user.email,
-        username=current_user.username,
-    )
+    return LoginResponse(access_token=token, user_id=current_user.id, role=current_user.role.value,
+                         email=current_user.email, username=current_user.username)
 
 
-# ── System statistics overview ─────────────────────────────────────
+# ── System statistics ─────────────────────────────────────────────
 
 @router.get("/stats")
 def get_stats(
     db: Session = Depends(get_db),
     _: User = Depends(get_authenticated_user),
 ):
-    """
-    Returns basic system statistics for the dashboard.
-    One query instead of N+1 calls from the frontend.
-    """
+    """System statistics for the dashboard."""
     strategy_counts = dict(
         db.query(IngestJob.strategy_used, func.count(IngestJob.id))
         .filter(IngestJob.strategy_used.isnot(None), IngestJob.status == "done")
@@ -264,111 +179,10 @@ def get_stats(
     activity_24h = [{"hour": d.strftime('%H:00'), "count": c} for d, c in hourly_jobs_raw]
 
     return {
-        "sources":               db.query(Source).count(),
-        "jobs":                  db.query(IngestJob).count(),
-        "incidents":             db.query(Incident).filter(Incident.status == IncidentStatus.open).count(),
-        "documents":             db.query(Document).count(),
-        "strategy_distribution": strategy_distribution,
-        "activity_24h":          activity_24h,
+        "sources":                db.query(Source).count(),
+        "jobs":                   db.query(IngestJob).count(),
+        "incidents":              db.query(Incident).filter(Incident.status == IncidentStatus.open).count(),
+        "documents":              db.query(Document).count(),
+        "strategy_distribution":  strategy_distribution,
+        "activity_24h":           activity_24h,
     }
-
-
-# ── Audit log ──────────────────────────────────────────────────────
-
-class AuditLogEntry(BaseModel):
-    id: str
-    action: str
-    object_type: str | None
-    object_id: str | None
-    extra: dict | None
-    created_at: str
-    user_email: str | None
-
-    class Config:
-        from_attributes = True
-
-
-@router.get("/audit", response_model=list[AuditLogEntry])
-def get_audit_log(
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.rag_admin)),
-):
-    """
-    Returns audit log entries ordered from newest to oldest.
-    Admin only.
-    """
-    rows = (
-        db.query(AuditLog)
-        .order_by(AuditLog.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
-    result = []
-    for row in rows:
-        # Look up the user's email (may be None for system actions)
-        user_email = None
-        if row.user_id:
-            user = db.query(User).filter(User.id == row.user_id).first()
-            user_email = user.email if user else None
-        result.append(AuditLogEntry(
-            id=row.id,
-            action=row.action,
-            object_type=row.object_type,
-            object_id=row.object_id,
-            extra=row.extra,
-            created_at=row.created_at.isoformat() if row.created_at else "",
-            user_email=user_email,
-        ))
-    return result
-
-
-# ── User management ───────────────────────────────────────────────
-
-@router.get("/users", response_model=list[UserResponse])
-def list_users(
-    db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.rag_admin)),
-):
-    """Returns all users. Admin only."""
-    return db.query(User).order_by(User.created_at.desc()).all()
-
-
-class UserUpdate(BaseModel):
-    role: Optional[UserRole] = None
-    is_active: Optional[bool] = None
-
-
-@router.patch("/users/{user_id}", response_model=UserResponse)
-async def update_user(
-    user_id: str,
-    request: UserUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.rag_admin)),
-):
-    """Updates a user's role or active status. Admin only.
-    When the target user authenticates via Keycloak, a role change is also
-    synced to Keycloak so it survives the next SSO login."""
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    role_changed = request.role is not None and request.role != user.role
-
-    if request.role is not None:
-        user.role = request.role
-    if request.is_active is not None:
-        user.is_active = request.is_active
-
-    db.commit()
-    db.refresh(user)
-    log_action(db, current_user.id, "USER_UPDATED", "user", user_id,
-               request.model_dump(exclude_none=True))
-
-    if role_changed and user.oauth_provider == "keycloak" and user.oauth_id:
-        # assign_role() never raises — failures are logged as warnings inside the service
-        await keycloak_assign_role(user.oauth_id, user.role)
-
-    return user

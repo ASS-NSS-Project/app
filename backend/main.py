@@ -3,50 +3,28 @@ import os
 import time
 from contextlib import asynccontextmanager
 
-from alembic.config import Config as AlembicConfig
-from alembic import command as alembic_command
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 from config import get_settings
-from database import SessionLocal
+from database import Base, engine, SessionLocal
 import models  # noqa: F401
 from models import Chunk, Experiment, ExperimentStatus
 from routers import auth, sources, query, incidents
 from routers import auth_keycloak
 import routers.documents as documents_router
 import routers.experiments as experiments_router
-from services.auth_service import ensure_admin_exists, ensure_default_sources
-from services.embedding_service import get_embedding_model
-from services.keycloak_service import sync_users_from_keycloak
+from services.auth import ensure_admin_exists, ensure_default_sources
+from services.embedding import get_embedding_model
+from services.keycloak import sync_users_from_keycloak
 from services.logging_config import setup_logging
-from services.rag_service import _get_embedder
-from services.scheduler_service import create_scheduler
+from services.rag import _get_embedder
+from services.scheduler import create_scheduler
 
 setup_logging(os.getenv("LOG_LEVEL", "INFO"))
 logging.getLogger("uvicorn.access").propagate = True
 logger = logging.getLogger(__name__)
-
-
-def _run_migrations() -> None:
-    """
-    Programmatically run Alembic migrations (equivalent to `alembic upgrade head`).
-    Called on startup instead of Base.metadata.create_all().
-
-    Advantages over create_all:
-    - Tracks migration history (alembic_version table)
-    - Supports rollback (downgrade)
-    - Can auto-generate migrations when models change
-    """
-    # Path to alembic.ini is relative to this file (main.py lives in /app)
-    alembic_cfg = AlembicConfig(os.path.join(os.path.dirname(__file__), "alembic.ini"))
-    # Explicitly set script path so it works inside Docker too
-    alembic_cfg.set_main_option(
-        "script_location",
-        os.path.join(os.path.dirname(__file__), "alembic"),
-    )
-    alembic_command.upgrade(alembic_cfg, "head")
 
 
 @asynccontextmanager
@@ -61,18 +39,17 @@ async def lifespan(app: FastAPI):
     """
     logger.info("Starting up RAG System API", extra={"event": "startup"})
 
-    # Run Alembic migrations with retries — guards against postgres not being
-    # fully ready yet (podman-compose does not fully honour condition: service_healthy).
+    # Create all tables — retries guard against CNPG not being fully ready yet.
     # First-time initdb can take 30–60 s; 20 × 5 s = 100 s covers that.
     for attempt in range(1, 21):
         try:
-            _run_migrations()
-            logger.info("Database migrations complete")
+            Base.metadata.create_all(bind=engine)
+            logger.info("Database schema ready")
             break
         except Exception as e:
             if attempt == 20:
                 raise
-            logger.warning("Migration attempt %d/20 failed (%s), retrying in 5s…", attempt, e)
+            logger.warning("Schema creation attempt %d/20 failed (%s), retrying in 5s…", attempt, e)
             time.sleep(5)
 
     # Create admin user if none exists

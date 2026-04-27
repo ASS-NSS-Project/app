@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from config import get_settings
 from models import Experiment, ExperimentQuery, ExperimentStatus
-from services.embedding_service import EmbeddingService
+from services.embedding import EmbeddingService
 
 logger = logging.getLogger(__name__)
 

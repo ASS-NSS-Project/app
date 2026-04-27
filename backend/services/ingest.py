@@ -32,9 +32,9 @@ from models import (
     IngestJob, Evidence, Document, Chunk,
     IngestStrategy, JobStatus, EvidenceType, ChunkType
 )
-from services.storage_service import StorageService
-from services.extraction_service import ExtractionService
-from services.captcha_service import CaptchaDetector
+from services.storage import StorageService
+from services.extraction import ExtractionService
+from services.captcha import CaptchaDetector
 from services.chunking import split_prose, split_tables, split_vlm, TextChunk
 from services.metrics import (
     INGEST_JOBS_TOTAL, INGEST_DURATION, CAPTCHA_INCIDENTS_TOTAL,
@@ -201,7 +201,7 @@ class IngestService:
                     "strategy": strategy.value,
                     "detector": e.detector,
                 })
-                from services.captcha_service import CaptchaService
+                from services.captcha import CaptchaService
                 await CaptchaService(self.db).create_incident(
                     job=job,
                     strategy=strategy,

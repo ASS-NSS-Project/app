@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import User, Experiment, ExperimentQuery, ExperimentStatus, UserRole
 from routers.auth import get_authenticated_user, require_role
-from services.auth_service import log_action
-from services.experiment_service import ExperimentService
+from services.auth import log_action
+from services.experiment import ExperimentService
 
 logger = logging.getLogger(__name__)
 

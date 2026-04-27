@@ -74,18 +74,16 @@ async def test_stats_authenticated(client: AsyncClient, auth_headers: dict):
         assert isinstance(data[key], int)
 
 
-async def test_users_list_requires_auth(client: AsyncClient):
-    resp = await client.get("/auth/users")
+async def test_me_requires_auth(client: AsyncClient):
+    resp = await client.get("/auth/me")
     assert resp.status_code == 401
 
 
-async def test_users_list_authenticated(client: AsyncClient, auth_headers: dict):
-    resp = await client.get("/auth/users", headers=auth_headers)
+async def test_me_authenticated(client: AsyncClient, auth_headers: dict):
+    resp = await client.get("/auth/me", headers=auth_headers)
     assert resp.status_code == 200
-    users = resp.json()
-    assert isinstance(users, list)
-    assert len(users) >= 1
-    assert any(u["role"] == "admin" for u in users)
+    me = resp.json()
+    assert me["role"] == "rag_admin"
 
 
 # ── Sources ───────────────────────────────────────────────────

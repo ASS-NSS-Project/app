@@ -34,8 +34,8 @@ from config import get_settings
 from database import SessionLocal
 from models import Chunk, Document, Evidence, Incident, IncidentStatus, IngestJob, Source, JobStatus
 from services.metrics import ACTIVE_SOURCES, OPEN_INCIDENTS, QDRANT_COLLECTION_SIZE
-from services.queue_service import publish_job
-from services.storage_service import StorageService
+from services.queue import publish_job
+from services.storage import StorageService
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -188,7 +188,7 @@ def _cleanup_expired_index() -> None:
     Each source has retention_days_index configured (default: 365 days).
     Chunks are deleted from PostgreSQL; Qdrant vectors are removed by chunk ID.
     """
-    from services.embedding_service import EmbeddingService
+    from services.embedding import EmbeddingService
 
     db = SessionLocal()
     try:
@@ -252,7 +252,7 @@ def _refresh_gauges() -> None:
 
 async def _sync_keycloak_users() -> None:
     """Pull all Keycloak realm users into the local DB. No-op if Keycloak is not configured."""
-    from services.keycloak_service import sync_users_from_keycloak
+    from services.keycloak import sync_users_from_keycloak
     db = SessionLocal()
     try:
         await sync_users_from_keycloak(db)

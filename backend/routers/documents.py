@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import User, Document, Chunk, Evidence
 from routers.auth import get_authenticated_user
-from services.storage_service import StorageService
+from services.storage import StorageService
 from config import get_settings
 
 logger = logging.getLogger(__name__)

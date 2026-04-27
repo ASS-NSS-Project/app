@@ -26,10 +26,10 @@ from prometheus_client import start_http_server
 from config import get_settings
 from database import SessionLocal
 from models import IngestJob, JobStatus, Source
-from services.ingest_service import IngestService
-from services.embedding_service import EmbeddingService, get_embedding_model
+from services.ingest import IngestService
+from services.embedding import EmbeddingService, get_embedding_model
 from services.logging_config import setup_logging
-from services.queue_service import QUEUE_NAME, wait_for_rabbitmq
+from services.queue import QUEUE_NAME, wait_for_rabbitmq
 
 setup_logging(os.getenv("LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)

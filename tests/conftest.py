@@ -13,21 +13,18 @@ from httpx import AsyncClient, ASGITransport
 
 
 @pytest.fixture(scope="session", autouse=True)
-def run_migrations():
-    """Run Alembic migrations once before the test suite (synchronous, idempotent)."""
-    from alembic.config import Config as AlembicConfig
-    from alembic import command as alembic_command
-
-    alembic_cfg = AlembicConfig(os.path.join(_BACKEND, "alembic.ini"))
-    alembic_cfg.set_main_option("script_location", os.path.join(_BACKEND, "alembic"))
-    alembic_command.upgrade(alembic_cfg, "head")
+def create_schema():
+    """Create all tables once before the test suite."""
+    from database import Base, engine
+    import models  # noqa: F401 — registers all ORM classes with Base
+    Base.metadata.create_all(bind=engine)
 
 
 @pytest.fixture(scope="session", autouse=True)
-def create_admin(run_migrations):
+def create_admin(create_schema):
     """Ensure the admin user exists (created by ensure_admin_exists on first run)."""
     from database import SessionLocal
-    from services.auth_service import ensure_admin_exists
+    from services.auth import ensure_admin_exists
 
     db = SessionLocal()
     try:

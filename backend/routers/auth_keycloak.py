@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 from config import get_settings
 from database import get_db
 from models import User, UserRole
-from services.auth_service import create_access_token
+from services.auth import create_access_token
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

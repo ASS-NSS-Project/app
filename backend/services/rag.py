@@ -22,7 +22,7 @@ from openai import AsyncOpenAI, APITimeoutError, APIStatusError
 from sqlalchemy.orm import Session
 
 from config import get_settings
-from services.embedding_service import EmbeddingService
+from services.embedding import EmbeddingService
 from services.metrics import QUERY_REQUESTS_TOTAL, QUERY_DURATION
 
 logger = logging.getLogger(__name__)

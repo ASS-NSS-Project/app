@@ -12,8 +12,8 @@ from datetime import datetime, timedelta
 from database import get_db
 from models import Source, IngestJob, JobStatus, IngestStrategy, UserRole, User, Document
 from routers.auth import get_authenticated_user, require_role
-from services.auth_service import log_action
-from services.queue_service import publish_job
+from services.auth import log_action
+from services.queue import publish_job
 
 logger = logging.getLogger(__name__)
 
