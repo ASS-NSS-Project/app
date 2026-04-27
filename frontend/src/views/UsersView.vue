@@ -81,43 +81,43 @@ const auth = useAuthStore()
 const users = ref<UserResponse[]>([])
 const loading = ref(true)
 const error = ref('')
-const roles = ['admin', 'curator', 'analyst', 'user']
+const roles = ['rag_admin', 'rag_curator', 'rag_analyst', 'rag_user']
 
 const roleDefinitions = [
   {
-    name: 'admin',
+    name: 'rag_admin',
     perms: [
-      'Manage users and roles',
+      'Manage users, roles, and audit log',
       'Manage sources and pipeline',
-      'View incidents and audit log',
+      'View incidents',
       'Run experiments',
       'Query the RAG system',
     ],
   },
   {
-    name: 'curator',
+    name: 'rag_curator',
     perms: [
       'Manage sources and pipeline',
-      'View incidents and audit log',
+      'View incidents',
       'Query the RAG system',
     ],
   },
   {
-    name: 'analyst',
+    name: 'rag_analyst',
     perms: [
       'Run and view experiments',
       'Query the RAG system',
     ],
   },
   {
-    name: 'user',
+    name: 'rag_user',
     perms: [
       'Query the RAG system',
     ],
   },
 ]
 
-const isAdmin = computed(() => auth.user?.role === 'admin')
+const isAdmin = computed(() => auth.user?.role === 'rag_admin')
 const currentUserId = computed(() => auth.user?.id)
 
 async function loadUsers() {
@@ -184,10 +184,10 @@ onMounted(loadUsers)
   padding: 3px 10px;
   border-radius: 99px;
 }
-.role-admin   { background: rgba(239,68,68,.15);  color: #f87171; }
-.role-curator { background: rgba(59,130,246,.15); color: #60a5fa; }
-.role-analyst { background: rgba(168,85,247,.15); color: #c084fc; }
-.role-user    { background: rgba(107,114,128,.15); color: var(--muted); }
+.role-rag_admin   { background: rgba(239,68,68,.15);  color: #f87171; }
+.role-rag_curator { background: rgba(59,130,246,.15); color: #60a5fa; }
+.role-rag_analyst { background: rgba(168,85,247,.15); color: #c084fc; }
+.role-rag_user    { background: rgba(107,114,128,.15); color: var(--muted); }
 
 .role-perms {
   list-style: none;

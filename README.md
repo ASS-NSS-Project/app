@@ -124,13 +124,14 @@ Obtain a token via `POST /auth/login`. Roles control access: **admin** > **curat
 
 | Section | admin | curator | analyst | user |
 |---------|-------|---------|---------|------|
-| Dashboard, Query, Knowledge Base | ✓ | ✓ | ✓ | ✓ |
+| Query (RAG) | ✓ | ✓ | ✓ | ✓ |
+| Dashboard, Knowledge Base | ✓ | ✓ | ✓ | — |
 | Sources, Pipeline, Incidents | ✓ | ✓ | — | — |
 | Experiments | ✓ | — | ✓ | — |
-| Audit Log, Users & RBAC | ✓ | ✓ | — | — |
+| Audit Log, Users & RBAC | ✓ | — | — | — |
 | Grafana (external link) | ✓ | ✓ | ✓ | ✓ |
 
-The router also enforces these roles server-side (redirects to `/dashboard` if role is insufficient).
+The router enforces these roles client-side and redirects to `/query` if the role is insufficient. `/query` is accessible to all authenticated roles and is the default landing page.
 
 Enable Swagger UI by setting `API_DOCS=true` in `.env`, then visit `/docs`.
 

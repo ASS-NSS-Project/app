@@ -6,8 +6,8 @@
     </div>
 
     <div class="nav-links">
-      <div class="nav-section">Overview</div>
-      <router-link to="/dashboard" class="nav-item" active-class="active">Dashboard</router-link>
+      <div v-if="canSeeDashboard" class="nav-section">Overview</div>
+      <router-link v-if="canSeeDashboard" to="/dashboard" class="nav-item" active-class="active">Dashboard</router-link>
 
       <div v-if="canManageSources" class="nav-section">Ingest</div>
       <router-link v-if="canManageSources" to="/sources" class="nav-item" active-class="active">Sources</router-link>
@@ -19,9 +19,9 @@
 
       <div class="nav-section">Query</div>
       <router-link to="/query" class="nav-item" active-class="active">Query (RAG)</router-link>
-      <router-link to="/knowledge-base" class="nav-item" active-class="active">Knowledge Base</router-link>
+      <router-link v-if="canSeeDashboard" to="/knowledge-base" class="nav-item" active-class="active">Knowledge Base</router-link>
 
-      <div class="nav-section">Analytics</div>
+      <div v-if="canSeeExperiments" class="nav-section">Analytics</div>
       <router-link
         v-if="canSeeExperiments"
         to="/experiments"
@@ -32,14 +32,19 @@
         <span v-if="experimentCount > 0" class="nav-badge badge-amber">{{ experimentCount }}</span>
       </router-link>
 
-      <div v-if="canSeeAudit || canSeeUsers" class="nav-section">Admin</div>
-      <router-link v-if="canSeeAudit" to="/audit" class="nav-item" active-class="active">Audit Log</router-link>
-      <router-link
-        v-if="canSeeUsers"
-        to="/users"
-        class="nav-item"
-        active-class="active"
-      >Users &amp; RBAC</router-link>
+      <div v-if="isRagAdmin" class="nav-section">Admin</div>
+      <a
+        v-if="isRagAdmin"
+        href="https://grafana.nss.jkzl.eu/d/rag-logs"
+        target="_blank"
+        class="nav-item nav-external"
+      >Audit Logs ↗</a>
+      <a
+        v-if="isRagAdmin"
+        href="https://keycloak.nss.jkzl.eu/admin/ass-nss-project/console/#/ass-nss-project/groups"
+        target="_blank"
+        class="nav-item nav-external"
+      >RBAC ↗</a>
     </div>
 
     <div class="sidebar-footer">
@@ -67,18 +72,16 @@ import { get } from '@/api/client'
 const auth = useAuthStore()
 const router = useRouter()
 
-const canSeeUsers = computed(() =>
-  auth.user?.role === 'admin' || auth.user?.role === 'curator'
+const canSeeDashboard = computed(() =>
+  auth.user?.role === 'rag_admin' || auth.user?.role === 'rag_curator' || auth.user?.role === 'rag_analyst'
 )
 const canSeeExperiments = computed(() =>
-  auth.user?.role === 'admin' || auth.user?.role === 'analyst'
+  auth.user?.role === 'rag_admin' || auth.user?.role === 'rag_analyst'
 )
 const canManageSources = computed(() =>
-  auth.user?.role === 'admin' || auth.user?.role === 'curator'
+  auth.user?.role === 'rag_admin' || auth.user?.role === 'rag_curator'
 )
-const canSeeAudit = computed(() =>
-  auth.user?.role === 'admin' || auth.user?.role === 'curator'
-)
+const isRagAdmin = computed(() => auth.user?.role === 'rag_admin')
 
 const systemOnline = ref(false)
 const incidentCount = ref(0)
@@ -240,10 +243,10 @@ onUnmounted(() => clearInterval(pingInterval))
   border: 1px solid;
   flex-shrink: 0;
 }
-.role-admin   { color: #f472b6; border-color: rgba(244,114,182,.3); background: rgba(244,114,182,.08); }
-.role-curator { color: var(--warning); border-color: rgba(251,191,36,.3); background: rgba(251,191,36,.08); }
-.role-analyst { color: var(--accent2); border-color: rgba(167,139,250,.3); background: rgba(167,139,250,.08); }
-.role-user    { color: var(--muted); border-color: var(--border); background: transparent; }
+.role-rag_admin   { color: #f472b6; border-color: rgba(244,114,182,.3); background: rgba(244,114,182,.08); }
+.role-rag_curator { color: var(--warning); border-color: rgba(251,191,36,.3); background: rgba(251,191,36,.08); }
+.role-rag_analyst { color: var(--accent2); border-color: rgba(167,139,250,.3); background: rgba(167,139,250,.08); }
+.role-rag_user    { color: var(--muted); border-color: var(--border); background: transparent; }
 
 .footer-bottom {
   display: flex;

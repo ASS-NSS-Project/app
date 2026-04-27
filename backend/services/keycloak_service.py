@@ -25,29 +25,29 @@ logger = logging.getLogger(__name__)
 
 # Keycloak group name → app UserRole
 _GROUP_TO_ROLE: dict[str, UserRole] = {
-    "admin":    UserRole.admin,
-    "curator":  UserRole.curator,
-    "analytic": UserRole.analyst,  # Keycloak group is "analytic", app role is "analyst"
-    "user":     UserRole.user,
+    "rag_admin":   UserRole.rag_admin,
+    "rag_curator": UserRole.rag_curator,
+    "rag_analyst": UserRole.rag_analyst,
+    "rag_user":    UserRole.rag_user,
 }
 
 # App role → Keycloak group name (inverse)
 _ROLE_TO_GROUP: dict[UserRole, str] = {
-    UserRole.admin:   "admin",
-    UserRole.curator: "curator",
-    UserRole.analyst: "analytic",
-    UserRole.user:    "user",
+    UserRole.rag_admin:   "rag_admin",
+    UserRole.rag_curator: "rag_curator",
+    UserRole.rag_analyst: "rag_analyst",
+    UserRole.rag_user:    "rag_user",
 }
 
 _MANAGED_GROUPS = set(_ROLE_TO_GROUP.values())
 
 
 def _map_role(groups: list[str]) -> UserRole:
-    """Highest-privilege matching group wins. Defaults to 'user'."""
-    for group in ("admin", "curator", "analytic", "user"):
+    """Highest-privilege matching group wins. Defaults to rag_user."""
+    for group in ("rag_admin", "rag_curator", "rag_analyst", "rag_user"):
         if group in groups:
             return _GROUP_TO_ROLE[group]
-    return UserRole.user
+    return UserRole.rag_user
 
 
 class KeycloakSyncError(Exception):

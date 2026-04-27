@@ -1,5 +1,5 @@
 function getToken(): string | null {
-  return localStorage.getItem('rag_token')
+  return sessionStorage.getItem('rag_token') ?? localStorage.getItem('rag_token')
 }
 
 function logError(method: string, path: string, status: number, detail: string, extra?: object) {
@@ -49,6 +49,8 @@ async function request<T>(
   if (res.status === 401) {
     localStorage.removeItem('rag_token')
     localStorage.removeItem('rag_user')
+    sessionStorage.removeItem('rag_token')
+    sessionStorage.removeItem('rag_user')
     window.dispatchEvent(new CustomEvent('auth:expired'))
     logError(method, path, 401, 'Unauthorized — session expired')
     throw new Error('Unauthorized')

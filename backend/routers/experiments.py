@@ -68,7 +68,7 @@ class ExperimentResponse(BaseModel):
 @router.get("/", response_model=list[ExperimentResponse])
 def list_experiments(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.analyst)),
+    current_user: User = Depends(require_role(UserRole.rag_admin, UserRole.rag_analyst)),
 ):
     return db.query(Experiment).order_by(Experiment.created_at.desc()).limit(100).all()
 
@@ -77,7 +77,7 @@ def list_experiments(
 def create_experiment(
     body: ExperimentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.analyst)),
+    current_user: User = Depends(require_role(UserRole.rag_admin, UserRole.rag_analyst)),
 ):
     experiment = Experiment(
         name=body.name,
@@ -111,7 +111,7 @@ def create_experiment(
 def get_experiment(
     experiment_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.analyst)),
+    current_user: User = Depends(require_role(UserRole.rag_admin, UserRole.rag_analyst)),
 ):
     exp = db.query(Experiment).filter(Experiment.id == experiment_id).first()
     if not exp:
@@ -124,7 +124,7 @@ def run_experiment(
     experiment_id: str,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.analyst)),
+    current_user: User = Depends(require_role(UserRole.rag_admin, UserRole.rag_analyst)),
 ):
     exp = db.query(Experiment).filter(Experiment.id == experiment_id).first()
     if not exp:
@@ -162,7 +162,7 @@ def run_experiment(
 def delete_experiment(
     experiment_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.analyst)),
+    current_user: User = Depends(require_role(UserRole.rag_admin, UserRole.rag_analyst)),
 ):
     exp = db.query(Experiment).filter(Experiment.id == experiment_id).first()
     if not exp:

@@ -50,17 +50,7 @@
         </div>
 
         <div class="field">
-          <label class="field-label" for="username">EMAIL ADDRESS</label>
-          <div class="input-icon-wrap">
-            <svg class="input-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <rect x="2" y="4" width="20" height="16" rx="2"/>
-              <path d="m2 7 10 7 10-7"/>
-            </svg>
-            <InputText id="username" v-model="username" placeholder="you@organization.com" fluid @keydown.enter="doLogin" class="has-icon" />
-          </div>
-        </div>
-        <div class="field">
-          <label class="field-label" for="password">PASSWORD</label>
+          <label class="field-label" for="password">ADMIN PASSWORD</label>
           <div class="input-icon-wrap">
             <svg class="input-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
               <rect x="3" y="11" width="18" height="11" rx="2"/>
@@ -75,7 +65,6 @@
             <input type="checkbox" v-model="rememberMe" class="remember-check" />
             Remember me
           </label>
-          <button type="button" class="forgot-link">Forgot password?</button>
         </div>
 
         <Button label="Sign In" class="w-full signin-btn" :loading="loading" @click="doLogin" />
@@ -250,17 +239,6 @@
   accent-color: var(--accent);
   cursor: pointer;
 }
-.forgot-link {
-  background: none;
-  border: none;
-  font-size: 12px;
-  color: var(--accent);
-  cursor: pointer;
-  padding: 0;
-  font-family: inherit;
-  transition: opacity 0.15s;
-}
-.forgot-link:hover { opacity: 0.75; }
 
 /* Sign in button — full green */
 .signin-btn {
@@ -300,7 +278,6 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
 import Password from 'primevue/password'
 import Message from 'primevue/message'
 import { get } from '@/api/client'
@@ -310,7 +287,6 @@ import keycloakLogo from '@/assets/keycloak-logo.png'
 const auth = useAuthStore()
 const router = useRouter()
 
-const username = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
@@ -329,14 +305,6 @@ onMounted(async () => {
 })
 
 async function doLogin() {
-  if (!username.value && !password.value) {
-    error.value = 'Please enter your email and password.'
-    return
-  }
-  if (!username.value) {
-    error.value = 'Email address is required.'
-    return
-  }
   if (!password.value) {
     error.value = 'Password is required.'
     return
@@ -344,8 +312,8 @@ async function doLogin() {
   error.value = ''
   loading.value = true
   try {
-    await auth.login(username.value, password.value)
-    await router.push('/dashboard')
+    await auth.localLogin(password.value, rememberMe.value)
+    await router.push('/query')
   } catch (e: unknown) {
     const err = e as { response?: { data?: { detail?: string } } }
     error.value = err.response?.data?.detail ?? 'Login failed'

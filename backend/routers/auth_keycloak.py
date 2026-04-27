@@ -64,21 +64,20 @@ def _verify_state(state: str) -> bool:
 
 
 # Keycloak group name → app UserRole.
-# "analytic" is the Keycloak group name; our enum value is "analyst".
 _GROUP_TO_ROLE: dict[str, UserRole] = {
-    "admin":    UserRole.admin,
-    "curator":  UserRole.curator,
-    "analytic": UserRole.analyst,  # Keycloak group is "analytic", app role is "analyst"
-    "user":     UserRole.user,
+    "rag_admin":   UserRole.rag_admin,
+    "rag_curator": UserRole.rag_curator,
+    "rag_analyst": UserRole.rag_analyst,
+    "rag_user":    UserRole.rag_user,
 }
 
 
 def _map_role(groups: list[str]) -> UserRole:
-    """Highest-privilege matching group wins. Defaults to 'user'."""
-    for group in ("admin", "curator", "analytic", "user"):
+    """Highest-privilege matching group wins. Defaults to rag_user."""
+    for group in ("rag_admin", "rag_curator", "rag_analyst", "rag_user"):
         if group in groups:
             return _GROUP_TO_ROLE[group]
-    return UserRole.user
+    return UserRole.rag_user
 
 
 def _extract_groups(access_token: str) -> list[str]:

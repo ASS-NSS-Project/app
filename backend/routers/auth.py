@@ -50,7 +50,7 @@ class RegisterRequest(BaseModel):
     email: str = Field(..., max_length=254)
     password: str = Field(..., min_length=12, max_length=128)
     full_name: str = Field("", max_length=128)
-    role: UserRole = UserRole.user
+    role: UserRole = UserRole.rag_user
 
 
 class UserResponse(BaseModel):
@@ -95,7 +95,7 @@ def require_role(*roles: UserRole):
     
     Usage:
         @router.post("/admin-only")
-        def admin_route(user: User = Depends(require_role(UserRole.admin))):
+        def admin_route(user: User = Depends(require_role(UserRole.rag_admin))):
             ...
     """
     def checker(current_user: User = Depends(get_authenticated_user)) -> User:
@@ -124,19 +124,14 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
-    """
-    Login with email + password, get a JWT token back.
-    
-    The token must be sent in all subsequent requests:
-    Authorization: Bearer <token>
-    """
+    """Standard OAuth2 login (username + password). Kept for API/script access."""
     user = db.query(User).filter(User.username == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         logger.warning("Login failed", extra={"event": "login_failed", "username": form_data.username})
         log_action(db, None, "LOGIN_FAILED", extra={"username": form_data.username})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Incorrect password",
         )
 
     token = create_access_token(user.id, user.role.value)
@@ -152,11 +147,44 @@ def login(
     )
 
 
+class LocalLoginRequest(BaseModel):
+    password: str
+
+
+@router.post("/local-login", response_model=LoginResponse)
+def local_login(
+    request: LocalLoginRequest,
+    db: Session = Depends(get_db),
+):
+    """Password-only login for the local admin account (the one with a hashed_password set).
+    Used by the UI login form — no username needed since there is exactly one local account."""
+    user = db.query(User).filter(User.hashed_password.isnot(None)).first()
+    if not user or not verify_password(request.password, user.hashed_password):
+        logger.warning("Local login failed", extra={"event": "login_failed"})
+        log_action(db, None, "LOGIN_FAILED", extra={"source": "local"})
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect password",
+        )
+
+    token = create_access_token(user.id, user.role.value)
+    log_action(db, user.id, "LOGIN")
+    logger.info("Local login successful", extra={"event": "login_success", "user_id": user.id})
+
+    return LoginResponse(
+        access_token=token,
+        user_id=user.id,
+        role=user.role.value,
+        email=user.email,
+        username=user.username,
+    )
+
+
 @router.post("/register", response_model=UserResponse)
 def register(
     request: RegisterRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin)),
+    current_user: User = Depends(require_role(UserRole.rag_admin)),
 ):
     """Create a new user. Admin only."""
     if db.query(User).filter(User.email == request.email).first():
@@ -184,6 +212,23 @@ def register(
 def get_me(current_user: User = Depends(get_authenticated_user)):
     """Get the currently logged-in user's info."""
     return current_user
+
+
+@router.post("/refresh", response_model=LoginResponse)
+def refresh_token(
+    current_user: User = Depends(get_authenticated_user),
+):
+    """Re-issue a JWT using the current DB role.
+    Called by the frontend when it detects a role mismatch — lets admin role
+    changes propagate to the affected user without requiring a re-login."""
+    token = create_access_token(current_user.id, current_user.role.value)
+    return LoginResponse(
+        access_token=token,
+        user_id=current_user.id,
+        role=current_user.role.value,
+        email=current_user.email,
+        username=current_user.username,
+    )
 
 
 # ── System statistics overview ─────────────────────────────────────
@@ -248,11 +293,11 @@ def get_audit_log(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.curator)),
+    current_user: User = Depends(require_role(UserRole.rag_admin)),
 ):
     """
     Returns audit log entries ordered from newest to oldest.
-    Accessible only to admins and curators.
+    Admin only.
     """
     rows = (
         db.query(AuditLog)
@@ -285,9 +330,9 @@ def get_audit_log(
 @router.get("/users", response_model=list[UserResponse])
 def list_users(
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin, UserRole.curator)),
+    _: User = Depends(require_role(UserRole.rag_admin)),
 ):
-    """Returns all users. Accessible to admins and curators."""
+    """Returns all users. Admin only."""
     return db.query(User).order_by(User.created_at.desc()).all()
 
 
@@ -301,7 +346,7 @@ async def update_user(
     user_id: str,
     request: UserUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin)),
+    current_user: User = Depends(require_role(UserRole.rag_admin)),
 ):
     """Updates a user's role or active status. Admin only.
     When the target user authenticates via Keycloak, a role change is also

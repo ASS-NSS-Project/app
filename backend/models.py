@@ -28,10 +28,10 @@ def new_uuid() -> str:
 # ─────────────────────────────────────────────────────
 
 class UserRole(str, enum.Enum):
-    admin = "admin"       # Full system access
-    curator = "curator"   # Manage sources and incidents
-    analyst = "analyst"   # Run experiments and reports
-    user = "user"         # Query only
+    rag_admin   = "rag_admin"    # RAG app admin + Keycloak RAG group management + Grafana
+    rag_curator = "rag_curator"  # Source/pipeline/incident management
+    rag_analyst = "rag_analyst"  # Experiments and queries
+    rag_user    = "rag_user"     # Query only
 
 
 class IngestStrategy(str, enum.Enum):
@@ -89,7 +89,7 @@ class User(Base):
     # Password is optional – users who log in via Google don't have one
     hashed_password = Column(String, nullable=True)
     full_name = Column(String, nullable=True)
-    role = Column(Enum(UserRole), default=UserRole.user, nullable=False)
+    role = Column(Enum(UserRole), default=UserRole.rag_user, nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 

@@ -49,7 +49,7 @@ class SimulateRequest(BaseModel):
 def simulate_incident(
     request: SimulateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin)),
+    current_user: User = Depends(require_role(UserRole.rag_admin)),
 ):
     """Create a synthetic CAPTCHA incident for testing. Admin only."""
     source_id = request.source_id
@@ -98,7 +98,7 @@ def resolve_incident(
     incident_id: str,
     request: ResolveRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.curator)),
+    current_user: User = Depends(require_role(UserRole.rag_admin, UserRole.rag_curator)),
 ):
     service = CaptchaService(db)
     try:

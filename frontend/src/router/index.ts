@@ -6,28 +6,23 @@ import DashboardView from '@/views/DashboardView.vue'
 import SourcesView from '@/views/SourcesView.vue'
 import QueryView from '@/views/QueryView.vue'
 import IncidentsView from '@/views/IncidentsView.vue'
-import AuditView from '@/views/AuditView.vue'
-import UsersView from '@/views/UsersView.vue'
 import KnowledgeBaseView from '@/views/KnowledgeBaseView.vue'
 import ExperimentsView from '@/views/ExperimentsView.vue'
-import JobsView from '@/views/JobsView.vue'
 import PipelineView from '@/views/PipelineView.vue'
 
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
-    { path: '/', redirect: '/dashboard' },
+    { path: '/', redirect: '/query' },
     { path: '/login', component: LoginView, meta: { public: true } },
-    { path: '/dashboard', component: DashboardView },
-    { path: '/sources', component: SourcesView, meta: { roles: ['admin', 'curator'] } },
+    { path: '/dashboard', component: DashboardView, meta: { roles: ['rag_admin', 'rag_curator', 'rag_analyst'] } },
+    { path: '/sources', component: SourcesView, meta: { roles: ['rag_admin', 'rag_curator'] } },
     { path: '/query', component: QueryView },
-    { path: '/pipeline', component: PipelineView, meta: { roles: ['admin', 'curator'] } },
+    { path: '/pipeline', component: PipelineView, meta: { roles: ['rag_admin', 'rag_curator'] } },
     { path: '/jobs', redirect: '/pipeline' },
-    { path: '/incidents', component: IncidentsView, meta: { roles: ['admin', 'curator'] } },
-    { path: '/audit', component: AuditView, meta: { roles: ['admin', 'curator'] } },
-    { path: '/users', component: UsersView, meta: { roles: ['admin', 'curator'] } },
-    { path: '/knowledge-base', component: KnowledgeBaseView },
-    { path: '/experiments', component: ExperimentsView, meta: { roles: ['admin', 'analyst'] } },
+    { path: '/incidents', component: IncidentsView, meta: { roles: ['rag_admin', 'rag_curator'] } },
+    { path: '/knowledge-base', component: KnowledgeBaseView, meta: { roles: ['rag_admin', 'rag_curator', 'rag_analyst'] } },
+    { path: '/experiments', component: ExperimentsView, meta: { roles: ['rag_admin', 'rag_analyst'] } },
   ],
 })
 
@@ -37,11 +32,11 @@ router.beforeEach((to) => {
     return '/login'
   }
   if (to.path === '/login' && auth.isAuthenticated()) {
-    return '/dashboard'
+    return '/query'
   }
   const roles = to.meta.roles as string[] | undefined
   if (roles && auth.user && !roles.includes(auth.user.role)) {
-    return '/dashboard'
+    return '/query'
   }
 })
 
