@@ -72,12 +72,12 @@ _GROUP_TO_ROLE: dict[str, UserRole] = {
 }
 
 
-def _map_role(groups: list[str]) -> UserRole:
-    """Highest-privilege matching group wins. Defaults to rag_user."""
+def _map_role(groups: list[str]) -> UserRole | None:
+    """Highest-privilege matching group wins. Returns None if user has no recognized group."""
     for group in ("rag_admin", "rag_curator", "rag_analyst", "rag_user"):
         if group in groups:
             return _GROUP_TO_ROLE[group]
-    return UserRole.rag_user
+    return None
 
 
 def _extract_groups(access_token: str) -> list[str]:
@@ -175,6 +175,11 @@ async def keycloak_callback(
 
     keycloak_roles = _extract_groups(access_token)
     role = _map_role(keycloak_roles)
+
+    if role is None:
+        logger.warning("Keycloak login blocked — no recognized group for %s (groups=%s)", email, keycloak_roles,
+                       extra={"event": "keycloak_unauthorized"})
+        return RedirectResponse(url=f"{settings.frontend_url}?auth_error=unauthorized")
 
     user = _get_or_create_keycloak_user(db, sub, email, full_name, role)
 
