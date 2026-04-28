@@ -73,7 +73,7 @@ body {
   align-items: baseline;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 24px;
+  margin-bottom: 12px;
 }
 .page-header h2 {
   font-size: 20px;

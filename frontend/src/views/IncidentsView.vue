@@ -2,14 +2,12 @@
   <AppLayout>
     <div class="page">
       <div class="page-header">
-        <div>
-          <h2>Incidents</h2>
-          <p>CAPTCHA detections and blocked scrape attempts requiring resolution</p>
-        </div>
-        <div class="page-actions">
-          <span v-if="openIncidents.length" class="unresolved-badge">{{ openIncidents.length }} unresolved</span>
-          <Button label="Refresh" icon="pi pi-refresh" size="small" severity="secondary" @click="reload" :loading="loading" />
-        </div>
+        <h2>Incidents</h2>
+        <p>CAPTCHA detections and blocked scrape attempts requiring resolution</p>
+      </div>
+      <div class="page-actions">
+        <span v-if="openIncidents.length" class="unresolved-badge">{{ openIncidents.length }} unresolved</span>
+        <Button label="Refresh" icon="pi pi-refresh" size="small" severity="secondary" @click="reload" :loading="loading" />
       </div>
 
       <div v-if="error" class="alert alert-error">{{ error }}</div>

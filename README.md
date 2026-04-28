@@ -86,8 +86,6 @@ KEYCLOAK_REALM=ass-nss-project
 # KEYCLOAK_CLIENT_SECRET=<Keycloak admin → Clients → rag-system → Credentials>
 # KEYCLOAK_REDIRECT_URI=http://localhost:8080/auth/keycloak/callback
 # FRONTEND_URL=http://localhost:8080
-# KEYCLOAK_ADMIN_CLIENT_ID=rag-rbac-sa
-# KEYCLOAK_ADMIN_CLIENT_SECRET=<Keycloak admin → Clients → rag-rbac-sa → Credentials>
 ```
 
 ### 3. Start the system
@@ -271,9 +269,7 @@ Lists all users.
 ---
 
 #### `PATCH /auth/users/{user_id}` *(admin only)*
-Update a user's role or active status. When the target user authenticates via Keycloak SSO, a role change is also synced to Keycloak group membership (via `rag-rbac-sa` service account) so the new role persists across future SSO logins. If Keycloak is unreachable or not configured, the sync is skipped with a warning — the local DB change is always committed.
-
-> **Keycloak RBAC proactive sync:** At startup and every 10 minutes, the API pulls all realm users from Keycloak via the Admin REST API and upserts them into the local DB (matched by `oauth_id`, fallback by email). This means all Keycloak users and their current roles are visible in Users & RBAC before anyone logs in for the first time. Requires `KEYCLOAK_ADMIN_CLIENT_ID` and `KEYCLOAK_ADMIN_CLIENT_SECRET` to be set.
+Update a user's role or active status.
 
 **Request** (`application/json`, all fields optional):
 ```json
@@ -834,6 +830,8 @@ docker compose restart api   # or: podman compose restart api
 
 All services emit structured JSON logs. Each line includes `timestamp`, `level`, `logger`, `service`, `message`, and an `event` slug for machine parsing.
 
+Frontend errors (`api_error`, `network_error`, `vue_error`, `unhandled_promise_rejection`) are written as structured JSON to `console.error` by `api/client.ts` and `main.ts`. In production, these appear in the `rag-frontend` pod's stdout and are collected by Alloy → Loki.
+
 ```bash
 podman compose logs -f api      # API logs
 podman compose logs -f worker   # Worker/ingest logs
@@ -890,10 +888,6 @@ Event catalogue:
 | `ingest_strategy_fallback` | worker | Falling back to next strategy |
 | `ingest_strategy_error` | worker | A strategy raised an error |
 | `captcha_detected` | worker | CAPTCHA found during ingest — also fires `rag_app=incident` Loki label |
-| `keycloak_role_synced` | api | Role change synced to Keycloak successfully |
-| `keycloak_sync_failed` | api | Keycloak unreachable or not configured — role saved locally, sync skipped |
-| `keycloak_user_sync` | api | Proactive user sync complete (created/updated/skipped counts) |
-| `keycloak_sync_skipped` | api | Keycloak unreachable during user sync — will retry on next tick |
 | `document_created` | worker | Document + chunks saved to DB |
 | `embedding_completed` | worker | Chunks upserted into Qdrant |
 | `embedding_failed` | worker | Qdrant upsert failed |
@@ -968,8 +962,9 @@ rag_system/
 │   ├── alembic.ini             # Database migration config
 │   ├── alembic/                # Migration scripts (0001–0007)
 │   ├── routers/
-│   │   ├── auth.py             # Login, register, JWT tokens, audit log, user management + Keycloak RBAC sync
+│   │   ├── auth.py             # Login, register, JWT tokens, audit log, user management
 │   │   ├── auth_google.py      # Google OAuth2 (HMAC-signed stateless state tokens)
+│   │   ├── auth_keycloak.py    # Keycloak OIDC callback
 │   │   ├── sources.py          # Source management + ingest trigger (SSRF-protected)
 │   │   ├── query.py            # RAG query endpoint
 │   │   ├── documents.py        # Document/chunk browsing + evidence URL generation
@@ -984,8 +979,7 @@ rag_system/
 │       ├── storage_service.py    # CESNET S3 file storage
 │       ├── captcha_service.py    # CAPTCHA detection + incident creation
 │       ├── auth_service.py       # JWT + bcrypt password hashing
-│       ├── keycloak_service.py   # Keycloak Admin REST API — assign_role() + sync_users_from_keycloak()
-│       ├── scheduler_service.py  # APScheduler: periodic crawls, evidence/index cleanup, Keycloak sync
+│       ├── scheduler_service.py  # APScheduler: periodic crawls, evidence/index cleanup, gauge refresh
 │       ├── logging_config.py     # Structured JSON logging (python-json-logger)
 │       └── queue_service.py      # RabbitMQ job publisher
 └── frontend/                   # Vue 3 + TypeScript SPA

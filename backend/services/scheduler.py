@@ -17,10 +17,6 @@ Periodic tasks:
 
 4. _refresh_gauges (every CHECK_INTERVAL_MINUTES minutes)
    Updates Prometheus gauges that reflect current DB state.
-
-5. _sync_keycloak_users (every 10 minutes)
-   Pulls all Keycloak realm users into the local DB so RBAC is accurate
-   before anyone logs in for the first time.
 """
 
 import logging
@@ -250,18 +246,6 @@ def _refresh_gauges() -> None:
         db.close()
 
 
-async def _sync_keycloak_users() -> None:
-    """Pull all Keycloak realm users into the local DB. No-op if Keycloak is not configured."""
-    from services.keycloak import sync_users_from_keycloak
-    db = SessionLocal()
-    try:
-        await sync_users_from_keycloak(db)
-    except Exception:
-        logger.exception("Keycloak user sync task failed")
-    finally:
-        db.close()
-
-
 def create_scheduler() -> AsyncIOScheduler:
     """
     Creates and configures an APScheduler instance.
@@ -314,17 +298,6 @@ def create_scheduler() -> AsyncIOScheduler:
         name="Prometheus gauge refresh",
         replace_existing=True,
         next_run_time=datetime.utcnow(),
-    )
-
-    # Task 5: sync Keycloak users every 10 minutes (async job, runs on event loop)
-    # Ensures the app DB mirrors Keycloak before anyone logs in for the first time.
-    scheduler.add_job(
-        _sync_keycloak_users,
-        trigger="interval",
-        minutes=10,
-        id="keycloak_sync",
-        name="Keycloak user sync",
-        replace_existing=True,
     )
 
     return scheduler

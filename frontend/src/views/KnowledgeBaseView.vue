@@ -4,10 +4,8 @@
 
       <!-- Page header -->
       <div class="page-header">
-        <div>
-          <h2>Knowledge Base</h2>
-          <p>Browse indexed documents and their text chunks</p>
-        </div>
+        <h2>Knowledge Base</h2>
+        <p>Browse indexed documents and their text chunks</p>
       </div>
 
       <!-- Stat strip -->
@@ -56,12 +54,7 @@
       <div class="table-card">
         <div class="card-header">
           <span class="card-title">ALL DOCUMENTS</span>
-          <span class="card-count">({{ documents.length }}{{ documents.length === limit ? '+' : '' }})</span>
-          <div class="pagination-row">
-            <button class="pg-btn" @click="prevPage" :disabled="offset === 0">‹</button>
-            <span class="pg-label">Page {{ page + 1 }}</span>
-            <button class="pg-btn" @click="nextPage" :disabled="documents.length < limit">›</button>
-          </div>
+          <span class="card-count">({{ documents.length }}{{ documents.length === limit.value ? '+' : '' }})</span>
         </div>
 
         <div v-if="error" class="error-bar">{{ error }}</div>
@@ -129,6 +122,13 @@
         </DataTable>
       </div>
 
+      <div class="pagination">
+        <Select v-model="limit" :options="pageSizeOptions" optionLabel="label" optionValue="value" size="small" style="min-width:90px" @change="applyFilter" />
+        <Button icon="pi pi-chevron-left" text size="small" @click="prevPage" :disabled="offset === 0" />
+        <span class="page-info">Page {{ page + 1 }}</span>
+        <Button icon="pi pi-chevron-right" text size="small" @click="nextPage" :disabled="documents.length < limit" />
+      </div>
+
     </div>
 
     <!-- Chunks side panel -->
@@ -191,6 +191,7 @@ import Column from 'primevue/column'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
+import Select from 'primevue/select'
 import { get } from '@/api/client'
 import type { DocumentResponse, ChunkResponse } from '@/api/types'
 import { relTime } from '@/utils/time'
@@ -201,9 +202,15 @@ const documents = ref<DocumentResponse[]>([])
 const selectedDoc = ref<DocumentResponse | null>(null)
 const titleFilter = ref('')
 const sourceFilter = ref('')
-const limit = 25
+const limit = ref(25)
 const offset = ref(0)
 const page = ref(0)
+const pageSizeOptions = [
+  { label: '10 / page', value: 10 },
+  { label: '25 / page', value: 25 },
+  { label: '50 / page', value: 50 },
+  { label: '100 / page', value: 100 },
+]
 
 const chunksVisible = ref(false)
 const chunksLoading = ref(false)
@@ -232,7 +239,7 @@ async function loadDocuments() {
   loading.value = true
   error.value = null
   try {
-    const params = new URLSearchParams({ limit: String(limit), offset: String(offset.value) })
+    const params = new URLSearchParams({ limit: String(limit.value), offset: String(offset.value) })
     if (sourceFilter.value.trim()) params.append('source_id', sourceFilter.value.trim())
     documents.value = await get<DocumentResponse[]>(`/documents/?${params}`)
     stats.value.documents = offset.value + documents.value.length
@@ -256,13 +263,13 @@ function clearFilter() {
 }
 
 function prevPage() {
-  offset.value = Math.max(0, offset.value - limit)
+  offset.value = Math.max(0, offset.value - limit.value)
   page.value = Math.max(0, page.value - 1)
   loadDocuments()
 }
 
 function nextPage() {
-  offset.value += limit
+  offset.value += limit.value
   page.value += 1
   loadDocuments()
 }
@@ -398,29 +405,16 @@ onMounted(loadDocuments)
   font-size: 11px;
   color: var(--muted);
 }
-.pagination-row {
-  margin-left: auto;
+.pagination {
   display: flex;
+  gap: 8px;
   align-items: center;
-  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 13px;
 }
-.pg-btn {
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--text2);
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s;
-}
-.pg-btn:hover:not(:disabled) { background: rgba(255,255,255,.05); }
-.pg-btn:disabled { opacity: 0.35; cursor: default; }
-.pg-label { font-size: 11px; color: var(--muted); }
+.page-info { min-width: 50px; text-align: center; }
 
 .error-bar {
   padding: 8px 16px;

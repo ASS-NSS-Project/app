@@ -2,16 +2,34 @@
   <AppLayout>
     <div class="page query-page">
       <div class="page-header">
-        <div>
-          <h2>Query Interface</h2>
-          <p>Ask questions about indexed content</p>
+        <h2>Query Interface</h2>
+        <p>Ask questions about indexed content</p>
+      </div>
+      <div class="page-actions">
+        <Button v-if="store.history.length" label="Clear" icon="pi pi-trash" size="small" severity="secondary" @click="onClearChat" />
+        <button class="legend-toggle" @click="showLegend = !showLegend" :title="showLegend ? 'Hide legend' : 'Show legend'">{{ showLegend ? '✕' : 'ⓘ' }}</button>
+        <div class="mode-chips">
+          <button :class="['chip-mode', store.mode === 'rag' ? 'active' : '']" @click="store.mode = 'rag'">RAG</button>
+          <button :class="['chip-mode', store.mode === 'no_rag' ? 'active' : '']" @click="store.mode = 'no_rag'; store.strictGrounding = false">No RAG</button>
+          <button :class="['chip-mode', store.strictGrounding ? 'active-gold' : '']" :disabled="store.mode === 'no_rag'" @click="store.strictGrounding = !store.strictGrounding">Strict Grounding</button>
         </div>
-        <div class="page-actions">
-          <Button v-if="store.history.length" label="Clear" icon="pi pi-trash" size="small" severity="secondary" @click="onClearChat" />
-          <div class="mode-chips">
-            <button :class="['chip-mode', store.mode === 'rag' ? 'active' : '']" @click="store.mode = 'rag'">RAG</button>
-            <button :class="['chip-mode', store.mode === 'no_rag' ? 'active' : '']" @click="store.mode = 'no_rag'">No RAG</button>
-            <button :class="['chip-mode', store.strictGrounding ? 'active-gold' : '']" @click="store.strictGrounding = !store.strictGrounding">Strict</button>
+      </div>
+
+      <!-- Mode legend -->
+      <div v-if="showLegend" class="legend-box">
+        <div class="legend-title">Query mode reference</div>
+        <div class="legend-modes">
+          <div class="legend-item">
+            <span class="legend-badge badge-rag">RAG</span>
+            <span class="legend-text">The system retrieves the most relevant text chunks from your indexed sources and passes them to the LLM as context. Answers are grounded in real content you have crawled.</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-badge badge-norag">No RAG</span>
+            <span class="legend-text">The LLM answers using only its training knowledge. Your indexed sources are not consulted. Use this to compare the model's general knowledge against RAG-grounded answers.</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-badge badge-strict">Strict Grounding</span>
+            <span class="legend-text">The LLM is instructed to answer <em>only</em> from the retrieved chunks and to say "I don't know" if the context is insufficient. Prevents the model from supplementing with general knowledge. Only available in RAG mode.</span>
           </div>
         </div>
       </div>
@@ -150,7 +168,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
 import { get, post } from '@/api/client'
 import type { SourceResponse, QueryResponse, ModelInfo } from '@/api/types'
@@ -170,6 +188,11 @@ const availableModels = ref<ModelInfo[]>([])
 const sessionStartIndex = ref(0)
 const showPrevious = ref(false)
 const shareCopied = ref(false)
+const showLegend = ref(false)
+
+watch(() => store.mode, (mode) => {
+  if (mode === 'no_rag') store.strictGrounding = false
+})
 
 // Model selection
 const selectedModelId = ref('aiaas:qwen3.5-122b')
@@ -402,7 +425,7 @@ onMounted(async () => {
   cursor: pointer;
   transition: all 0.15s;
 }
-.chip-mode:hover { border-color: var(--accent); color: var(--text); }
+.chip-mode:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
 .chip-mode.active {
   background: rgba(0,230,118,.12);
   border-color: var(--accent);
@@ -412,6 +435,73 @@ onMounted(async () => {
   background: rgba(245,158,11,.1);
   border-color: var(--warning);
   color: var(--warning);
+}
+.chip-mode:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.legend-toggle {
+  background: none;
+  border: 1px solid var(--border2);
+  border-radius: 99px;
+  color: var(--muted);
+  font-size: 13px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.legend-toggle:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Legend */
+.legend-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.legend-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+.legend-modes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+@media (max-width: 700px) {
+  .legend-modes { grid-template-columns: 1fr; }
+}
+.legend-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.legend-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  align-self: flex-start;
+}
+.badge-rag    { background: rgba(0,230,118,.15); color: var(--accent); }
+.badge-norag  { background: rgba(148,163,184,.15); color: var(--text2); }
+.badge-strict { background: rgba(245,158,11,.1); color: var(--warning); }
+.legend-text {
+  font-size: 11px;
+  color: var(--text2);
+  line-height: 1.55;
 }
 
 /* Query bar */

@@ -104,8 +104,6 @@ class Settings(BaseSettings):
     keycloak_client_id: str = ""
     keycloak_client_secret: str = ""
     keycloak_redirect_uri: str = "http://localhost/auth/keycloak/callback"
-    keycloak_admin_client_id: str = ""      # service account: rag-rbac-sa
-    keycloak_admin_client_secret: str = ""  # service account secret
     frontend_url: str = "http://localhost"
 
     # ── First Admin (created on startup) ──────────

@@ -2,11 +2,11 @@
   <AppLayout>
     <div class="page">
       <div class="page-header">
-        <div>
-          <h2>Experiments</h2>
-          <p>Evaluate RAG retrieval quality</p>
-        </div>
-        <Button label="New Experiment" icon="pi pi-plus" size="small" @click="newVisible = true" />
+        <h2>Experiments</h2>
+        <p>Evaluate RAG retrieval quality</p>
+      </div>
+      <div class="page-actions">
+        <Button label="+ New Experiment" icon="pi pi-plus" size="small" @click="newVisible = true" />
       </div>
 
       <div v-if="error" class="alert alert-error">{{ error }}</div>
@@ -37,7 +37,7 @@
         </div>
       </div>
 
-      <DataTable :value="experiments" :loading="loading" size="small" stripedRows>
+      <DataTable :value="paginatedExperiments" :loading="loading" size="small" stripedRows>
         <template #empty>
           <div class="empty-state">
             <div class="icon">🧪</div>
@@ -107,6 +107,13 @@
           </template>
         </Column>
       </DataTable>
+
+      <div class="pagination">
+        <Select v-model="limit" :options="pageSizeOptions" optionLabel="label" optionValue="value" size="small" style="min-width:90px" @change="expPage = 0" />
+        <Button icon="pi pi-chevron-left" text size="small" @click="prevPage" :disabled="expPage === 0" />
+        <span class="page-info">Page {{ expPage + 1 }}</span>
+        <Button icon="pi pi-chevron-right" text size="small" @click="nextPage" :disabled="(expPage + 1) * limit >= experiments.length" />
+      </div>
     </div>
 
     <!-- New Experiment Dialog -->
@@ -217,7 +224,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
@@ -226,6 +233,7 @@ import Dialog from 'primevue/dialog'
 import Tag from 'primevue/tag'
 import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
+import Select from 'primevue/select'
 import { get, post, del } from '@/api/client'
 import type { ExperimentResponse, ExperimentCreate, ModelInfo } from '@/api/types'
 import { fmtDatetime } from '@/utils/time'
@@ -241,6 +249,21 @@ const detailsExp = ref<ExperimentResponse | null>(null)
 const expandedRows = ref<Record<string, boolean>>({})
 const runningId = ref<string | null>(null)
 
+const limit = ref(25)
+const expPage = ref(0)
+const pageSizeOptions = [
+  { label: '10 / page', value: 10 },
+  { label: '25 / page', value: 25 },
+  { label: '50 / page', value: 50 },
+  { label: '100 / page', value: 100 },
+]
+const paginatedExperiments = computed(() =>
+  experiments.value.slice(expPage.value * limit.value, (expPage.value + 1) * limit.value)
+)
+function prevPage() { expPage.value = Math.max(0, expPage.value - 1) }
+function nextPage() { expPage.value += 1 }
+watch(limit, () => { expPage.value = 0 })
+
 const modelGroups = computed(() => {
   const groups = new Map<string, ModelInfo[]>()
   for (const m of availableModels.value) {
@@ -250,11 +273,13 @@ const modelGroups = computed(() => {
   return [...groups.entries()]
 })
 
+const DEFAULT_MODEL = 'qwen3.5-122b'
+
 const form = reactive({
   name: '',
   description: '',
   top_k: 5,
-  model_name: '',
+  model_name: DEFAULT_MODEL,
   queries: [] as { query_text: string; keywordsRaw: string }[],
 })
 
@@ -319,7 +344,7 @@ async function createExperiment() {
     form.name = ''
     form.description = ''
     form.top_k = 5
-    form.model_name = ''
+    form.model_name = DEFAULT_MODEL
     form.queries = []
     await loadExperiments()
   } catch (e: any) {
@@ -497,6 +522,17 @@ get<ModelInfo[]>('/query/models').then(m => { availableModels.value = m }).catch
 .metric-card-mid  .metric-value { color: var(--warning); }
 .metric-card-bad  .metric-value { color: var(--danger); }
 .metric-hint { font-size: 10px; color: var(--muted); }
+
+.pagination {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.page-info { min-width: 50px; text-align: center; }
 
 /* Query answer expansion */
 .answer-box {

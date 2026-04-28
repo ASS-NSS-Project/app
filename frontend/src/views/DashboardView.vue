@@ -2,17 +2,13 @@
   <AppLayout>
     <div class="page">
       <div class="page-header">
-        <div>
-          <h2>Dashboard</h2>
-          <p>Last updated: {{ lastUpdated }}</p>
-        </div>
-        <div class="page-actions">
-          <a href="https://grafana.nss.jkzl.eu/d/rag-metrics" target="_blank" class="grafana-link">
-            Metrics ↗
-          </a>
-          <Button label="Refresh" icon="pi pi-refresh" size="small" severity="secondary" @click="load" :loading="loadingStats" />
-          <Button label="+ New Ingest Job" size="small" @click="$router.push('/sources')" />
-        </div>
+        <h2>Dashboard</h2>
+        <p>Last updated: {{ lastUpdated }}</p>
+      </div>
+      <div class="page-actions">
+        <Button label="Metrics ↗" size="small" severity="secondary" as="a" href="https://grafana.nss.jkzl.eu/d/rag-metrics" target="_blank" />
+        <Button label="Refresh" icon="pi pi-refresh" size="small" severity="secondary" @click="load" :loading="loadingStats" />
+        <Button label="+ New Ingest Job" size="small" @click="$router.push('/sources')" />
       </div>
 
       <!-- Stat cards -->
@@ -364,17 +360,6 @@ onUnmounted(() => clearInterval(ticker))
 }
 .strategy-pct { font-size: 12px; color: var(--text2); width: 32px; text-align: right; flex-shrink: 0; }
 
-.grafana-link {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--warning);
-  text-decoration: none;
-  padding: 4px 10px;
-  border: 1px solid rgba(245,158,11,.35);
-  border-radius: var(--radius-sm);
-  transition: background 0.15s;
-}
-.grafana-link:hover { background: rgba(245,158,11,.1); }
 .job-url { color: var(--accent); font-size: 12px; text-decoration: none; }
 .job-url:hover { text-decoration: underline; }
 .time-cell { color: var(--muted); font-size: 11px; }
