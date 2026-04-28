@@ -85,15 +85,6 @@
           style="min-width:140px"
           @change="reload"
         />
-        <Select
-          v-model="limit"
-          :options="pageSizeOptions"
-          optionLabel="label"
-          optionValue="value"
-          size="small"
-          style="min-width:90px"
-          @change="reload"
-        />
         <span class="filter-count" v-if="!loading">{{ jobs.length }} jobs</span>
       </div>
 
@@ -210,8 +201,9 @@
       </DataTable>
 
       <div class="pagination">
+        <Select v-model="limit" :options="pageSizeOptions" optionLabel="label" optionValue="value" size="small" style="min-width:90px" @change="reload" />
         <Button icon="pi pi-chevron-left" text size="small" @click="prevPage" :disabled="offset === 0" />
-        <span>Page {{ page + 1 }}</span>
+        <span class="page-info">Page {{ page + 1 }}</span>
         <Button icon="pi pi-chevron-right" text size="small" @click="nextPage" :disabled="jobs.length < limit" />
       </div>
     </div>
@@ -546,7 +538,8 @@ onMounted(async () => {
 .quality-good { color: var(--success); font-size: 12px; font-weight: 600; }
 .quality-mid { color: var(--warning); font-size: 12px; font-weight: 600; }
 .quality-bad { color: var(--danger); font-size: 12px; font-weight: 600; }
-.pagination { display: flex; gap: 8px; align-items: center; justify-content: center; margin-top: 12px; color: var(--muted); font-size: 13px; }
+.pagination { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 16px; color: var(--muted); font-size: 13px; }
+.page-info { min-width: 50px; text-align: center; }
 .row-actions { display: flex; gap: 2px; justify-content: flex-end; }
 :deep(.row-selected) { background: rgba(0,230,118,.06) !important; }
 </style>

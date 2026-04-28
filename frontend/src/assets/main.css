@@ -85,7 +85,7 @@ body {
   background-clip: text;
 }
 .page-header p { color: var(--muted); font-size: 13px; flex: 1; }
-.page-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.page-actions { display: flex; gap: 8px; flex-shrink: 0; margin-bottom: 20px; }
 
 /* ── Cards ── */
 .card {

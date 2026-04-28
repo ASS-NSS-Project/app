@@ -6,7 +6,7 @@
         <p>Evaluate RAG retrieval quality</p>
       </div>
       <div class="page-actions">
-        <Button label="+ New Experiment" icon="pi pi-plus" size="small" @click="newVisible = true" />
+        <Button label="+ New Experiment" size="small" @click="newVisible = true" />
       </div>
 
       <div v-if="error" class="alert alert-error">{{ error }}</div>

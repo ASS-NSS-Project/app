@@ -53,15 +53,6 @@
         <div v-if="error" class="alert alert-error">{{ error }}</div>
 
         <div class="filter-bar">
-          <Select
-            v-model="limit"
-            :options="pageSizeOptions"
-            optionLabel="label"
-            optionValue="value"
-            size="small"
-            style="min-width:90px"
-            @change="reloadSources"
-          />
           <Button label="Refresh" icon="pi pi-refresh" size="small" severity="secondary" @click="reloadSources" :loading="loading" />
         </div>
 
@@ -115,8 +106,9 @@
         </DataTable>
 
         <div class="pagination">
+          <Select v-model="limit" :options="pageSizeOptions" optionLabel="label" optionValue="value" size="small" style="min-width:90px" @change="reloadSources" />
           <Button icon="pi pi-chevron-left" text size="small" @click="prevPage" :disabled="offset === 0" />
-          <span>Page {{ page + 1 }}</span>
+          <span class="page-info">Page {{ page + 1 }}</span>
           <Button icon="pi pi-chevron-right" text size="small" @click="nextPage" :disabled="sources.length < limit" />
         </div>
       </template>
@@ -339,5 +331,6 @@ onMounted(loadSources)
 <style scoped>
 .panel-title { margin-left: 12px; font-size: 14px; font-weight: 600; }
 .filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
-.pagination { display: flex; gap: 8px; align-items: center; justify-content: center; margin-top: 12px; color: var(--muted); font-size: 13px; }
+.pagination { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 16px; color: var(--muted); font-size: 13px; }
+.page-info { min-width: 50px; text-align: center; }
 </style>
