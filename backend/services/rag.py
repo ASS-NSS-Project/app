@@ -88,6 +88,9 @@ class RAGService:
                 timeout=httpx.Timeout(connect=10.0, read=180.0, write=10.0, pool=5.0),
             )
             model = upstream_model or settings.aiaas_llm_model
+            # enable_thinking is an AIaaS-specific extension (suppresses chain-of-thought
+            # output from DeepSeek/Qwen3 reasoning models). Standard OpenAI/Anthropic APIs
+            # reject unknown extra_body fields, so we must not send it to external providers.
             aiaas_extras = False
             logger.info("Using upstream provider %s model=%s", upstream_base_url, model,
                         extra={"event": "upstream_provider", "base_url": upstream_base_url, "model": model})
@@ -240,6 +243,8 @@ class RAGService:
 
     @staticmethod
     def _strip_thinking(text: str) -> str:
+        # DeepSeek-R1 and Qwen3 emit chain-of-thought inside <think>…</think> before
+        # the answer. Strip it so users see only the final response, not the reasoning trace.
         return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
     def _build_rag_system_prompt(self, strict_grounding: bool) -> str:

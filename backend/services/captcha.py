@@ -73,7 +73,10 @@ class CaptchaDetector:
             if sig in content_lower
         )
 
-        # If we have CAPTCHA signals and little real content, it's a CAPTCHA
+        # Require 2+ CAPTCHA signals to avoid false positives on articles *about* CAPTCHAs
+        # (e.g. a blog post that mentions "recaptcha" once). The content_hits < 3 guard
+        # ensures we only fire when real page structure is absent — blocking pages are
+        # always sparse HTML with no <article>, <main>, or <p> tags.
         if captcha_hits >= 2 and content_hits < 3:
             logger.warning(
                 f"CAPTCHA detected on {url}: "
@@ -97,7 +100,8 @@ class CaptchaDetector:
         captcha_hits = sum(1 for kw in CAPTCHA_KEYWORDS if kw in html_lower)
         content_hits = sum(1 for sig in CONTENT_SIGNALS if sig in html_lower)
 
-        # Short page with CAPTCHA signals = probably blocked
+        # Same 2-hit threshold as detect_from_page; the len < 30000 guard replaces the
+        # content_hits check for raw HTML (we have no DOM to parse structural tags from).
         if captcha_hits >= 2 and len(html) < 30000 and content_hits < 5:
             logger.warning(f"CAPTCHA detected in HTML for {url}")
             return True

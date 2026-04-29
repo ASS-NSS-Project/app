@@ -146,6 +146,9 @@ def list_sources(
     )
     result = []
     for s in sources:
+        # Build a plain dict because Pydantic cannot serialize extra attributes
+        # (like doc_count) set on a SQLAlchemy ORM instance — they are not columns
+        # and are ignored by model_validate / from_attributes.
         d = {c.name: getattr(s, c.name) for c in s.__table__.columns}
         d["doc_count"] = doc_counts.get(s.id, 0)
         result.append(d)
@@ -287,6 +290,8 @@ def list_all_jobs(
     rows = q.order_by(IngestJob.created_at.desc()).offset(offset).limit(limit).all()
     result = []
     for job, src_name, src_url in rows:
+        # Same plain-dict workaround as list_sources: extra JOIN columns can't be
+        # attached to the ORM object and read back by Pydantic's from_attributes.
         d = {c.name: getattr(job, c.name) for c in job.__table__.columns}
         d["source_name"] = src_name
         d["source_base_url"] = src_url

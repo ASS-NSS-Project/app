@@ -9,6 +9,9 @@ from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 from config import get_settings
 from database import Base, engine, SessionLocal
+# Side-effect import: registers ORM model classes with Base.metadata so that
+# create_all() below discovers all tables. Without this line the import of Base
+# happens before models.py is loaded and create_all() creates nothing.
 import models  # noqa: F401
 from models import Chunk, Experiment, ExperimentStatus
 from routers import auth, sources, query, incidents
@@ -22,6 +25,8 @@ from services.rag import _get_embedder
 from services.scheduler import create_scheduler
 
 setup_logging(os.getenv("LOG_LEVEL", "INFO"))
+# Without propagate=True, uvicorn's access log handler bypasses our JSON handler
+# and writes plain-text lines directly to stderr, breaking Loki parsing.
 logging.getLogger("uvicorn.access").propagate = True
 logger = logging.getLogger(__name__)
 

@@ -62,12 +62,17 @@ def get_embedding_model() -> BGEM3FlagModel:
         model_name = settings.embedding_model
         cached = _is_model_cached(model_name)
         if not cached:
+            # Remove *.incomplete files left by a previously interrupted download.
+            # BGEM3FlagModel treats any blob file (even a partial one) as valid and
+            # crashes with a cryptic error instead of re-downloading it.
             _cleanup_incomplete_blobs(model_name)
         logger.info("Loading BGE-M3 model", extra={
             "event": "model_load_start",
             "model": model_name,
             "cached": cached,
         })
+        # local_files_only=True skips the HuggingFace Hub network check when the model
+        # is already on disk — avoids a ~30 s timeout in air-gapped containers (Kubernetes).
         _embedding_model = BGEM3FlagModel(model_name, use_fp16=True, local_files_only=cached)
         logger.info("BGE-M3 model loaded", extra={"event": "model_load_complete", "model": model_name})
     return _embedding_model

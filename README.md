@@ -9,7 +9,7 @@ LLM and VLM inference runs on **CERIT-SC AIaaS** (e-INFRA). Object storage uses 
 ## What This System Does
 
 1. **Ingests** websites using a multi-strategy pipeline:
-   - API/Feed (Jina.ai reader + RSS fallback) → HTML fetch → Rendered DOM (Playwright) → Screenshot Screening + vision AI
+   - API/Feed (Jina.ai reader + RSS fallback) → HTML fetch → Rendered DOM (Playwright) → Screenshot + vision AI
 2. **Extracts** structured content from screenshots using a VLM on AIaaS
 3. **Indexes** content in Qdrant using BGE-M3 hybrid embeddings (dense + sparse, RRF fusion)
 4. **Answers** questions using RAG — retrieves relevant passages, then answers with citations via a text LLM on AIaaS
@@ -45,10 +45,13 @@ Fill in the required values:
 
 ```env
 # PostgreSQL
-POSTGRES_PASSWORD=strong-random-password
+POSTGRES_USER=raguser
+POSTGRES_PASSWORD=change_me_strong_password
+POSTGRES_DB=ragdb
 
 # RabbitMQ
-RABBITMQ_DEFAULT_PASS=strong-random-password
+RABBITMQ_DEFAULT_USER=raguser
+RABBITMQ_DEFAULT_PASS=change_me_strong_password
 
 # CESNET S3 (dev uses separate buckets — see Object Storage section)
 S3_ENDPOINT_URL=https://s3.cl4.du.cesnet.cz
@@ -59,33 +62,32 @@ S3_BUCKET_EVIDENCE=rag-evidence-dev
 S3_BUCKET_DOCS=rag-documents-dev
 
 # CERIT-SC AIaaS — shared base URL and key for both LLM and VLM
-AIAAS_BASE_URL=https://<aiaas-endpoint>/v1
-AIAAS_API_KEY=<provided-by-team>
-AIAAS_LLM_MODEL=<from /v1/models, e.g. llama-3.3-70b-instruct>
-AIAAS_VLM_MODEL=<from /v1/models, e.g. qwen2.5-vl-7b-instruct>
+AIAAS_BASE_URL=https://llm.ai.e-infra.cz/v1
+AIAAS_API_KEY=<provided-by-e-INFRA>
+AIAAS_LLM_MODEL=qwen3.5-122b
+AIAAS_VLM_MODEL=qwen3.5-122b
 
 # Optional external LLM providers — set any to unlock those models in the query UI
 # OPENAI_API_KEY=sk-...        # enables GPT-4.1, GPT-4.1-mini, GPT-4.1-nano, GPT-4o, o4-mini, o3
 # GEMINI_API_KEY=AIza...       # enables Gemini 2.5 Pro/Flash, 2.0 Flash, 3.0 Flash, 3.1 Pro
 # ANTHROPIC_API_KEY=sk-ant-... # enables Claude Opus 4.7, Sonnet 4.6, Haiku 4.5 (direct Anthropic API)
-# OPENROUTER_API_KEY=sk-or-... # enables Claude Opus 4.7, Sonnet 4.6 via OpenRouter
 
 # JWT signing secret
 # Generate: python -c "import secrets; print(secrets.token_hex(32))"
-JWT_SECRET=your-random-hex-string
+JWT_SECRET=change_me_to_a_random_hex_string
 
 # First admin account (created automatically on first startup)
+FIRST_ADMIN_USERNAME=admin
 FIRST_ADMIN_EMAIL=admin@example.com
-FIRST_ADMIN_PASSWORD=strong-random-password
+FIRST_ADMIN_PASSWORD=change_me_strong_password
 
 # Keycloak OIDC — leave commented out for pure local dev (JWT login still works)
-# Uncomment to test Keycloak SSO locally against the prod Keycloak instance:
-KEYCLOAK_URL=https://keycloak.nss.jkzl.eu
-KEYCLOAK_REALM=ass-nss-project
+# KEYCLOAK_URL=https://keycloak.nss.jkzl.eu
+# KEYCLOAK_REALM=ass-nss-project
 # KEYCLOAK_CLIENT_ID=rag-system
 # KEYCLOAK_CLIENT_SECRET=<Keycloak admin → Clients → rag-system → Credentials>
-# KEYCLOAK_REDIRECT_URI=http://localhost:8080/auth/keycloak/callback
-# FRONTEND_URL=http://localhost:8080
+# KEYCLOAK_REDIRECT_URI=http://localhost/auth/keycloak/callback
+# FRONTEND_URL=http://localhost
 ```
 
 ### 3. Start the system
@@ -116,20 +118,21 @@ All endpoints (except `GET /health`) require a JWT token in the `Authorization` 
 Authorization: Bearer <token>
 ```
 
-Obtain a token via `POST /auth/login`. Roles control access: **admin** > **curator** > **analyst** > **user**.
+Obtain a token via `POST /auth/login`. Roles control access: **rag_admin** > **rag_curator** > **rag_analyst** > **rag_user**.
 
 **Frontend navigation visibility by role:**
 
-| Section | admin | curator | analyst | user |
-|---------|-------|---------|---------|------|
+| Section | rag_admin | rag_curator | rag_analyst | rag_user |
+|---------|-----------|-------------|-------------|----------|
 | Query (RAG) | ✓ | ✓ | ✓ | ✓ |
-| Dashboard, Knowledge Base | ✓ | ✓ | ✓ | — |
+| Knowledge Base | ✓ | ✓ | ✓ | — |
 | Sources, Pipeline, Incidents | ✓ | ✓ | — | — |
 | Experiments | ✓ | — | ✓ | — |
-| Audit Log, Users & RBAC | ✓ | — | — | — |
-| Grafana (external link) | ✓ | ✓ | ✓ | ✓ |
+| Dashboard ↗ (Grafana) | ✓ | ✓ | ✓ | — |
+| Audit Logs ↗ (Grafana) | ✓ | ✓ | ✓ | — |
+| Users ↗ (Keycloak) | ✓ | — | — | — |
 
-The router enforces these roles client-side and redirects to `/query` if the role is insufficient. `/query` is accessible to all authenticated roles and is the default landing page.
+The router enforces roles client-side and redirects to `/query` if the role is insufficient. Dashboard, Audit Logs, and Users management all open as external links — there are no in-app pages for these. `/query` is the default landing page for all authenticated roles.
 
 Enable Swagger UI by setting `API_DOCS=true` in `.env`, then visit `/docs`.
 
@@ -137,13 +140,23 @@ Enable Swagger UI by setting `API_DOCS=true` in `.env`, then visit `/docs`.
 
 ### Authentication — `/auth`
 
+#### `GET /auth/providers`
+Public — returns which SSO providers are configured. Used by the frontend to show/hide the Keycloak login button.
+
+**Response `200`**:
+```json
+{"keycloak": true}
+```
+
+---
+
 #### `POST /auth/login`
-Authenticate with username/email and password. Returns a JWT token.
+OAuth2 form login. For API and script access where form encoding is preferred.
 
 **Request** (`application/x-www-form-urlencoded`):
 | Field | Type | Description |
 |-------|------|-------------|
-| `username` | string | Email or username |
+| `username` | string | Username |
 | `password` | string | Password |
 
 **Response `200`**:
@@ -152,7 +165,7 @@ Authenticate with username/email and password. Returns a JWT token.
   "access_token": "eyJ...",
   "token_type": "bearer",
   "user_id": "uuid",
-  "role": "admin",
+  "role": "rag_admin",
   "email": "admin@example.com",
   "username": "admin"
 }
@@ -160,36 +173,15 @@ Authenticate with username/email and password. Returns a JWT token.
 
 ---
 
-#### `GET /auth/google`
-Redirects to Google's OAuth2 consent page. No body required.
-
-#### `GET /auth/google/callback`
-OAuth2 callback — handled automatically by Google after user consent. Redirects to the frontend with the JWT token as a query parameter.
-
-#### `GET /auth/keycloak`
-Redirects to the Keycloak OIDC authorization endpoint. Shown as the **"Sign in with OIDC"** button on the login page when `KEYCLOAK_URL` is configured. The button uses the Keycloak logo (`src/assets/keycloak-logo.png`).
-
-#### `GET /auth/keycloak/callback`
-OIDC callback — handled automatically by Keycloak after user consent. Redirects to the frontend with the JWT token as a query parameter.
-
----
-
-#### `POST /auth/register` *(admin only)*
-Create a new user account.
+#### `POST /auth/local-login`
+Password-only login for the local admin account. Used by the UI login form.
 
 **Request** (`application/json`):
 ```json
-{
-  "username": "jsmith",
-  "email": "j@example.com",
-  "password": "min-12-chars",
-  "full_name": "Jane Smith",
-  "role": "user"
-}
+{"password": "your-admin-password"}
 ```
-`role` is one of: `admin`, `curator`, `analyst`, `user`.
 
-**Response `200`**: `UserResponse` (see below).
+**Response `200`**: same shape as `/auth/login`.
 
 ---
 
@@ -202,16 +194,23 @@ Returns the currently authenticated user's profile.
   "id": "uuid",
   "username": "admin",
   "email": "admin@example.com",
-  "full_name": "Admin",
-  "role": "admin",
+  "full_name": null,
+  "role": "rag_admin",
   "is_active": true
 }
 ```
 
 ---
 
+#### `POST /auth/refresh`
+Re-issues a JWT with the current DB role. Called by the frontend when a role mismatch is detected (e.g. after a Keycloak group change).
+
+**Response `200`**: same shape as `/auth/login`.
+
+---
+
 #### `GET /auth/stats`
-Returns system-wide counts and chart data for the dashboard.
+Returns system-wide counts and chart data.
 
 **Response `200`**:
 ```json
@@ -233,53 +232,17 @@ Returns system-wide counts and chart data for the dashboard.
 }
 ```
 
-`strategy_distribution` is a map of strategy name → percentage of completed jobs using that strategy. `activity_24h` contains one entry per hour for the last 24 hours.
+`strategy_distribution` is strategy name → percentage of completed jobs. `activity_24h` has one entry per hour for the last 24 hours.
 
 ---
 
-#### `GET /auth/audit` *(admin, curator)*
-Returns audit log entries, newest first.
+#### `GET /auth/keycloak`
+Redirects to the Keycloak OIDC authorization endpoint. Shown as the **"Sign in with OIDC"** button on the login page when `KEYCLOAK_URL` and `KEYCLOAK_CLIENT_ID` are configured.
 
-**Query params**:
-| Param | Default | Description |
-|-------|---------|-------------|
-| `limit` | `50` | Max entries (1–200) |
-| `offset` | `0` | Pagination offset |
+#### `GET /auth/keycloak/callback`
+OIDC callback — handled automatically by Keycloak. Redirects to the frontend with the JWT as a `?token=` query parameter.
 
-**Response `200`**: array of:
-```json
-{
-  "id": "uuid",
-  "action": "SOURCE_CREATED",
-  "object_type": "source",
-  "object_id": "uuid",
-  "extra": {"name": "Tech Blog", "url": "https://..."},
-  "created_at": "2026-04-19T10:00:00",
-  "user_email": "admin@example.com"
-}
-```
-
----
-
-#### `GET /auth/users` *(admin, curator)*
-Lists all users.
-
-**Response `200`**: array of `UserResponse`.
-
----
-
-#### `PATCH /auth/users/{user_id}` *(admin only)*
-Update a user's role or active status.
-
-**Request** (`application/json`, all fields optional):
-```json
-{
-  "role": "curator",
-  "is_active": false
-}
-```
-
-**Response `200`**: updated `UserResponse`.
+User management (create, edit roles, deactivate) is done directly in Keycloak. Keycloak group membership maps to RAG roles: `admin`/`rag_admin` → `rag_admin`, `rag_curator` → `rag_curator`, `rag_analyst` → `rag_analyst`, `rag_user` → `rag_user`.
 
 ---
 
@@ -310,7 +273,7 @@ List all active sources.
 
 ---
 
-#### `POST /sources/` *(admin, curator)*
+#### `POST /sources/` *(rag_admin, rag_curator)*
 Create a new source.
 
 **Request** (`application/json`):
@@ -335,7 +298,7 @@ URLs pointing to private/loopback addresses are rejected (SSRF protection).
 
 ---
 
-#### `PATCH /sources/{source_id}` *(admin, curator)*
+#### `PATCH /sources/{source_id}` *(rag_admin, rag_curator)*
 Update a source's settings. All fields are optional.
 
 **Request** (`application/json`):
@@ -352,7 +315,7 @@ Update a source's settings. All fields are optional.
 
 ---
 
-#### `DELETE /sources/{source_id}` *(admin only)*
+#### `DELETE /sources/{source_id}` *(rag_admin only)*
 Deactivates a source (soft delete — sets `is_active = false`).
 
 **Response `200`**:
@@ -362,7 +325,7 @@ Deactivates a source (soft delete — sets `is_active = false`).
 
 ---
 
-#### `POST /sources/{source_id}/ingest` *(admin, curator)*
+#### `POST /sources/{source_id}/ingest` *(rag_admin, rag_curator)*
 Trigger an immediate ingest job for a source.
 
 **Request** (`application/json`, optional):
@@ -415,12 +378,12 @@ List all ingest jobs across all sources. Supports `source_id`, `status`, `limit`
 
 ---
 
-#### `POST /sources/jobs/{job_id}/cancel` *(admin, curator)*
+#### `POST /sources/jobs/{job_id}/cancel` *(rag_admin, rag_curator)*
 Cancel a `pending` or `running` job.
 
 ---
 
-#### `DELETE /sources/jobs/{job_id}` *(admin only)*
+#### `DELETE /sources/jobs/{job_id}` *(rag_admin only)*
 Delete a completed/failed job record.
 
 ---
@@ -443,7 +406,6 @@ Returns the list of available LLM models. AIaaS models are always present; exter
 | OpenAI | `OPENAI_API_KEY` | GPT-4.1, GPT-4.1 Mini, GPT-4.1 Nano, GPT-4o, GPT-4o Mini, o4-mini, o3 |
 | Gemini | `GEMINI_API_KEY` | Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.0 Flash, Gemini 3.0 Flash, Gemini 3.1 Pro |
 | Anthropic (direct) | `ANTHROPIC_API_KEY` | Claude Opus 4.7, Claude Sonnet 4.6, Claude Haiku 4.5 |
-| OpenRouter | `OPENROUTER_API_KEY` | Claude Opus 4.7, Claude Sonnet 4.6 (via OpenRouter) |
 
 Each entry in the response has `id` (e.g. `"anthropic:claude-opus-4-7"`), `label`, `model` (raw model name), and `group`. The frontend uses this list to populate the model selector — no API keys are ever sent to or stored by the frontend.
 
@@ -544,7 +506,7 @@ Experiments let you run named batch query sets to benchmark retrieval quality ov
 #### `GET /experiments/`
 List all experiments.
 
-#### `POST /experiments/` *(admin, curator)*
+#### `POST /experiments/` *(rag_admin, rag_curator)*
 Create a new experiment.
 
 **Request** (`application/json`):
@@ -564,10 +526,10 @@ Create a new experiment.
 #### `GET /experiments/{experiment_id}`
 Fetch a single experiment with all its query results.
 
-#### `POST /experiments/{experiment_id}/run` *(admin, curator)*
+#### `POST /experiments/{experiment_id}/run` *(rag_admin, rag_curator)*
 Re-run all queries in the experiment against the current index. Results are updated in place.
 
-#### `DELETE /experiments/{experiment_id}` *(admin only)*
+#### `DELETE /experiments/{experiment_id}` *(rag_admin only)*
 Delete an experiment and all its query results.
 
 ---
@@ -611,7 +573,7 @@ List incidents, newest first (max 100).
 
 ---
 
-#### `POST /incidents/{incident_id}/resolve` *(admin, curator)*
+#### `POST /incidents/{incident_id}/resolve` *(rag_admin, rag_curator)*
 Mark an incident as resolved.
 
 **Request** (`application/json`):
@@ -625,7 +587,7 @@ Mark an incident as resolved.
 
 ---
 
-#### `POST /incidents/simulate` *(admin only)*
+#### `POST /incidents/simulate` *(rag_admin only)*
 Create a synthetic CAPTCHA incident for testing. Useful for verifying the UI and resolve workflow without waiting for a real scrape to be blocked.
 
 **Request** (`application/json`, all fields optional):
@@ -683,7 +645,7 @@ Exported metrics:
 | `rag_open_incidents` | Gauge | — |
 | `rag_qdrant_collection_size` | Gauge | — |
 
-The three Gauges (`rag_active_sources`, `rag_open_incidents`, `rag_qdrant_collection_size`) are refreshed every 5 minutes by the APScheduler `gauge_refresh` job in `scheduler_service.py`.
+The three Gauges (`rag_active_sources`, `rag_open_incidents`, `rag_qdrant_collection_size`) are refreshed every 5 minutes by the APScheduler `gauge_refresh` job in `services/scheduler.py`.
 
 ---
 
@@ -714,7 +676,7 @@ Frontend / Nginx :8080 (host) → :80 (container)
     │  (proxies /auth, /sources, /query, … to API)
     │
     └──► FastAPI API :8000
-            │── Auth (JWT + Google OAuth2)
+            │── Auth (JWT + Keycloak OIDC)
             │── Sources API
             │── Query API ──────────────► Qdrant :6333 (hybrid vector search)
             │── Documents API               ▲
@@ -948,53 +910,52 @@ docker compose down -v       # Stop and delete all data (fresh start)
 ## Project Structure
 
 ```text
-rag_system/
+app/
 ├── docker-compose.yml          # Local dev — all services (Docker + Podman)
 ├── .env.example                # Config template (copy to .env)
 ├── backend/                    # FastAPI Python service
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── main.py                 # App entry point, startup logic, Alembic migrations
-│   ├── config.py               # Settings from environment variables
-│   ├── database.py             # SQLAlchemy DB connection
+│   ├── main.py                 # App entry point, startup (create_all, admin init, Qdrant init, scheduler)
+│   ├── config.py               # Settings from environment variables (pydantic-settings)
+│   ├── database.py             # SQLAlchemy engine + SessionLocal + Base
 │   ├── models.py               # All database tables (ORM)
-│   ├── worker.py               # Background job processor (RabbitMQ consumer)
-│   ├── alembic.ini             # Database migration config
-│   ├── alembic/                # Migration scripts (0001–0007)
+│   ├── worker.py               # RabbitMQ consumer: pulls job_id → runs ingest pipeline → embeds chunks
 │   ├── routers/
-│   │   ├── auth.py             # Login, register, JWT tokens, audit log, user management
-│   │   ├── auth_google.py      # Google OAuth2 (HMAC-signed stateless state tokens)
-│   │   ├── auth_keycloak.py    # Keycloak OIDC callback
-│   │   ├── sources.py          # Source management + ingest trigger (SSRF-protected)
-│   │   ├── query.py            # RAG query endpoint
-│   │   ├── documents.py        # Document/chunk browsing + evidence URL generation
+│   │   ├── auth.py             # Login, local-login, me, refresh, stats, providers
+│   │   ├── auth_keycloak.py    # Keycloak OIDC callback → JWT
+│   │   ├── sources.py          # Source CRUD + ingest trigger (SSRF-protected)
+│   │   ├── query.py            # RAG query + model list endpoints
+│   │   ├── documents.py        # Document/chunk browsing + evidence pre-signed URLs
 │   │   ├── experiments.py      # Batch query benchmarks
 │   │   └── incidents.py        # CAPTCHA incident management
 │   └── services/
-│       ├── ingest_service.py     # Core scraping pipeline (3 strategies + fallback)
-│       ├── chunking.py           # Structure-aware chunking (prose / table / VLM)
-│       ├── extraction_service.py # VLM extraction via AIaaS
-│       ├── embedding_service.py  # BGE-M3 FlagEmbedding + Qdrant hybrid search
-│       ├── rag_service.py        # RAG query engine (LLM via AIaaS)
-│       ├── storage_service.py    # CESNET S3 file storage
-│       ├── captcha_service.py    # CAPTCHA detection + incident creation
-│       ├── auth_service.py       # JWT + bcrypt password hashing
-│       ├── scheduler_service.py  # APScheduler: periodic crawls, evidence/index cleanup, gauge refresh
-│       ├── logging_config.py     # Structured JSON logging (python-json-logger)
-│       └── queue_service.py      # RabbitMQ job publisher
+│       ├── ingest.py           # Core scraping pipeline (Jina.ai/RSS → HTML → Playwright → VLM)
+│       ├── chunking.py         # Structure-aware chunking (prose / table / VLM)
+│       ├── extraction.py       # VLM screenshot analysis via AIaaS
+│       ├── embedding.py        # BGE-M3 FlagEmbedding + Qdrant hybrid search
+│       ├── rag.py              # RAG query engine (Qdrant → LLM → citations)
+│       ├── storage.py          # CESNET S3 upload/download + pre-signed URLs
+│       ├── captcha.py          # CAPTCHA detection + incident creation
+│       ├── auth.py             # JWT signing (python-jose), bcrypt, ensure_admin_exists
+│       ├── scheduler.py        # APScheduler: periodic crawls, cleanup, gauge refresh
+│       ├── queue.py            # pika: publish job_id to RabbitMQ "ingest" queue
+│       ├── experiment.py       # Run batch experiment queries, compute recall@k / MRR / nDCG
+│       ├── metrics.py          # prometheus_client counters, histograms, gauges
+│       └── logging_config.py   # Structured JSON logging (python-json-logger)
 └── frontend/                   # Vue 3 + TypeScript SPA
     ├── Dockerfile
     ├── nginx.conf              # Nginx static file server with security headers
     ├── src/
-    │   ├── main.ts             # App entry point + OAuth token handler
+    │   ├── main.ts             # App entry point + Keycloak token handler (?token= param)
     │   ├── App.vue             # Root component (auth expiry listener)
     │   ├── router/             # Vue Router (hash-based routing)
     │   ├── stores/             # Pinia state management (auth, query history)
     │   ├── api/                # Axios API client + TypeScript types
-    │   ├── views/              # Page components (Dashboard, Sources, Pipeline,
-    │   │                       #   Query, Incidents, Audit, Users, Login,
-    │   │                       #   Documents, Experiments)
-    │   └── components/         # Reusable UI components
+    │   ├── views/              # Page components:
+    │   │                       #   LoginView, QueryView, SourcesView, PipelineView,
+    │   │                       #   IncidentsView, KnowledgeBaseView, ExperimentsView
+    │   └── components/         # AppLayout, AppSidebar, StatusBadge
     └── package.json
 ```
 
@@ -1015,7 +976,9 @@ Images:
 - `ghcr.io/ass-nss-project/rag-api` — FastAPI backend (also used for the worker, different `command` in k8s)
 - `ghcr.io/ass-nss-project/rag-frontend` — Vue 3 / Nginx SPA
 
-The workflow: commit-message lint → backend tests → frontend build → build & push (main/kost/tags only).
+The workflow: commit-message lint → frontend build → build & push (main/kost/tags only).
+
+> **Note:** `backend-tests` is currently disabled (`if: false`) in the CI workflow while the test suite is being updated.
 
 ---
 
@@ -1026,9 +989,11 @@ The production deployment lives in [ASS-NSS-Project/infra](https://github.com/AS
 | Service | Production URL |
 |---------|----------------|
 | Main UI + API | <https://rag.nss.jkzl.eu> |
-| RabbitMQ Management | <https://rabbitmq-mgmt.nss.jkzl.eu> |
+| RabbitMQ Management | <https://rabbitmq.nss.jkzl.eu> |
 
 The API is accessible via the `/api` prefix on `rag.nss.jkzl.eu` — Traefik rewrites `/api/*` → `/*` before forwarding to the backend. This lets cURL clients target a stable public endpoint without needing to know the internal path layout.
+
+The worker runs as a **StatefulSet** in Kubernetes (not a Deployment) because the BGE-M3 cache volume is `ReadWriteOnce`. Each replica gets its own `hf-cache` PVC; scaling workers means setting `replicas` to any positive integer — each pulls independently from the shared RabbitMQ queue.
 
 **cURL example (production):**
 ```bash

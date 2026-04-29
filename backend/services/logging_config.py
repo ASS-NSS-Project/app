@@ -26,6 +26,9 @@ def setup_logging(level: str = "INFO") -> None:
     handler.addFilter(_ContextFilter())
 
     root = logging.getLogger()
+    # Remove default handlers installed by uvicorn/FastAPI before our process starts.
+    # Without this, both the plain-text uvicorn handler and our JSON handler fire on
+    # every record, producing duplicate lines with mixed formats in the log stream.
     root.handlers.clear()
     root.addHandler(handler)
     root.setLevel(getattr(logging, level.upper(), logging.INFO))
