@@ -7,7 +7,7 @@
 
     <div class="nav-links">
       <div v-if="canSeeDashboard" class="nav-section">Overview</div>
-      <router-link v-if="canSeeDashboard" to="/dashboard" class="nav-item" active-class="active">Dashboard</router-link>
+      <a v-if="canSeeDashboard" href="https://grafana.nss.jkzl.eu/d/rag-overview" target="_blank" class="nav-item nav-external">Dashboard ↗</a>
 
       <div v-if="canManageSources" class="nav-section">Ingest</div>
       <router-link v-if="canManageSources" to="/sources" class="nav-item" active-class="active">Sources</router-link>
@@ -35,7 +35,7 @@
       <div v-if="isRagAdmin" class="nav-section">Admin</div>
       <a
         v-if="isRagAdmin"
-        href="https://grafana.nss.jkzl.eu/d/rag-logs"
+        href="https://grafana.nss.jkzl.eu/d/rag-audit"
         target="_blank"
         class="nav-item nav-external"
       >Audit Logs ↗</a>

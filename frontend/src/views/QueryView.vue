@@ -38,10 +38,11 @@
       <div class="query-bar">
         <Textarea
           v-model="store.question"
-          placeholder="What are the latest regulatory requirements for data collection from web sources in the EU?"
+          placeholder="Feel free to ask..."
           :rows="1"
           autoResize
           class="query-input"
+          @keydown.enter.exact.prevent="doQuery"
           @keydown.ctrl.enter="doQuery"
           @keydown.meta.enter="doQuery"
         />

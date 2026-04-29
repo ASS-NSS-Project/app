@@ -53,7 +53,6 @@
         <div v-if="error" class="alert alert-error">{{ error }}</div>
 
         <div class="filter-bar">
-          <Button label="Refresh" icon="pi pi-refresh" size="small" severity="secondary" @click="reloadSources" :loading="loading" />
         </div>
 
         <DataTable :value="sources" :loading="loading" size="small" stripedRows>

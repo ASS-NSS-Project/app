@@ -134,7 +134,6 @@
         <div class="field field-half">
           <label>Model <span class="opt-label">(optional — for tracking only)</span></label>
           <select v-model="form.model_name" class="model-select">
-            <option value="">Default (system setting)</option>
             <template v-for="[group, models] in modelGroups" :key="group">
               <optgroup :label="group">
                 <option v-for="m in models" :key="m.id" :value="m.model">{{ m.label }}</option>
@@ -249,7 +248,7 @@ const detailsExp = ref<ExperimentResponse | null>(null)
 const expandedRows = ref<Record<string, boolean>>({})
 const runningId = ref<string | null>(null)
 
-const limit = ref(25)
+const limit = ref(10)
 const expPage = ref(0)
 const pageSizeOptions = [
   { label: '10 / page', value: 10 },

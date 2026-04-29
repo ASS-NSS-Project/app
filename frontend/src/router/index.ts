@@ -1,8 +1,7 @@
-import { createRouter, createWebHashHistory } from 'vue-router'
+import { createRouter, createWebHashHistory, type RouteLocationNormalized } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 import LoginView from '@/views/LoginView.vue'
-import DashboardView from '@/views/DashboardView.vue'
 import SourcesView from '@/views/SourcesView.vue'
 import QueryView from '@/views/QueryView.vue'
 import IncidentsView from '@/views/IncidentsView.vue'
@@ -15,7 +14,6 @@ const router = createRouter({
   routes: [
     { path: '/', redirect: '/query' },
     { path: '/login', component: LoginView, meta: { public: true } },
-    { path: '/dashboard', component: DashboardView, meta: { roles: ['rag_admin', 'rag_curator', 'rag_analyst'] } },
     { path: '/sources', component: SourcesView, meta: { roles: ['rag_admin', 'rag_curator'] } },
     { path: '/query', component: QueryView },
     { path: '/pipeline', component: PipelineView, meta: { roles: ['rag_admin', 'rag_curator'] } },
@@ -26,7 +24,7 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach((to: RouteLocationNormalized) => {
   const auth = useAuthStore()
   if (!to.meta.public && !auth.isAuthenticated()) {
     return '/login'

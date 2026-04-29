@@ -7,7 +7,6 @@
       </div>
       <div class="page-actions">
         <span v-if="openIncidents.length" class="unresolved-badge">{{ openIncidents.length }} unresolved</span>
-        <Button label="Refresh" icon="pi pi-refresh" size="small" severity="secondary" @click="reload" :loading="loading" />
       </div>
 
       <div v-if="error" class="alert alert-error">{{ error }}</div>
@@ -141,7 +140,7 @@ const resolveVisible = ref(false)
 const resolveNote = ref('')
 const whitelistVisible = ref(false)
 const whitelistId = ref<string | null>(null)
-const limit = ref(25)
+const limit = ref(10)
 const offset = ref(0)
 const page = ref(0)
 

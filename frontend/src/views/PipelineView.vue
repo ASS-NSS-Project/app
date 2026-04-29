@@ -6,7 +6,6 @@
         <p>Queue status, job queue, fallback chain</p>
       </div>
       <div class="page-actions">
-        <Button label="Refresh" icon="pi pi-refresh" size="small" severity="secondary" @click="reload" :loading="loading" />
       </div>
 
       <!-- Pipeline stat cards -->
