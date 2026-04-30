@@ -972,6 +972,63 @@ app/
 
 ---
 
+## Testing
+
+Tests live in `tests/` and run against a real PostgreSQL database (no mocking). The suite is intentionally minimal — it covers the critical paths and acts as a regression gate.
+
+### Running locally
+
+```bash
+# from app/backend
+poetry install          # includes dev group (pytest, pytest-asyncio)
+```
+
+Set the required environment variables (same as local dev — copy `.env.example` to `.env`):
+
+```bash
+export POSTGRES_USER=rag
+export POSTGRES_PASSWORD=rag
+export POSTGRES_DB=rag
+export POSTGRES_HOST=localhost
+export JWT_SECRET=local-test-secret
+export FIRST_ADMIN_EMAIL=admin@test.local
+export FIRST_ADMIN_PASSWORD=testpassword123
+export FRONTEND_URL=http://localhost:5173
+```
+
+Then run:
+
+```bash
+cd backend
+poetry run pytest ../tests/ -v
+```
+
+### What is tested
+
+| File | Covers |
+|------|--------|
+| `tests/test_api.py` | Health, metrics, auth (login, /me, stats), sources (list, SSRF guard), query auth gate, documents, incidents, chunker unit tests |
+| `tests/test_config.py` | Settings loading from environment variables |
+
+### Test fixtures (`tests/conftest.py`)
+
+- `create_schema` — creates all DB tables once per session via `Base.metadata.create_all`
+- `create_admin` — calls `ensure_admin_exists` so login tests have a real user
+- `client` — async `httpx.AsyncClient` backed by ASGI transport (no real HTTP server needed)
+- `auth_headers` — logs in as the default admin and returns the `Authorization` header dict
+
+### Pending tests (TODO)
+
+- Experiment endpoints — waiting for the feature to be implemented
+- Ingest pipeline end-to-end — requires RabbitMQ and Qdrant; currently out of scope for unit tests
+- RAG query with real embeddings — skipped because BGE-M3 is not loaded in CI
+
+### CI status
+
+The `backend-tests` job in `.github/workflows/ci.yml` is currently disabled (`if: false`) while the suite is stabilised. Re-enable it by removing that line once the test environment is confirmed to work end-to-end in GitHub Actions.
+
+---
+
 ## CI / CD
 
 Images are built and pushed to **GitHub Container Registry** on every push to `main` or `kost`, and on semver git tags (`v*.*.*`).
