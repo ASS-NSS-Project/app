@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y \
     fonts-liberation fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir poetry
+RUN pip install --no-cache-dir poetry poetry-plugin-export
 
 COPY pyproject.toml poetry.lock* ./
 
