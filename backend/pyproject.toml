@@ -1,0 +1,80 @@
+[tool.poetry]
+name = "rag-api"
+version = "0.1.0"
+description = "Multimodal web data collection and AI analysis system"
+authors = []
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+# Web framework
+fastapi = "0.111.0"
+uvicorn = {version = "0.29.0", extras = ["standard"]}
+
+# Database
+sqlalchemy = "2.0.30"
+psycopg2-binary = "2.9.9"
+
+# Authentication
+python-jose = {version = "3.3.0", extras = ["cryptography"]}
+passlib = {version = "1.7.4", extras = ["bcrypt"]}
+bcrypt = "4.0.1"
+python-multipart = "0.0.9"
+
+# RabbitMQ / job queue
+pika = "1.3.2"
+
+# Crawl scheduler
+apscheduler = "3.10.4"
+
+# Object storage (CESNET S3 / MinIO)
+boto3 = "1.34.101"
+
+# Web scraping
+httpx = "0.27.0"
+playwright = "1.44.0"
+beautifulsoup4 = "4.12.3"
+
+# LLM / VLM (OpenAI-compatible AIaaS)
+openai = ">=1.30.0"
+
+# Embeddings — BGE-M3 via FlagEmbedding
+# torch comes from the pytorch-cpu source below to keep the image ~250 MB
+# instead of the default CUDA variant (~2 GB).
+torch = {version = ">=2.0,<3.0", source = "pytorch-cpu"}
+sentence-transformers = "3.0.1"
+flagembedding = "*"
+
+# Vector database
+qdrant-client = "1.13.3"
+
+# Config / utilities
+pydantic-settings = "2.2.1"
+python-dotenv = "1.0.1"
+pillow = "10.3.0"
+aiofiles = "23.2.1"
+tenacity = "8.3.0"
+
+# Observability
+prometheus-client = "0.20.0"
+python-json-logger = "2.0.7"
+
+# Feed ingestion
+feedparser = "6.0.11"
+
+# Markdown conversion
+markdownify = "0.14.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0"
+pytest-asyncio = ">=0.23"
+
+[[tool.poetry.source]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "supplemental"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

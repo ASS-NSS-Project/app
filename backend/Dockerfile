@@ -3,7 +3,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # System dependencies:
-# - libpq-dev + gcc: required by psycopg2 and any C-extension packages
+# - libpq-dev + gcc: required by psycopg2 and C-extension packages
 # - Chromium runtime libs: installed manually because playwright install-deps
 #   fails on Debian Trixie due to missing font packages
 RUN apt-get update && apt-get install -y \
@@ -16,20 +16,21 @@ RUN apt-get update && apt-get install -y \
     fonts-liberation fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+RUN pip install poetry
 
-# Install CPU-only PyTorch before everything else.
-# Without this, sentence-transformers and FlagEmbedding pull in the CUDA
-# variant of torch (~2 GB) even though no GPU is present in the container.
-# The CPU wheel is ~250 MB and fully sufficient for BGE-M3 inference.
-#
-# The BuildKit cache mount keeps downloaded wheels across rebuilds — changing
-# requirements.txt no longer triggers a full re-download from PyPI.
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install torch --extra-index-url https://download.pytorch.org/whl/cpu && \
-    pip install -r requirements.txt
+# Disable virtualenv creation — in a container the system Python is the env.
+ENV POETRY_VIRTUALENVS_CREATE=false \
+    POETRY_NO_INTERACTION=1 \
+    POETRY_CACHE_DIR=/root/.cache/pypoetry
 
-# Chromium for Playwright (skipping install-deps — handled by apt above)
+COPY pyproject.toml poetry.lock* ./
+
+# poetry.lock* is optional — if absent, Poetry resolves fresh (first build only).
+# Commit the generated poetry.lock for reproducible subsequent builds.
+RUN --mount=type=cache,target=/root/.cache/pypoetry \
+    poetry install --no-root --only main
+
+# Chromium for Playwright (system libs installed above via apt)
 RUN playwright install chromium
 
 COPY . .

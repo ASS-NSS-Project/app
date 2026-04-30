@@ -772,7 +772,16 @@ You should see `model_load_start` followed by `model_load_complete`, then `start
 
 ### Build time
 
-`sentence-transformers` and `FlagEmbedding` transitively depend on PyTorch. The Dockerfile explicitly installs the **CPU-only** PyTorch wheel before the rest of the requirements, preventing pip from pulling the ~2 GB CUDA variant (which would never be used in the container). The BuildKit pip cache (`--mount=type=cache`) keeps downloaded wheels across rebuilds — changing a single package in `requirements.txt` no longer triggers a full re-download.
+Dependencies are managed with **Poetry** (`pyproject.toml` + `poetry.lock`). `sentence-transformers` and `FlagEmbedding` transitively depend on PyTorch. The `pytorch-cpu` supplemental source in `pyproject.toml` pins torch to the CPU-only wheels (~250 MB) instead of the default CUDA variant (~2 GB). The Dockerfile sets `POETRY_VIRTUALENVS_CREATE=false` so Poetry installs directly into the system Python (appropriate for containers). The BuildKit cache mount (`--mount=type=cache,target=/root/.cache/pypoetry`) keeps downloaded wheels across rebuilds.
+
+**Local dev setup:**
+```bash
+cd backend
+poetry install          # installs all deps including dev (pytest etc.)
+poetry shell            # activate the virtualenv
+```
+
+After adding or updating dependencies, run `poetry lock` to regenerate `poetry.lock` and commit both files.
 
 ---
 
@@ -916,7 +925,8 @@ app/
 ├── .env.example                # Config template (copy to .env)
 ├── backend/                    # FastAPI Python service
 │   ├── Dockerfile
-│   ├── requirements.txt
+│   ├── pyproject.toml          # Poetry dependency manifest
+│   ├── poetry.lock             # Locked dependency tree (commit this)
 │   ├── main.py                 # App entry point, startup (create_all, admin init, Qdrant init, scheduler)
 │   ├── config.py               # Settings from environment variables (pydantic-settings)
 │   ├── database.py             # SQLAlchemy engine + SessionLocal + Base

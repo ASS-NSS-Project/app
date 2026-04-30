@@ -58,11 +58,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
+
+      - name: Install Poetry
+        run: pip install poetry
 
       - name: Install dependencies
         working-directory: backend
-        run: pip install -r requirements.txt pytest pytest-asyncio httpx
+        run: poetry install --no-root --with dev
 
       - name: Run tests
         env:
@@ -75,7 +77,7 @@ jobs:
           FIRST_ADMIN_EMAIL: admin@test.local
           FIRST_ADMIN_PASSWORD: testpassword123
           FRONTEND_URL: http://localhost:5173
-        run: pytest tests/ -v
+        run: poetry run pytest tests/ -v
 
   frontend-build:
     runs-on: ubuntu-latest
