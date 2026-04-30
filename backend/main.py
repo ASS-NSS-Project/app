@@ -65,12 +65,19 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
 
+    # Load BGE-M3 weights eagerly — prevents OOMKill on first query.
+    # Done before Qdrant init so a Qdrant failure doesn't skip model loading.
+    try:
+        get_embedding_model()
+        logger.info("BGE-M3 model loaded", extra={"event": "model_load_complete"})
+    except Exception as e:
+        logger.warning("Could not pre-load embedding model: %s", e)
+
     # Initialize Qdrant collection
     # If the embedding model changed (different dimension), the collection is recreated
     # and all chunks are marked for re-embedding
     try:
         embedding_service = _get_embedder()
-        get_embedding_model()  # load BGE-M3 weights eagerly — prevents OOMKill on first query
         if embedding_service.collection_was_recreated:
             db = SessionLocal()
             try:
