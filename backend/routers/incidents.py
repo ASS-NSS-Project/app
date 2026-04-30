@@ -75,7 +75,10 @@ def simulate_incident(
     db.commit()
     db.refresh(incident)
     log_action(db, current_user.id, "INCIDENT_SIMULATED", "incident", incident.id)
-    logger.info("Simulated incident %s created by %s", incident.id, current_user.email)
+    logger.info(
+        "Simulated incident %s created by %s", incident.id, current_user.email,
+        extra={"event": "incident_simulated", "incident_id": incident.id, "user_id": current_user.id},
+    )
     return incident
 
 
@@ -112,6 +115,10 @@ def resolve_incident(
         raise HTTPException(status_code=404, detail="Incident not found")
 
     log_action(db, current_user.id, "INCIDENT_RESOLVED", "incident", incident_id)
+    logger.info(
+        "Incident %s resolved by %s", incident_id, current_user.email,
+        extra={"event": "incident_resolved", "incident_id": incident_id, "user_id": current_user.id},
+    )
 
     # Retry the failed URL: create a new IngestJob and publish it
     source = db.query(Source).filter(Source.id == incident.source_id).first()

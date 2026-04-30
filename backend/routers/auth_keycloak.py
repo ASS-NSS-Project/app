@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 from config import get_settings
 from database import get_db
 from models import User, UserRole
-from services.auth import create_access_token
+from services.auth import create_access_token, log_action
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -178,17 +178,27 @@ async def keycloak_callback(
     role = _map_role(keycloak_roles)
 
     if role is None:
-        logger.warning("Keycloak login blocked — no recognized group for %s (groups=%s)", email, keycloak_roles,
-                       extra={"event": "keycloak_unauthorized"})
+        logger.warning(
+            "Keycloak login blocked — no recognized group for %s (groups=%s)", email, keycloak_roles,
+            extra={"event": "keycloak_unauthorized", "email": email},
+        )
+        log_action(db, None, "LOGIN_FAILED", None, None,
+                   {"source": "keycloak", "email": email, "reason": "no_recognized_group"})
         return RedirectResponse(url=f"{settings.frontend_url}?auth_error=unauthorized")
 
     user = _get_or_create_keycloak_user(db, sub, email, full_name, role)
 
     if not user.is_active:
+        log_action(db, user.id, "LOGIN_FAILED", "user", user.id,
+                   {"source": "keycloak", "reason": "account_deactivated"})
         raise HTTPException(status_code=403, detail="Account is deactivated")
 
+    log_action(db, user.id, "LOGIN", "user", user.id, {"source": "keycloak", "role": role.value})
     jwt_token = create_access_token(user_id=user.id, role=user.role.value)
-    logger.info("User %s logged in via Keycloak (role=%s)", email, role.value)
+    logger.info(
+        "User %s logged in via Keycloak (role=%s)", email, role.value,
+        extra={"event": "login_success", "source": "keycloak", "user_id": user.id, "role": role.value},
+    )
 
     return RedirectResponse(url=f"{settings.frontend_url}?token={jwt_token}")
 
@@ -222,7 +232,13 @@ def _get_or_create_keycloak_user(
         if full_name and not user.full_name:
             user.full_name = full_name
         db.commit()
-        logger.info("Linked existing account %s to Keycloak", email)
+        db.refresh(user)
+        log_action(db, user.id, "USER_UPDATED", "user", user.id,
+                   {"action": "keycloak_linked", "email": email})
+        logger.info(
+            "Linked existing account %s to Keycloak", email,
+            extra={"event": "user_updated", "action": "keycloak_linked", "user_id": user.id},
+        )
         return user
 
     # New user
@@ -238,5 +254,10 @@ def _get_or_create_keycloak_user(
     db.add(user)
     db.commit()
     db.refresh(user)
-    logger.info("Created new user via Keycloak: %s (role=%s)", email, role.value)
+    log_action(db, user.id, "USER_CREATED", "user", user.id,
+               {"source": "keycloak", "email": email, "role": role.value})
+    logger.info(
+        "Created new user via Keycloak: %s (role=%s)", email, role.value,
+        extra={"event": "user_registered", "source": "keycloak", "user_id": user.id, "role": role.value},
+    )
     return user
