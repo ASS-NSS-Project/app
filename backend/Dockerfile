@@ -16,19 +16,29 @@ RUN apt-get update && apt-get install -y \
     fonts-liberation fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install poetry
-
-# Disable virtualenv creation — in a container the system Python is the env.
-ENV POETRY_VIRTUALENVS_CREATE=false \
-    POETRY_NO_INTERACTION=1 \
-    POETRY_CACHE_DIR=/root/.cache/pypoetry
+RUN pip install --no-cache-dir poetry
 
 COPY pyproject.toml poetry.lock* ./
 
-# poetry.lock* is optional — if absent, Poetry resolves fresh (first build only).
-# Commit the generated poetry.lock for reproducible subsequent builds.
-RUN --mount=type=cache,target=/root/.cache/pypoetry \
-    poetry install --no-root --only main
+# Export a flat requirements.txt from the lock file so pip handles the actual
+# installation. This avoids Poetry's own installer, which does not support
+# --mount=type=cache in Podman and has known issues with virtualenv detection
+# in some container runtimes.
+RUN poetry export -f requirements.txt --only main --without-hashes -o /tmp/requirements.txt
+
+# Install torch before everything else.
+# pytorch.org/whl/cpu only publishes linux_x86_64 wheels — installing one of
+# those on an arm64 container causes SIGILL at import time.
+# On arm64 (Apple Silicon Podman, etc.) we fall back to PyPI which has native wheels.
+RUN arch=$(uname -m) && \
+    if [ "$arch" = "x86_64" ]; then \
+        pip install --no-cache-dir torch --extra-index-url https://download.pytorch.org/whl/cpu; \
+    else \
+        pip install --no-cache-dir torch; \
+    fi
+
+# Install remaining dependencies. pip skips torch because it is already satisfied.
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 # Chromium for Playwright (system libs installed above via apt)
 RUN playwright install chromium
