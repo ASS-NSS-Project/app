@@ -13,7 +13,7 @@ from database import Base, engine, SessionLocal
 # create_all() below discovers all tables. Without this line the import of Base
 # happens before models.py is loaded and create_all() creates nothing.
 import models  # noqa: F401
-from models import Chunk, Experiment, ExperimentStatus
+from models import Chunk
 from routers import auth, sources, query, incidents
 from routers import auth_keycloak
 import routers.documents as documents_router
@@ -61,15 +61,6 @@ async def lifespan(app: FastAPI):
     try:
         ensure_admin_exists(db)
         ensure_default_sources(db)
-
-        # Reset experiments stuck in "running" — they were interrupted by a previous restart
-        stuck = db.query(Experiment).filter(Experiment.status == ExperimentStatus.running).all()
-        for exp in stuck:
-            exp.status = ExperimentStatus.failed
-            exp.error_message = "Interrupted by API restart"
-        if stuck:
-            db.commit()
-            logger.info("Reset %d stuck experiment(s) to failed", len(stuck))
 
     finally:
         db.close()
