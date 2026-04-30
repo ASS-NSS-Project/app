@@ -16,6 +16,7 @@ import hashlib
 import io
 import logging
 import os
+import re
 import time
 from datetime import datetime
 from typing import Optional, Tuple
@@ -272,7 +273,12 @@ class IngestService:
                 resp = await client.get(jina_url)
 
             if resp.status_code == 200:
-                text = resp.text.strip()
+                text = resp.content.decode('utf-8', errors='replace').strip()
+                # Jina.ai prepends a metadata block (Title:, URL Source:, Markdown Content:, …)
+                # before the actual document. Strip it so only the real content is chunked.
+                marker = re.search(r'^Markdown Content:\s*\n+', text, re.MULTILINE)
+                if marker:
+                    text = text[marker.end():].strip()
                 if len(text) >= settings.quality_threshold_chars:
                     evidence_id = await self._save_evidence(
                         job=job,
@@ -347,7 +353,11 @@ class IngestService:
         if len(response.content) > _MAX_BODY:
             raise ValueError(f"Response too large: {len(response.content)} bytes")
 
-        html = response.text
+        # Pass raw bytes so BeautifulSoup reads the charset from the <meta> tag.
+        # response.text uses the Content-Type charset header, which many servers omit
+        # or set to iso-8859-1 (the HTTP default), silently corrupting non-ASCII text.
+        soup = BeautifulSoup(response.content, "html.parser")
+        html = str(soup)
 
         # CAPTCHA detection in HTML
         html_lower = html.lower()
@@ -358,7 +368,7 @@ class IngestService:
                     detector="html_keyword",
                 )
 
-        # Save raw HTML as evidence
+        # Save raw HTML as evidence (re-encoded as UTF-8 after BS4 normalisation)
         evidence_id = await self._save_evidence(
             job=job,
             data=html.encode("utf-8"),
@@ -367,8 +377,7 @@ class IngestService:
             content_type="text/html",
         )
 
-        # Parse with BeautifulSoup: remove nav, footer, scripts, ads
-        soup = BeautifulSoup(html, "html.parser")
+        # Remove noise tags (soup still live after str() call)
         for tag in soup(["script", "style", "nav", "footer", "header", "aside", "form"]):
             tag.decompose()
 
@@ -584,7 +593,11 @@ class IngestService:
         source_method = strategy.value if strategy else "html"
         all_chunks: list[TextChunk] = []
 
-        if strategy == IngestStrategy.screenshot:
+        if strategy in (IngestStrategy.screenshot, IngestStrategy.api):
+            # api: Jina.ai returns clean markdown — the VLM chunker splits on blank
+            # lines and "---" separators, which matches Jina's output structure.
+            # The HTML prose chunker finds no <p>/<h1>/… tags in markdown and falls
+            # back to a naive blank-line split with no heading context.
             all_chunks = split_vlm(text)
         else:
             # For HTML and rendered strategies: extract tables first, then prose

@@ -292,6 +292,7 @@ Create a new source.
 ```
 
 `preferred_strategy` is one of: `api` (default — Jina.ai reader + RSS fallback), `html`, `rendered`, `screenshot`.  
+The `api` strategy fetches `https://r.jina.ai/{url}`, strips the Jina metadata preamble (Title / URL Source / Markdown Content lines), and chunks the resulting markdown using the VLM block chunker (blank-line separated). The `html` and `rendered` strategies use BeautifulSoup for encoding detection (reads `<meta charset>` from the raw bytes, not the Content-Type header) to correctly handle non-ASCII characters including Czech, Slovak, and other Central/Eastern European scripts.  
 URLs pointing to private/loopback addresses are rejected (SSRF protection).
 
 **Response `200`**: `SourceResponse`.
