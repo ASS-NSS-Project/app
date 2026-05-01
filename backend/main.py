@@ -41,23 +41,35 @@ async def lifespan(app: FastAPI):
     2. Ensure admin user exists
     3. Initialize Qdrant collection
     """
-    logger.info("Starting up RAG System API", extra={"event": "startup"})
+    logger.info(
+        "Starting up RAG System API container",
+        extra={"event": "startup"}
+    )
 
-    # Create all tables — retries guard against CNPG not being fully ready yet.
-    # First-time initdb can take 30–60 s; 20 × 5 s = 100 s covers that.
+    # Create all tables — retries guard against Postgres DB not being fully ready yet.
+    # First-time initdb state can take 30–60 s; thus 20 × 5 s = 100 s covers that.
     for attempt in range(1, 21):
         try:
             Base.metadata.create_all(bind=engine)
-            logger.info("Database schema ready")
+
+            logger.info("Database schema was created")
+
             break
+
         except Exception as e:
             if attempt == 20:
                 raise
-            logger.warning("Schema creation attempt %d/20 failed (%s), retrying in 5s…", attempt, e)
+
+            logger.warning(
+                "Database schema creation attempt %d/20 failed (%s), retrying in 5s…", 
+                attempt, e
+            )
+
             time.sleep(5)
 
     # Create admin user if none exists
     db = SessionLocal()
+    
     try:
         ensure_admin_exists(db)
         ensure_default_sources(db)

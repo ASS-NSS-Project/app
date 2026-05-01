@@ -23,10 +23,14 @@ settings = get_settings()
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
-    pool_size=10,        # Max 10 simultaneous DB connections
+    pool_size=10, # Max 10 simultaneous connections to Postgres DB
     max_overflow=20,
 )
-logger.debug("Database engine created", extra={"event": "db_engine_created"})
+
+logger.debug(
+    "Database engine created",
+    extra={"event": "db_engine_created"}
+)
 
 # SessionLocal is a factory for database sessions.
 # Each API request gets its own session (like a transaction context).
