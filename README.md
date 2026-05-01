@@ -504,36 +504,8 @@ Get a pre-signed download URL for an evidence file (screenshot, HTML dump) store
 
 ### Experiments — `/experiments`
 
-Experiments let you run named batch query sets to benchmark retrieval quality over time.
-
-#### `GET /experiments/`
-List all experiments.
-
-#### `POST /experiments/` *(rag_admin, rag_curator)*
-Create a new experiment.
-
-**Request** (`application/json`):
-```json
-{
-  "name": "Pricing Q&A benchmark",
-  "description": "Tests retrieval accuracy on pricing-related questions",
-  "top_k": 5,
-  "model_name": "qwen3.5-122b",
-  "queries": [
-    {"query_text": "What are the pricing tiers?", "expected_keywords": ["tier", "price", "plan"]},
-    {"query_text": "Is there a free plan?", "expected_keywords": ["free", "trial"]}
-  ]
-}
-```
-
-#### `GET /experiments/{experiment_id}`
-Fetch a single experiment with all its query results.
-
-#### `POST /experiments/{experiment_id}/run` *(rag_admin, rag_curator)*
-Re-run all queries in the experiment against the current index. Results are updated in place.
-
-#### `DELETE /experiments/{experiment_id}` *(rag_admin only)*
-Delete an experiment and all its query results.
+Experiments are currently scaffolded in code but not implemented in the running API.  
+The router is registered, but no experiment endpoints are exposed yet; requests under `/experiments/` currently return `404`.
 
 ---
 
@@ -805,6 +777,8 @@ docker compose restart api   # or: podman compose restart api
 All services emit structured JSON logs. Each line includes `timestamp`, `level`, `logger`, `service`, `message`, and an `event` slug for machine parsing.
 
 Frontend errors (`api_error`, `network_error`, `vue_error`, `unhandled_promise_rejection`) are written as structured JSON to `console.error` by `api/client.ts` and `main.ts`. In production, these appear in the `rag-frontend` pod's stdout and are collected by Alloy → Loki.
+
+The frontend HTML document title is `WebRAG` (browser tab title).
 
 ```bash
 podman compose logs -f api      # API logs
