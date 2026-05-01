@@ -8,9 +8,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import User, Document, Chunk, Evidence
-from routers.auth import get_authenticated_user
+from models import User, UserRole, Document, Chunk, Evidence
+from routers.auth import get_authenticated_user, require_role
 from services.storage import StorageService
+from services.embedding import EmbeddingService
 from config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -149,3 +150,34 @@ def get_evidence_url(
                      exc_info=True)
         raise HTTPException(status_code=500, detail="Could not generate evidence URL")
     return EvidenceUrlResponse(evidence_id=evidence_id, url=presigned)
+
+
+@router.delete("/{doc_id}", status_code=204)
+def delete_document(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.rag_admin, UserRole.rag_curator)),
+):
+    """Delete a document and all of its chunks (including embedded vectors in Qdrant)."""
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    chunks = db.query(Chunk).filter(Chunk.document_id == doc_id).all()
+    embedded_ids = [c.id for c in chunks if c.is_embedded]
+
+    if embedded_ids:
+        try:
+            EmbeddingService().delete_chunks(embedded_ids)
+        except Exception as e:
+            logger.warning(
+                "Failed to delete vectors from Qdrant for document %s: %s",
+                doc_id,
+                e,
+                extra={"event": "chunks_delete_failed", "document_id": doc_id, "error": str(e)},
+            )
+
+    for chunk in chunks:
+        db.delete(chunk)
+    db.delete(doc)
+    db.commit()
