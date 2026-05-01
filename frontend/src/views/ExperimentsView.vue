@@ -41,8 +41,6 @@ import AppLayout from '@/components/AppLayout.vue'
   align-items: center;
   justify-content: center;
   min-height: 12rem;
-  border: 1px dashed var(--color-border, #d1d5db);
-  border-radius: 0.5rem;
   color: var(--color-text-muted, #6b7280);
 }
 
