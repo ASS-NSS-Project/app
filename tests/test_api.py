@@ -214,6 +214,10 @@ async def test_documents_list_authenticated(client: AsyncClient, auth_headers: d
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
 
+async def test_documents_delete_requires_auth(client: AsyncClient):
+    resp = await client.delete("/documents/nonexistent-id")
+    assert resp.status_code == 401
+
 # --- Experiments ---
 async def test_experiments_list_not_implemented(client: AsyncClient, auth_headers: dict):
     resp = await client.get("/experiments/", headers=auth_headers)
