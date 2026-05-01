@@ -215,4 +215,11 @@ async def test_documents_list_authenticated(client: AsyncClient, auth_headers: d
     assert isinstance(resp.json(), list)
 
 # --- Experiments ---
-# TODO: add experiment tests once the feature is implemented
+async def test_experiments_list_not_implemented(client: AsyncClient, auth_headers: dict):
+    resp = await client.get("/experiments/", headers=auth_headers)
+    assert resp.status_code == 404
+
+
+async def test_experiments_create_not_implemented(client: AsyncClient, auth_headers: dict):
+    resp = await client.post("/experiments/", json={}, headers=auth_headers)
+    assert resp.status_code == 404
