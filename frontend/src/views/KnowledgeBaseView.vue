@@ -126,7 +126,10 @@
 
           <Column style="width:80px">
             <template #body="{ data }">
-              <button class="view-btn" @click.stop="openChunks(data)">Chunks</button>
+              <div class="row-actions">
+                <button class="view-btn" @click.stop="openChunks(data)">Chunks</button>
+                <button v-if="canDelete" class="view-btn danger" @click.stop="deleteDocument(data)">Delete</button>
+              </div>
             </template>
           </Column>
         </DataTable>
@@ -202,9 +205,10 @@ import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
-import { get } from '@/api/client'
+import { get, del } from '@/api/client'
 import type { DocumentResponse, ChunkResponse, SourceResponse } from '@/api/types'
 import { relTime } from '@/utils/time'
+import { useAuthStore } from '@/stores/auth'
 
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -228,6 +232,10 @@ const chunks = ref<ChunkResponse[]>([])
 const selectedDoc = ref<DocumentResponse | null>(null)
 
 const stats = ref({ documents: 0, chunks: 0, embeddedPct: 0, sources: 0 })
+const auth = useAuthStore()
+const canDelete = computed(() =>
+  auth.user?.role === 'rag_admin' || auth.user?.role === 'rag_curator'
+)
 
 const chunksHeader = computed(() =>
   selectedDoc.value
@@ -318,6 +326,20 @@ async function openEvidence(evidenceId: string) {
     window.open(resp.url, '_blank')
   } catch (e: any) {
     error.value = e.message ?? 'Failed to get evidence URL'
+  }
+}
+
+async function deleteDocument(doc: DocumentResponse) {
+  try {
+    await del<void>(`/documents/${doc.id}`)
+    documents.value = documents.value.filter((d) => d.id !== doc.id)
+    if (selectedDoc.value?.id === doc.id) {
+      selectedDoc.value = null
+      chunksVisible.value = false
+      chunks.value = []
+    }
+  } catch (e: any) {
+    error.value = e.message ?? 'Failed to delete document'
   }
 }
 
@@ -503,6 +525,15 @@ onMounted(async () => {
 .view-btn:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+.view-btn.danger:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.row-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
 }
 
 /* Empty */
