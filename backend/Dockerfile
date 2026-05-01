@@ -2,10 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# System dependencies:
-# - libpq-dev + gcc: required by psycopg2 and C-extension packages
-# - Chromium runtime libs: installed manually because playwright install-deps
-#   fails on Debian Trixie due to missing font packages
+# Chromium runtime libs: installed manually because 
+# playwright install-deps fails on Debian Trixie
+# due to missing font packages
 RUN apt-get update && apt-get install -y \
     libpq-dev gcc zlib1g-dev \
     libnss3 libatk1.0-0 libatk-bridge2.0-0 \
@@ -20,15 +19,13 @@ RUN pip install --no-cache-dir poetry poetry-plugin-export
 
 COPY pyproject.toml poetry.lock* ./
 
-# Export a flat requirements.txt from the lock file so pip handles the actual
-# installation. This avoids Poetry's own installer, which does not support
-# --mount=type=cache in Podman and has known issues with virtualenv detection
-# in some container runtimes.
-RUN poetry export -f requirements.txt --only main --without-hashes -o /tmp/requirements.txt
+# Export a flat requirements.txt from the lock file 
+# so pip handles the actual installation.
+RUN poetry export -f requirements.txt --only main \
+    --without-hashes -o /tmp/requirements.txt
 
-# Install torch before everything else.
-# pytorch.org/whl/cpu only publishes linux_x86_64 wheels — installing one of
-# those on an arm64 container causes SIGILL at import time.
+# Install torch before everything else. `pytorch.org/whl/cpu` only publishes linux_x86_64 wheels 
+# — installing one of those on an arm64 container causes SIGILL at import time. 
 # On arm64 (Apple Silicon Podman, etc.) we fall back to PyPI which has native wheels.
 RUN arch=$(uname -m) && \
     if [ "$arch" = "x86_64" ]; then \
@@ -37,10 +34,9 @@ RUN arch=$(uname -m) && \
         pip install --no-cache-dir torch; \
     fi
 
-# Install remaining dependencies. pip skips torch because it is already satisfied.
+# Remaining dependencies
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
-# Chromium for Playwright (system libs installed above via apt)
 RUN playwright install chromium
 
 COPY . .
