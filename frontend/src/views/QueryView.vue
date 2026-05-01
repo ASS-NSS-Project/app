@@ -37,6 +37,7 @@
       <!-- Query input bar -->
       <div class="query-bar">
         <Textarea
+          ref="queryInputRef"
           v-model="store.question"
           placeholder="Feel free to ask..."
           :rows="1"
@@ -169,7 +170,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
 import { get, post } from '@/api/client'
 import type { SourceResponse, QueryResponse, ModelInfo } from '@/api/types'
@@ -190,9 +191,13 @@ const sessionStartIndex = ref(0)
 const showPrevious = ref(false)
 const shareCopied = ref(false)
 const showLegend = ref(false)
+const queryInputRef = ref<any>(null)
 
 watch(() => store.mode, (mode) => {
   if (mode === 'no_rag') store.strictGrounding = false
+})
+watch(() => store.question, (q) => {
+  if (!q) resetQueryInputHeight()
 })
 
 // Model selection
@@ -234,11 +239,21 @@ function timestampFilename(): string {
 }
 
 // ─── Query ────────────────────────────────────────────────────────────────────
+function resetQueryInputHeight() {
+  nextTick(() => {
+    const rootEl = queryInputRef.value?.$el ?? null
+    const textarea = rootEl?.querySelector?.('textarea') as HTMLTextAreaElement | null
+    if (!textarea) return
+    textarea.style.height = 'auto'
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
 
 async function doQuery() {
   if (!store.question.trim() || loading.value) return
   const q = store.question.trim()
   store.question = ''
+  resetQueryInputHeight()
   loading.value = true
   queryError.value = ''
 
@@ -260,6 +275,7 @@ async function doQuery() {
     const err = e as { response?: { data?: { detail?: string } } }
     queryError.value = err.response?.data?.detail ?? msg
     store.question = q
+    resetQueryInputHeight()
   } finally {
     loading.value = false
   }
@@ -387,6 +403,8 @@ async function copyShare() {
 
 function onClearChat() {
   store.clearHistory()
+  store.question = ''
+  resetQueryInputHeight()
   sessionStartIndex.value = 0
   showPrevious.value = false
 }
