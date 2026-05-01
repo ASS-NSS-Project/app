@@ -48,16 +48,46 @@ def process_ingest_job(job_id: str) -> None:
     logger.info("Worker picked up job", extra={"event": "worker_job_started", "job_id": job_id})
     db = SessionLocal()
 
-    # Job may have been cancelled between being queued and picked up
+    # Preflight state gate. Redelivered messages are expected after worker crashes
+    # (for example OOMKill during embedding), so "done" and "running" need
+    # recovery handling instead of being skipped blindly.
     preflight = db.query(IngestJob).filter(IngestJob.id == job_id).first()
-    if not preflight or preflight.status != JobStatus.pending:
+    if not preflight:
         logger.info("Job already cancelled or missing, skipping", extra={
             "event": "worker_job_skipped", "job_id": job_id,
         })
         db.close()
         return
 
+    if preflight.status == JobStatus.done:
+        logger.info("Recovering done job: retrying embedding step", extra={
+            "event": "worker_job_recovery_embedding",
+            "job_id": job_id,
+            "source_id": str(preflight.source_id),
+        })
+        try:
+            _embed_job_chunks(db, preflight)
+        finally:
+            db.close()
+        return
+
+    if preflight.status in (JobStatus.failed, JobStatus.captcha_blocked):
+        logger.info("Job in terminal state, skipping", extra={
+            "event": "worker_job_skipped",
+            "job_id": job_id,
+            "status": preflight.status.value,
+        })
+        db.close()
+        return
+
     try:
+        if preflight.status == JobStatus.running:
+            logger.info("Recovering running job after worker interruption", extra={
+                "event": "worker_job_recovery_running",
+                "job_id": job_id,
+                "source_id": str(preflight.source_id),
+            })
+
         ingest_service = IngestService(db)
         job = asyncio.run(ingest_service.run(job_id))
 

@@ -354,6 +354,8 @@ If `url` is omitted, uses the source's `base_url`.
 
 `status` progresses through: `pending` → `running` → `done` | `failed` | `captcha_blocked`. `started_at` and `finished_at` are populated once the worker picks up and completes the job.
 
+Worker recovery behavior: if a RabbitMQ message is redelivered after a worker restart (for example OOMKill during embedding), the worker does not blindly skip non-`pending` jobs. It resumes `running` jobs and retries the embedding step for `done` jobs to prevent "document/chunks saved but vectors missing" drift.
+
 ---
 
 #### `GET /sources/pipeline/stats`
