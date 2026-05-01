@@ -487,6 +487,13 @@ In the Knowledge Base UI, chunks are opened explicitly via the **Chunks** action
 
 ---
 
+#### `DELETE /documents/{doc_id}` *(rag_admin, rag_curator)*
+Delete a document and all of its chunks from the knowledge base. Embedded vectors for that document's chunks are removed from Qdrant as part of the same operation.
+
+**Response `204`**: deleted.
+
+---
+
 #### `GET /documents/{doc_id}/markdown`
 Download the full document content as a `.md` file. Documents ingested after the 0006 migration have clean Markdown stored natively (HTML/rendered strategies via `markdownify`, VLM via prompt). Older documents fall back to concatenating their chunks.
 
