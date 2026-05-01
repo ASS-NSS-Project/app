@@ -45,14 +45,14 @@
               class="chain-step"
               :class="{
                 'chain-step-done':    step.status === 'done',
-                'chain-step-current': step.status === 'current',
-                'chain-step-waiting': step.status === 'waiting',
+                'chain-step-pending': step.status === 'pending',
+                'chain-step-neutral': step.status === 'neutral',
                 'chain-step-failed':  step.status === 'failed',
               }"
             >
               <span class="step-num">{{ i + 1 }}</span>
               <span class="step-label">{{ step.label }}</span>
-              <span class="step-status">{{ step.status }}</span>
+              <span class="step-status">{{ step.statusLabel }}</span>
             </div>
             <span v-if="i < chainSteps.length - 1" class="step-arrow">→</span>
           </template>
@@ -282,26 +282,38 @@ const chainSteps = computed(() => {
     { label: 'Rendered DOM',         key: 'rendered' },
     { label: 'Screenshot + AI',      key: 'screenshot' },
   ]
+  const mk = (
+    s: { label: string; key: string },
+    status: 'neutral' | 'pending' | 'done' | 'failed',
+  ) => ({
+    ...s,
+    status,
+    statusLabel:
+      status === 'done' ? 'READY'
+      : status === 'pending' ? 'PENDING'
+      : status === 'failed' ? 'FAILED'
+      : '-',
+  })
 
   const job = selectedJob.value ?? jobs.value.find(j => j.status === 'running') ?? null
 
   if (!job) {
-    return steps.map(s => ({ ...s, status: 'ready' }))
+    return steps.map(s => mk(s, 'neutral'))
   }
 
   const strategyKey = job.strategy_used ?? null
   const strategyIdx = strategyKey ? steps.findIndex(s => s.key === strategyKey) : -1
 
   return steps.map((s, i) => {
-    if (strategyIdx === -1) return { ...s, status: 'ready' }
-    if (i < strategyIdx) return { ...s, status: 'done' }
+    if (strategyIdx === -1) return mk(s, 'neutral')
+    if (i < strategyIdx) return mk(s, 'done')
     if (i === strategyIdx) {
-      if (job.status === 'running') return { ...s, status: 'current' }
-      if (job.status === 'done') return { ...s, status: 'done' }
-      if (job.status === 'failed' || job.status === 'captcha_blocked') return { ...s, status: 'failed' }
-      return { ...s, status: 'current' }
+      if (job.status === 'running' || job.status === 'pending') return mk(s, 'pending')
+      if (job.status === 'done') return mk(s, 'done')
+      if (job.status === 'failed' || job.status === 'captcha_blocked') return mk(s, 'failed')
+      return mk(s, 'pending')
     }
-    return { ...s, status: 'waiting' }
+    return mk(s, 'neutral')
   })
 })
 
@@ -480,12 +492,11 @@ onMounted(async () => {
   background: rgba(0,230,118,.06);
   border-color: rgba(0,230,118,.2);
 }
-.chain-step-current {
-  background: var(--surface3);
-  border-color: rgba(0,230,118,.5);
-  box-shadow: 0 0 14px rgba(0,230,118,.15);
+.chain-step-pending {
+  background: rgba(245,158,11,.08);
+  border-color: rgba(245,158,11,.35);
 }
-.chain-step-waiting { opacity: 0.5; }
+.chain-step-neutral { opacity: 0.65; }
 .chain-step-failed {
   background: rgba(239,68,68,.06);
   border-color: rgba(239,68,68,.3);
@@ -508,11 +519,11 @@ onMounted(async () => {
   flex-shrink: 0;
   margin-bottom: 2px;
 }
-.chain-step-current .step-num { background: var(--accent); color: #000; }
+.chain-step-pending .step-num { background: rgba(245,158,11,.22); color: #f59e0b; }
 .chain-step-done .step-num    { background: rgba(0,230,118,.3); color: var(--accent); }
 
 .step-label { font-size: 12px; font-weight: 500; color: var(--text2); text-align: center; }
-.chain-step-current .step-label { color: var(--text); }
+.chain-step-pending .step-label { color: #f59e0b; }
 .chain-step-done .step-label    { color: var(--accent); }
 
 .step-status {
@@ -522,7 +533,7 @@ onMounted(async () => {
   color: var(--muted);
   margin-top: 2px;
 }
-.chain-step-current .step-status { color: var(--accent); }
+.chain-step-pending .step-status { color: #f59e0b; }
 .chain-step-done .step-status    { color: var(--accent); opacity: 0.7; }
 
 .step-arrow { color: var(--muted); font-size: 14px; margin: 0 2px; padding-bottom: 16px; }
