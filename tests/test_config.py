@@ -1,5 +1,14 @@
-from config import Settings
+"""
+Configuration unit tests for `config.Settings`.
 
+Coverage:
+- PostgreSQL URL composition from POSTGRES_* fields.
+- S3/CESNET settings mapping (endpoint, credentials, region, path-style, buckets).
+- AIaaS model settings mapping (shared base URL/key, LLM/VLM model names).
+- Chunking default values for prose/table/VLM strategies.
+- Authentication settings defaults and overrides (JWT/admin bootstrap fields).
+"""
+from config import Settings
 
 def test_settings_database_url():
     s = Settings(
@@ -8,6 +17,7 @@ def test_settings_database_url():
         postgres_host="db.example.com",
         postgres_db="testdb",
     )
+
     assert s.database_url == "postgresql://testuser:testpass@db.example.com/testdb"
 
 
@@ -21,6 +31,7 @@ def test_settings_s3_fields():
         s3_bucket_evidence="cesnet-evidence",
         s3_bucket_docs="cesnet-docs",
     )
+
     assert s.s3_endpoint_url == "https://s3.cesnet.cz"
     assert s.s3_access_key == "mykey"
     assert s.s3_secret_key == "mysecret"
@@ -37,6 +48,7 @@ def test_settings_llm_vlm_fields():
         aiaas_llm_model="llama-3.3-70b-instruct",
         aiaas_vlm_model="qwen2.5-vl-7b-instruct",
     )
+
     assert s.aiaas_base_url == "https://aiaas.example.com/v1"
     assert s.aiaas_api_key == "shared-key"
     assert s.aiaas_llm_model == "llama-3.3-70b-instruct"
@@ -45,6 +57,7 @@ def test_settings_llm_vlm_fields():
 
 def test_settings_chunking_defaults():
     s = Settings()
+
     assert s.chunking.prose.target_tokens == 500
     assert s.chunking.prose.overlap_tokens == 50
     assert s.chunking.table.max_tokens == 1500
@@ -57,6 +70,7 @@ def test_settings_auth_fields():
         first_admin_email="ops@example.com",
         first_admin_password="hunter2",
     )
+    
     assert s.jwt_secret == "supersecret"
     assert s.first_admin_email == "ops@example.com"
     assert s.first_admin_password == "hunter2"
