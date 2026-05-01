@@ -930,7 +930,7 @@ app/
 │   ├── main.py                 # App entry point, startup (create_all, admin init, Qdrant init, scheduler)
 │   ├── config.py               # Settings from environment variables (pydantic-settings)
 │   ├── database.py             # SQLAlchemy engine + SessionLocal + Base
-│   ├── models.py               # All database tables (ORM)
+│   ├── models.py               # All database tables (ORM); column declarations use aligned formatting for readability
 │   ├── worker.py               # RabbitMQ consumer: pulls job_id → runs ingest pipeline → embeds chunks
 │   ├── routers/
 │   │   ├── auth.py             # Login, local-login, me, refresh, stats, providers

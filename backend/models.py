@@ -28,49 +28,49 @@ def new_uuid() -> str:
 # ─────────────────────────────────────────────────────
 
 class UserRole(str, enum.Enum):
-    rag_admin   = "rag_admin"    # RAG app admin + Keycloak RAG group management + Grafana
+    rag_admin   = "rag_admin"    # RAG app admin + Keycloak RAG groups management + Grafana
     rag_curator = "rag_curator"  # Source/pipeline/incident management
     rag_analyst = "rag_analyst"  # Experiments and queries
     rag_user    = "rag_user"     # Query only
 
 
 class IngestStrategy(str, enum.Enum):
-    api = "api"
-    html = "html"
-    rendered = "rendered"
-    screenshot = "screenshot"
+    api         = "api"
+    html        = "html"
+    rendered    = "rendered"
+    screenshot  = "screenshot"
     upstream_ai = "upstream_ai"
 
 
 class JobStatus(str, enum.Enum):
-    pending = "pending"
-    running = "running"
-    done = "done"
-    failed = "failed"
+    pending         = "pending"
+    running         = "running"
+    done            = "done"
+    failed          = "failed"
     captcha_blocked = "captcha_blocked"
 
 
 class EvidenceType(str, enum.Enum):
     screenshot = "screenshot"
-    html = "html"
-    dom = "dom"
-    pdf = "pdf"
+    html       = "html"
+    dom        = "dom"
+    pdf        = "pdf"
 
 
 class IncidentType(str, enum.Enum):
-    captcha = "captcha"
+    captcha      = "captcha"
     rate_limited = "rate_limited"
-    blocked = "blocked"
+    blocked      = "blocked"
 
 
 class IncidentStatus(str, enum.Enum):
-    open = "open"
+    open        = "open"
     in_progress = "in_progress"
-    resolved = "resolved"
+    resolved    = "resolved"
 
 
 class ChunkType(str, enum.Enum):
-    text = "text"
+    text  = "text"
     table = "table"
     block = "block"
 
@@ -83,22 +83,36 @@ class ChunkType(str, enum.Enum):
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(String, primary_key=True, default=new_uuid)
-    username = Column(String, unique=True, nullable=True, index=True)
-    email = Column(String, unique=True, nullable=False, index=True)
+    id       = Column(String, 
+                      primary_key=True, 
+                      default=new_uuid)
+    username = Column(String, 
+                      unique=True, 
+                      nullable=True, 
+                      index=True)
+    email    = Column(String, 
+                      unique=True, 
+                      nullable=False, 
+                      index=True)
     # Password is optional – users who log in via Google don't have one
-    hashed_password = Column(String, nullable=True)
-    full_name = Column(String, nullable=True)
-    role = Column(Enum(UserRole), default=UserRole.rag_user, nullable=False)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    hashed_password = Column(String, 
+                             nullable=True)
+    full_name       = Column(String, 
+                             nullable=True)
+    role            = Column(Enum(UserRole), 
+                             default=UserRole.rag_user, 
+                             nullable=False)
+    is_active       = Column(Boolean, 
+                             default=True)
+    created_at      = Column(DateTime, 
+                             default=datetime.utcnow)
 
     # OAuth2 fields – only populated for users who log in via an external provider
-    oauth_provider = Column(String, nullable=True)   # e.g. "google"
-    oauth_id = Column(String, nullable=True, index=True)  # Google sub (unique user ID)
-    avatar_url = Column(String, nullable=True)        # Profile picture URL from Google
+    oauth_provider = Column(String, nullable=True) # e.g. "google" or "keycloak"
+    oauth_id       = Column(String, nullable=True, index=True)  # unique user ID
+    avatar_url     = Column(String, nullable=True) # Profile picture URL from Google
 
-    audit_logs = relationship("AuditLog", back_populates="user")
+    audit_logs     = relationship("AuditLog", back_populates="user")
 
 
 # ─────────────────────────────────────────────────────
@@ -110,25 +124,25 @@ class User(Base):
 class Source(Base):
     __tablename__ = "sources"
 
-    id = Column(String, primary_key=True, default=new_uuid)
-    name = Column(String, nullable=False)
+    id       = Column(String, primary_key=True, default=new_uuid)
+    name     = Column(String, nullable=False)
     base_url = Column(String, nullable=False)
     
     # Legal/permission info (required by section 2 of spec)
     permission_type = Column(String, nullable=False)  # e.g. "public", "licensed", "api"
-    permission_ref = Column(Text, nullable=True)       # Reference to the agreement
+    permission_ref  = Column(Text, nullable=True)     # Reference to the agreement
 
     # How to collect
-    preferred_strategy = Column(Enum(IngestStrategy), default=IngestStrategy.api)
+    preferred_strategy    = Column(Enum(IngestStrategy), default=IngestStrategy.api)
     crawl_frequency_hours = Column(Integer, default=24)
-    crawl_depth = Column(Integer, default=1)
-    rate_limit_rps = Column(Float, default=1.0)  # Requests per second
+    crawl_depth           = Column(Integer, default=1)
+    rate_limit_rps        = Column(Float, default=1.0)  # Requests per second
 
     # How long to keep evidence (days)
     retention_days_evidence = Column(Integer, default=90)
-    retention_days_index = Column(Integer, default=365)
+    retention_days_index    = Column(Integer, default=365)
 
-    is_active = Column(Boolean, default=True)
+    is_active  = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(String, ForeignKey("users.id"))
 
@@ -151,14 +165,14 @@ class Source(Base):
 class IngestJob(Base):
     __tablename__ = "ingest_jobs"
 
-    id = Column(String, primary_key=True, default=new_uuid)
-    source_id = Column(String, ForeignKey("sources.id"), nullable=False)
-    url = Column(String, nullable=False)
+    id            = Column(String, primary_key=True, default=new_uuid)
+    source_id     = Column(String, ForeignKey("sources.id"), nullable=False)
+    url           = Column(String, nullable=False)
     strategy_used = Column(Enum(IngestStrategy), nullable=True)
-    status = Column(Enum(JobStatus), default=JobStatus.pending)
+    status        = Column(Enum(JobStatus), default=JobStatus.pending)
     
     # Timing
-    started_at = Column(DateTime, nullable=True)
+    started_at  = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
     
     # Result
@@ -177,20 +191,20 @@ class IngestJob(Base):
 # ─────────────────────────────────────────────────────
 # EVIDENCE TABLE
 # Every scraped artifact: screenshot file, HTML dump, etc.
-# Stored in MinIO, referenced here with its URL and hash.
+# Stored in S3, referenced here with its URL and hash.
 # This is the "proof" of what we found at a URL at a point in time.
 # ─────────────────────────────────────────────────────
 
 class Evidence(Base):
     __tablename__ = "evidence"
 
-    id = Column(String, primary_key=True, default=new_uuid)
+    id     = Column(String, primary_key=True, default=new_uuid)
     job_id = Column(String, ForeignKey("ingest_jobs.id"), nullable=False)
-    type = Column(Enum(EvidenceType), nullable=False)
+    type   = Column(Enum(EvidenceType), nullable=False)
     
     # Where the file is stored in MinIO
     storage_uri = Column(String, nullable=False)  # e.g. "evidence/abc123.png"
-    file_hash = Column(String, nullable=False)     # SHA256 of the file
+    file_hash       = Column(String, nullable=False)  # SHA256 of the file
     file_size_bytes = Column(Integer, nullable=True)
     
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -207,10 +221,10 @@ class Evidence(Base):
 class Document(Base):
     __tablename__ = "documents"
 
-    id = Column(String, primary_key=True, default=new_uuid)
+    id        = Column(String, primary_key=True, default=new_uuid)
     source_id = Column(String, ForeignKey("sources.id"), nullable=False)
-    url = Column(String, nullable=False)
-    title = Column(String, nullable=True)
+    url       = Column(String, nullable=False)
+    title     = Column(String, nullable=True)
     
     # Version tracking: if we re-scrape, version increments
     doc_version = Column(Integer, default=1)
@@ -230,7 +244,7 @@ class Document(Base):
     # Hash of content for deduplication
     content_hash = Column(String, nullable=True)
     
-    language = Column(String, nullable=True)
+    language   = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     source = relationship("Source", back_populates="documents")
@@ -246,9 +260,9 @@ class Document(Base):
 class Chunk(Base):
     __tablename__ = "chunks"
 
-    id = Column(String, primary_key=True, default=new_uuid)
+    id          = Column(String, primary_key=True, default=new_uuid)
     document_id = Column(String, ForeignKey("documents.id"), nullable=False)
-    chunk_type = Column(Enum(ChunkType), default=ChunkType.text)
+    chunk_type  = Column(Enum(ChunkType), default=ChunkType.text)
     
     # The actual text content
     text = Column(Text, nullable=False)
@@ -257,7 +271,7 @@ class Chunk(Base):
     chunk_index = Column(Integer, nullable=False)
     
     # Citation reference: points back to evidence
-    citation_url = Column(String, nullable=True)
+    citation_url         = Column(String, nullable=True)
     citation_evidence_id = Column(String, ForeignKey("evidence.id"), nullable=True)
     
     # For screenshots: where in the image was this text found?
@@ -268,10 +282,10 @@ class Chunk(Base):
 
     # Extended metadata
     parent_chunk_id = Column(String, ForeignKey("chunks.id"), nullable=True)
-    section_path = Column(String, nullable=True)
-    token_count = Column(Integer, nullable=True)
-    source_method = Column(String, nullable=True)  # "html" / "rendered" / "vlm"
-    language = Column(String, nullable=True)
+    section_path    = Column(String, nullable=True)
+    token_count     = Column(Integer, nullable=True)
+    source_method   = Column(String, nullable=True)  # "html" / "rendered" / "vlm"
+    language        = Column(String, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -287,13 +301,13 @@ class Chunk(Base):
 class Incident(Base):
     __tablename__ = "incidents"
 
-    id = Column(String, primary_key=True, default=new_uuid)
-    type = Column(Enum(IncidentType), default=IncidentType.captcha)
+    id        = Column(String, primary_key=True, default=new_uuid)
+    type      = Column(Enum(IncidentType), default=IncidentType.captcha)
     source_id = Column(String, ForeignKey("sources.id"), nullable=False)
-    url = Column(String, nullable=False)
+    url       = Column(String, nullable=False)
     strategy = Column(Enum(IngestStrategy), nullable=True)
     severity = Column(String, default="medium")  # low, medium, high
-    status = Column(Enum(IncidentStatus), default=IncidentStatus.open)
+    status   = Column(Enum(IncidentStatus), default=IncidentStatus.open)
     
     # Who detected it (DOM parser, screenshot classifier, etc.)
     detector = Column(String, nullable=True)
@@ -302,8 +316,8 @@ class Incident(Base):
     evidence_screenshot_uri = Column(String, nullable=True)
     
     # Resolution info
-    resolved_by = Column(String, ForeignKey("users.id"), nullable=True)
-    resolved_at = Column(DateTime, nullable=True)
+    resolved_by     = Column(String, ForeignKey("users.id"), nullable=True)
+    resolved_at     = Column(DateTime, nullable=True)
     resolution_note = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -321,12 +335,12 @@ class Incident(Base):
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
-    id = Column(String, primary_key=True, default=new_uuid)
-    user_id = Column(String, ForeignKey("users.id"), nullable=True)
-    action = Column(String, nullable=False)    # e.g. "LOGIN", "SOURCE_CREATED", "QUERY"
+    id          = Column(String, primary_key=True, default=new_uuid)
+    user_id     = Column(String, ForeignKey("users.id"), nullable=True)
+    action      = Column(String, nullable=False)     # e.g. "LOGIN", "SOURCE_CREATED", "QUERY"
     object_type = Column(String, nullable=True) # e.g. "source", "document"
-    object_id = Column(String, nullable=True)   # ID of the affected object
-    extra = Column(JSON, nullable=True)      # Extra context (IP, query text, etc.)
+    object_id   = Column(String, nullable=True)      # ID of the affected object
+    extra       = Column(JSON, nullable=True)        # Extra context (IP, query text, etc.)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="audit_logs")
@@ -340,26 +354,26 @@ class AuditLog(Base):
 class ExperimentStatus(str, enum.Enum):
     pending = "pending"
     running = "running"
-    done = "done"
-    failed = "failed"
+    done    = "done"
+    failed  = "failed"
 
 
 class Experiment(Base):
     __tablename__ = "experiments"
 
-    id = Column(String, primary_key=True, default=new_uuid)
-    name = Column(String, nullable=False)
+    id          = Column(String, primary_key=True, default=new_uuid)
+    name        = Column(String, nullable=False)
     description = Column(Text, nullable=True)
-    created_by = Column(String, ForeignKey("users.id"), nullable=False)
-    status = Column(Enum(ExperimentStatus), default=ExperimentStatus.pending)
+    created_by  = Column(String, ForeignKey("users.id"), nullable=False)
+    status      = Column(Enum(ExperimentStatus), default=ExperimentStatus.pending)
 
     # Aggregated results populated after run completes
     recall_at_k = Column(Float, nullable=True)
-    mrr = Column(Float, nullable=True)
+    mrr  = Column(Float, nullable=True)
     ndcg = Column(Float, nullable=True)
     avg_latency_ms = Column(Float, nullable=True)
 
-    top_k = Column(Integer, default=5)
+    top_k      = Column(Integer, default=5)
     model_name = Column(String, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -372,17 +386,17 @@ class Experiment(Base):
 class ExperimentQuery(Base):
     __tablename__ = "experiment_queries"
 
-    id = Column(String, primary_key=True, default=new_uuid)
-    experiment_id = Column(String, ForeignKey("experiments.id"), nullable=False)
-    query_text = Column(Text, nullable=False)
+    id                = Column(String, primary_key=True, default=new_uuid)
+    experiment_id     = Column(String, ForeignKey("experiments.id"), nullable=False)
+    query_text        = Column(Text, nullable=False)
     expected_keywords = Column(JSON, nullable=False, default=list)  # list[str]
 
     # Per-query results
     recall_at_k = Column(Float, nullable=True)
-    mrr = Column(Float, nullable=True)
-    ndcg = Column(Float, nullable=True)
-    latency_ms = Column(Float, nullable=True)
+    mrr                 = Column(Float, nullable=True)
+    ndcg                = Column(Float, nullable=True)
+    latency_ms          = Column(Float, nullable=True)
     retrieved_chunk_ids = Column(JSON, nullable=True)
-    generated_answer = Column(Text, nullable=True)
+    generated_answer    = Column(Text, nullable=True)
 
     experiment = relationship("Experiment", back_populates="queries")
