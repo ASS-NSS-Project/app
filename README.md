@@ -1010,7 +1010,7 @@ poetry run pytest ../tests/ -v
 
 ### CI status
 
-The `backend-tests` job in `.github/workflows/ci.yml` is currently disabled (`if: false`) while the suite is stabilised. Re-enable it by removing that line once the test environment is confirmed to work end-to-end in GitHub Actions.
+`backend-tests` runs in GitHub Actions against PostgreSQL 16 on every PR/push. The image build job is gated on both backend tests and frontend build, so failed tests block image publishing immediately.
 
 ---
 
@@ -1029,9 +1029,7 @@ Images:
 - `ghcr.io/ass-nss-project/rag-api` — FastAPI backend (also used for the worker, different `command` in k8s)
 - `ghcr.io/ass-nss-project/rag-frontend` — Vue 3 / Nginx SPA
 
-The workflow: commit-message lint → frontend build → build & push (main/kost/tags only).
-
-> **Note:** `backend-tests` is currently disabled (`if: false`) in the CI workflow while the test suite is being updated.
+The workflow: commit-message lint → backend tests + frontend build → build & push (main/kost/tags only).
 
 ---
 
