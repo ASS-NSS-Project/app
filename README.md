@@ -481,6 +481,8 @@ Fetch a single document by ID.
 #### `GET /documents/{doc_id}/chunks`
 List all chunks for a document.
 
+In the Knowledge Base UI, chunks are opened explicitly via the **Chunks** action button in each row (row click does not open chunks). The document search box filters by document title and URL text, and the Source filter is a selectable source-id list.
+
 **Response `200`**: array of `ChunkResponse`.
 
 ---

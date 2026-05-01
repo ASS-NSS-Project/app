@@ -45,7 +45,15 @@
             @keydown.enter="applyFilter"
           />
         </div>
-        <InputText v-model="sourceFilter" placeholder="Source ID…" style="width:180px" />
+        <Select
+          v-model="sourceFilter"
+          :options="sourceOptions"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="Source ID…"
+          size="small"
+          style="width:220px"
+        />
         <Button label="Search" size="small" @click="applyFilter" :loading="loading" />
         <Button label="Clear" size="small" severity="secondary" text @click="clearFilter" v-if="titleFilter || sourceFilter" />
       </div>
@@ -60,14 +68,10 @@
         <div v-if="error" class="error-bar">{{ error }}</div>
 
         <DataTable
-          :value="documents"
+          :value="filteredDocuments"
           :loading="loading"
           size="small"
           stripedRows
-          selectionMode="single"
-          v-model:selection="selectedDoc"
-          @row-select="onDocSelect"
-          :rowClass="() => 'kb-row'"
         >
           <template #empty>
             <div class="empty-state">
@@ -82,6 +86,12 @@
                 <span class="doc-title">{{ data.title ?? urlShort(data.url) }}</span>
                 <a :href="data.url" target="_blank" class="doc-url" @click.stop>{{ urlShort(data.url) }}</a>
               </div>
+            </template>
+          </Column>
+
+          <Column field="source_id" header="Source ID" style="width:180px">
+            <template #body="{ data }">
+              <span class="source-id">{{ data.source_id.slice(0, 8) }}…</span>
             </template>
           </Column>
 
@@ -193,15 +203,15 @@ import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import { get } from '@/api/client'
-import type { DocumentResponse, ChunkResponse } from '@/api/types'
+import type { DocumentResponse, ChunkResponse, SourceResponse } from '@/api/types'
 import { relTime } from '@/utils/time'
 
 const loading = ref(false)
 const error = ref<string | null>(null)
 const documents = ref<DocumentResponse[]>([])
-const selectedDoc = ref<DocumentResponse | null>(null)
 const titleFilter = ref('')
 const sourceFilter = ref('')
+const sourceOptions = ref<{ label: string; value: string }[]>([{ label: 'All sources', value: '' }])
 const limit = ref(10)
 const offset = ref(0)
 const page = ref(0)
@@ -215,6 +225,7 @@ const pageSizeOptions = [
 const chunksVisible = ref(false)
 const chunksLoading = ref(false)
 const chunks = ref<ChunkResponse[]>([])
+const selectedDoc = ref<DocumentResponse | null>(null)
 
 const stats = ref({ documents: 0, chunks: 0, embeddedPct: 0, sources: 0 })
 
@@ -223,6 +234,15 @@ const chunksHeader = computed(() =>
     ? (selectedDoc.value.title ?? urlShort(selectedDoc.value.url))
     : 'Chunks'
 )
+const filteredDocuments = computed(() => {
+  const q = titleFilter.value.trim().toLowerCase()
+  if (!q) return documents.value
+  return documents.value.filter((d) => {
+    const title = (d.title ?? '').toLowerCase()
+    const url = (d.url ?? '').toLowerCase()
+    return title.includes(q) || url.includes(q)
+  })
+})
 
 function urlShort(url: string) {
   try { return new URL(url).hostname + new URL(url).pathname.replace(/\/$/, '').slice(0, 30) }
@@ -292,10 +312,6 @@ async function openChunks(doc: DocumentResponse) {
   }
 }
 
-async function onDocSelect() {
-  if (selectedDoc.value) openChunks(selectedDoc.value)
-}
-
 async function openEvidence(evidenceId: string) {
   try {
     const resp = await get<{ url: string }>(`/documents/evidence/${evidenceId}/url`)
@@ -305,7 +321,18 @@ async function openEvidence(evidenceId: string) {
   }
 }
 
-onMounted(loadDocuments)
+onMounted(async () => {
+  await loadDocuments()
+  try {
+    const sources = await get<SourceResponse[]>('/sources/?limit=200')
+    sourceOptions.value = [
+      { label: 'All sources', value: '' },
+      ...sources.map((s) => ({ label: `${s.name} (${s.id.slice(0, 8)}…)`, value: s.id })),
+    ]
+  } catch {
+    // keep default option only
+  }
+})
 </script>
 
 <style scoped>
@@ -427,8 +454,15 @@ onMounted(loadDocuments)
 /* Document rows */
 .doc-cell { display: flex; flex-direction: column; gap: 1px; }
 .doc-title { font-size: 13px; color: var(--text); font-weight: 450; }
-.doc-url { font-size: 11px; color: var(--muted); text-decoration: none; }
+.doc-url {
+  display: inline-block;
+  width: fit-content;
+  font-size: 11px;
+  color: var(--muted);
+  text-decoration: none;
+}
 .doc-url:hover { color: var(--accent); }
+.source-id { font-family: monospace; font-size: 11px; color: var(--muted); }
 
 /* Strategy badge */
 .strategy-badge {
@@ -497,6 +531,4 @@ onMounted(loadDocuments)
   line-height: 1.5;
 }
 
-:deep(.kb-row) { cursor: pointer; }
-:deep(.kb-row:hover td) { background: rgba(0,230,118,.03) !important; }
 </style>
