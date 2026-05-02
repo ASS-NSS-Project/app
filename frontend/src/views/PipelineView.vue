@@ -39,23 +39,49 @@
             </p>
           </div>
         </div>
-        <div class="chain-steps">
-          <template v-for="(step, i) in chainSteps" :key="i">
-            <div
-              class="chain-step"
-              :class="{
-                'chain-step-done':    step.status === 'done',
-                'chain-step-pending': step.status === 'pending',
-                'chain-step-neutral': step.status === 'neutral',
-                'chain-step-failed':  step.status === 'failed',
-              }"
-            >
-              <span class="step-num">{{ i + 1 }}</span>
-              <span class="step-label">{{ step.label }}</span>
-              <span class="step-status">{{ step.statusLabel }}</span>
+        <div class="chain-steps-wrap">
+          <div class="chain-steps">
+            <template v-for="(step, i) in chainSteps" :key="i">
+              <div
+                class="chain-step"
+                :class="{
+                  'chain-step-done':    step.status === 'done',
+                  'chain-step-pending': step.status === 'pending',
+                  'chain-step-neutral': step.status === 'neutral',
+                  'chain-step-skipped': step.status === 'skipped',
+                  'chain-step-failed':  step.status === 'failed',
+                }"
+              >
+                <span class="step-num">{{ i + 1 }}</span>
+                <span class="step-label">{{ step.label }}</span>
+                <span class="step-status">{{ step.statusLabel }}</span>
+              </div>
+              <span v-if="i < chainSteps.length - 1" class="step-arrow">→</span>
+            </template>
+          </div>
+          <div class="chain-legend">
+            <div class="legend-title">Methods</div>
+            <div class="legend-item">
+              <strong>API / Feed</strong>
+              <span>Uses <a href="https://jina.ai" target="_blank" rel="noopener noreferrer">jina.ai</a> reader output first, with RSS/Atom fallback where available.</span>
+              <span>Fastest path for clean structured content before heavier scraping methods are tried.</span>
             </div>
-            <span v-if="i < chainSteps.length - 1" class="step-arrow">→</span>
-          </template>
+            <div class="legend-item">
+              <strong>HTML</strong>
+              <span>Fetches raw page HTML and extracts visible text from the DOM without JavaScript rendering.</span>
+              <span>Good for static pages and lower-latency ingestion when content is present directly in markup.</span>
+            </div>
+            <div class="legend-item">
+              <strong>Rendered DOM</strong>
+              <span>Runs a headless browser to execute JavaScript and capture the post-rendered document state.</span>
+              <span>Used for SPA/dynamic websites where server HTML is incomplete.</span>
+            </div>
+            <div class="legend-item">
+              <strong>Screenshot + Visual Extraction</strong>
+              <span>Captures a screenshot and sends it to the VLM extraction model for OCR-like structured reading.</span>
+              <span>This is the most expensive fallback and is used when prior text extraction paths are insufficient.</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -280,11 +306,11 @@ const chainSteps = computed(() => {
     { label: 'API / Feed',           key: 'api' },
     { label: 'HTML',                 key: 'html' },
     { label: 'Rendered DOM',         key: 'rendered' },
-    { label: 'Screenshot + AI',      key: 'screenshot' },
+    { label: 'Screenshot + Visual Extraction', key: 'screenshot' },
   ]
   const mk = (
     s: { label: string; key: string },
-    status: 'neutral' | 'pending' | 'done' | 'failed',
+    status: 'neutral' | 'pending' | 'done' | 'failed' | 'skipped',
   ) => ({
     ...s,
     status,
@@ -292,6 +318,7 @@ const chainSteps = computed(() => {
       status === 'done' ? 'READY'
       : status === 'pending' ? 'PENDING'
       : status === 'failed' ? 'FAILED'
+      : status === 'skipped' ? 'SKIPPED'
       : '-',
   })
 
@@ -305,8 +332,19 @@ const chainSteps = computed(() => {
   const strategyIdx = strategyKey ? steps.findIndex(s => s.key === strategyKey) : -1
 
   return steps.map((s, i) => {
-    if (strategyIdx === -1) return mk(s, 'neutral')
-    if (i < strategyIdx) return mk(s, 'done')
+    if (strategyIdx === -1) {
+      if (job.status === 'pending' || job.status === 'running') {
+        return i === 0 ? mk(s, 'pending') : mk(s, 'neutral')
+      }
+      if (job.status === 'failed' || job.status === 'captcha_blocked') {
+        return i === 0 ? mk(s, 'failed') : mk(s, 'neutral')
+      }
+      if (job.status === 'done') {
+        return i === 0 ? mk(s, 'done') : mk(s, 'neutral')
+      }
+      return mk(s, 'neutral')
+    }
+    if (i < strategyIdx) return mk(s, 'skipped')
     if (i === strategyIdx) {
       if (job.status === 'running' || job.status === 'pending') return mk(s, 'pending')
       if (job.status === 'done') return mk(s, 'done')
@@ -472,10 +510,12 @@ onMounted(async () => {
 .chain-steps {
   display: flex;
   align-items: center;
-  gap: 0;
-  flex-wrap: wrap;
   gap: 8px;
+  flex-wrap: wrap;
+  flex: 1;
 }
+.chain-card { display: flex; flex-direction: column; gap: 14px; }
+.chain-steps-wrap { display: flex; gap: 20px; align-items: flex-start; }
 .chain-step {
   display: flex;
   flex-direction: column;
@@ -497,6 +537,10 @@ onMounted(async () => {
   border-color: rgba(245,158,11,.35);
 }
 .chain-step-neutral { opacity: 0.65; }
+.chain-step-skipped {
+  background: rgba(96,165,250,.08);
+  border-color: rgba(96,165,250,.35);
+}
 .chain-step-failed {
   background: rgba(239,68,68,.06);
   border-color: rgba(239,68,68,.3);
@@ -521,10 +565,12 @@ onMounted(async () => {
 }
 .chain-step-pending .step-num { background: rgba(245,158,11,.22); color: #f59e0b; }
 .chain-step-done .step-num    { background: rgba(0,230,118,.3); color: var(--accent); }
+.chain-step-skipped .step-num { background: rgba(96,165,250,.22); color: #60a5fa; }
 
 .step-label { font-size: 12px; font-weight: 500; color: var(--text2); text-align: center; }
 .chain-step-pending .step-label { color: #f59e0b; }
 .chain-step-done .step-label    { color: var(--accent); }
+.chain-step-skipped .step-label { color: #60a5fa; }
 
 .step-status {
   font-size: 9px;
@@ -535,8 +581,50 @@ onMounted(async () => {
 }
 .chain-step-pending .step-status { color: #f59e0b; }
 .chain-step-done .step-status    { color: var(--accent); opacity: 0.7; }
+.chain-step-skipped .step-status { color: #60a5fa; }
 
 .step-arrow { color: var(--muted); font-size: 14px; margin: 0 2px; padding-bottom: 16px; }
+
+.chain-legend {
+  min-width: 320px;
+  max-width: 360px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface2);
+  padding: 10px 12px;
+}
+.chain-legend .legend-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.chain-legend .legend-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+.chain-legend .legend-item:last-child { margin-bottom: 0; }
+.chain-legend strong {
+  font-size: 12px;
+  color: var(--text);
+}
+.chain-legend span {
+  font-size: 11px;
+  color: var(--text2);
+  line-height: 1.35;
+}
+.chain-legend a {
+  color: #60a5fa;
+  text-decoration: underline;
+}
+@media (max-width: 1200px) {
+  .chain-steps-wrap { flex-direction: column; }
+  .chain-legend { max-width: 100%; width: 100%; }
+}
 
 .filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
 .filter-count { font-size: 12px; color: var(--muted); margin-left: auto; }
