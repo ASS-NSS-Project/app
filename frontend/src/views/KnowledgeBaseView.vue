@@ -50,9 +50,9 @@
           :options="sourceOptions"
           optionLabel="label"
           optionValue="value"
-          placeholder="Source ID…"
+          placeholder="Source ID"
           size="small"
-          style="width:220px"
+          style="width:300px"
         />
         <Button label="Search" size="small" @click="applyFilter" :loading="loading" />
         <Button label="Clear" size="small" severity="secondary" text @click="clearFilter" v-if="titleFilter || sourceFilter" />
@@ -91,7 +91,7 @@
 
           <Column field="source_id" header="Source ID" style="width:180px">
             <template #body="{ data }">
-              <span class="source-id">{{ data.source_id.slice(0, 8) }}…</span>
+              <span class="source-id">{{ data.source_id }}</span>
             </template>
           </Column>
 
@@ -349,7 +349,7 @@ onMounted(async () => {
     const sources = await get<SourceResponse[]>('/sources/?limit=200')
     sourceOptions.value = [
       { label: 'All sources', value: '' },
-      ...sources.map((s) => ({ label: `${s.name} (${s.id.slice(0, 8)}…)`, value: s.id })),
+      ...sources.map((s) => ({ label: `${s.name} (${s.id})`, value: s.id })),
     ]
   } catch {
     // keep default option only
@@ -484,7 +484,13 @@ onMounted(async () => {
   text-decoration: none;
 }
 .doc-url:hover { color: var(--accent); }
-.source-id { font-family: monospace; font-size: 11px; color: var(--muted); }
+.source-id {
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: normal;
+  word-break: break-all;
+}
 
 /* Strategy badge */
 .strategy-badge {

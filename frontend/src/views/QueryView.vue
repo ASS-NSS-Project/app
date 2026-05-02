@@ -197,7 +197,7 @@ watch(() => store.mode, (mode) => {
   if (mode === 'no_rag') store.strictGrounding = false
 })
 watch(() => store.question, (q) => {
-  if (!q) resetQueryInputHeight()
+  if (!q.trim()) resetQueryInputHeight()
 })
 
 // Model selection
