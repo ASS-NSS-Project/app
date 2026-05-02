@@ -90,6 +90,11 @@ async def lifespan(app: FastAPI):
     # and all chunks are marked for re-embedding
     try:
         embedding_service = _get_embedder()
+        db = SessionLocal()
+        try:
+            embedding_service.reconcile_with_db(db)
+        finally:
+            db.close()
         if embedding_service.collection_was_recreated:
             db = SessionLocal()
             try:
