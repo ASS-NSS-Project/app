@@ -441,6 +441,8 @@ Ask a question. Returns an answer with citations from the knowledge base.
 
 When `model_id` is set, the backend resolves the provider URL and API key from its environment. For a fully custom endpoint, set `upstream_base_url` + `upstream_api_key` + `upstream_model` instead. The `enable_thinking` extra body is only sent to AIaaS — suppressed for all other providers.
 
+In the Query UI, the autosizing input resets back to compact height when cleared (including whitespace-only content).
+
 **Response `200`**:
 ```json
 {
@@ -481,7 +483,7 @@ Fetch a single document by ID.
 #### `GET /documents/{doc_id}/chunks`
 List all chunks for a document.
 
-In the Knowledge Base UI, chunks are opened explicitly via the **Chunks** action button in each row (row click does not open chunks). The document search box filters by document title and URL text, and the Source filter is a selectable source-id list.
+In the Knowledge Base UI, chunks are opened explicitly via the **Chunks** action button in each row (row click does not open chunks). The document search box filters by document title and URL text, and the Source ID filter is a selectable list populated from known sources. Source IDs are shown in full in the table and the selector.
 
 **Response `200`**: array of `ChunkResponse`.
 
