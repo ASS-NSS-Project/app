@@ -356,6 +356,8 @@ If `url` is omitted, uses the source's `base_url`.
 
 Worker recovery behavior: if a RabbitMQ message is redelivered after a worker restart (for example OOMKill during embedding), the worker does not blindly skip non-`pending` jobs. It resumes `running` jobs and retries the embedding step for `done` jobs to prevent "document/chunks saved but vectors missing" drift.
 
+Qdrant/Postgres drift handling: on API startup, if Postgres has zero chunks but Qdrant still contains vectors (for example after DB reset with persistent Qdrant volume), the collection is recreated automatically. During search, stale vectors whose `chunk_id` no longer exists in Postgres are filtered out and deleted from Qdrant as best-effort cleanup.
+
 ---
 
 #### `GET /sources/pipeline/stats`

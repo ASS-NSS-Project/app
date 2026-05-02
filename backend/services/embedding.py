@@ -25,6 +25,7 @@ from qdrant_client.models import (
     PayloadSchemaType,
 )
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from config import get_settings
 from models import Chunk
@@ -241,6 +242,9 @@ class EmbeddingService:
                     must=[FieldCondition(key="source_id", match=MatchValue(value=source_id))]
                 )
 
+            # Ask for a wider fused candidate set, then filter to chunks that still
+            # exist in Postgres (guards against stale Qdrant points after DB resets).
+            candidate_limit = max(top_k * 5, 20)
             results = self.qdrant.query_points(
                 collection_name=settings.qdrant_collection,
                 prefetch=[
@@ -258,7 +262,7 @@ class EmbeddingService:
                     ),
                 ],
                 query=FusionQuery(fusion=Fusion.RRF),
-                limit=top_k,
+                limit=candidate_limit,
                 with_payload=True,
             )
         except Exception as e:
@@ -278,6 +282,19 @@ class EmbeddingService:
         if chunk_ids and db is not None:
             rows = db.query(Chunk).filter(Chunk.id.in_(chunk_ids)).all()
             chunk_text_map = {r.id: r.text for r in rows}
+            stale_ids = [cid for cid in chunk_ids if cid and cid not in chunk_text_map]
+            if stale_ids:
+                # Best-effort self-healing: drop orphaned vectors that no longer map
+                # to any chunk row in Postgres.
+                try:
+                    self.delete_chunks(stale_ids)
+                    logger.warning(
+                        "Deleted %d stale vectors with missing chunk rows",
+                        len(stale_ids),
+                        extra={"event": "chunks_delete", "count": len(stale_ids)},
+                    )
+                except Exception as e:
+                    logger.warning("Failed to delete stale vectors: %s", e)
 
         logger.info("Qdrant search complete", extra={
             "event": "search_complete",
@@ -286,20 +303,30 @@ class EmbeddingService:
             "elapsed_ms": round((time.time() - t0) * 1000),
         })
 
-        return [
-            {
-                "chunk_id": h.payload.get("chunk_id"),
-                "document_id": h.payload.get("document_id"),
-                "text": chunk_text_map.get(h.payload.get("chunk_id"), ""),
-                "citation_url": h.payload.get("citation_url"),
-                "score": h.score,
-            }
-            for h in hits
-        ]
+        filtered = []
+        for h in hits:
+            chunk_id = h.payload.get("chunk_id")
+            text = chunk_text_map.get(chunk_id, "")
+            if not text:
+                continue
+            filtered.append(
+                {
+                    "chunk_id": chunk_id,
+                    "document_id": h.payload.get("document_id"),
+                    "text": text,
+                    "citation_url": h.payload.get("citation_url"),
+                    "score": h.score,
+                }
+            )
+            if len(filtered) >= top_k:
+                break
+        return filtered
 
     def delete_chunks(self, chunk_ids: list[str]) -> None:
         """Remove Qdrant points whose payload chunk_id matches any of the given IDs."""
         from qdrant_client.models import Filter, FieldCondition, MatchAny
+        if not chunk_ids:
+            return
         logger.info("Deleting %d chunks from Qdrant", len(chunk_ids), extra={
             "event": "chunks_delete",
             "count": len(chunk_ids),
@@ -310,3 +337,26 @@ class EmbeddingService:
                 must=[FieldCondition(key="chunk_id", match=MatchAny(any=chunk_ids))]
             ),
         )
+
+    def reconcile_with_db(self, db: Session) -> None:
+        """
+        If Postgres has no chunks but Qdrant still has points, reset the collection.
+        This handles DB/PVC resets where vector state survives and becomes orphaned.
+        """
+        db_chunk_count = db.query(func.count(Chunk.id)).scalar() or 0
+        if db_chunk_count != 0:
+            return
+        try:
+            qdrant_count = self.qdrant.count(
+                collection_name=settings.qdrant_collection,
+                exact=False,
+            ).count
+        except Exception:
+            return
+        if qdrant_count > 0:
+            logger.warning(
+                "Detected %d orphaned Qdrant points with empty DB; recreating collection",
+                qdrant_count,
+            )
+            self.qdrant.delete_collection(settings.qdrant_collection)
+            self._ensure_collection()
