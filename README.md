@@ -372,6 +372,8 @@ Returns current pipeline queue statistics for the Pipeline dashboard.
 
 `error_rate_24h` is the percentage of jobs created in the last 24 hours that ended in `failed` or `captcha_blocked`.
 
+In the Pipeline UI fallback chain, step badges use `-`, `PENDING`, `READY`, `FAILED`, and `SKIPPED` statuses. If a later strategy is selected directly (for example screenshot extraction), predecessor steps are shown as `SKIPPED` in blue. The chain legend explains each method, including the `jina.ai` reader path and the VLM-based visual extraction step.
+
 ---
 
 #### `GET /sources/jobs/all`
