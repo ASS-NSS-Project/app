@@ -9,7 +9,7 @@ the differences.
 ## What is the same
 
 - **FastAPI** application with the same dependency-injection patterns.
-- **SQLAlchemy** ORM (v2 style) with **Alembic** migrations.
+- **SQLAlchemy** ORM (v2 style).
 - **Pydantic v2** settings and schemas.
 - Routers registered in `main.py`, same CORS middleware setup.
 - `/health` endpoint.
@@ -23,7 +23,7 @@ the differences.
 | Aspect | Reference repo | This project |
 |--------|---------------|--------------|
 | DB | SQLite (demo) | **PostgreSQL** (production) |
-| Migrations | `Base.metadata.create_all` | **Alembic** (`alembic upgrade head` on startup) |
+| Schema setup | `Base.metadata.create_all` | `Base.metadata.create_all` (startup retries until Postgres is ready) |
 | Deps | Poetry + `pyproject.toml` | **pip + `requirements.txt`** |
 | Python | ≥ 3.13 | 3.11 (Docker image) |
 | RAG core | `src/example_raglib/` (spaCy in-memory) | `services/` (sentence-transformers + **Qdrant**) |
