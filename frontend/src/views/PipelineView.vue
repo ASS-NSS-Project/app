@@ -41,7 +41,7 @@
         </div>
         <div class="chain-steps-wrap">
           <div class="chain-steps">
-            <template v-for="(step, i) in chainSteps" :key="i">
+            <template v-for="step in chainSteps" :key="step.key">
               <div
                 class="chain-step"
                 :class="{
@@ -52,11 +52,9 @@
                   'chain-step-failed':  step.status === 'failed',
                 }"
               >
-                <span class="step-num">{{ i + 1 }}</span>
                 <span class="step-label">{{ step.label }}</span>
                 <span class="step-status">{{ step.statusLabel }}</span>
               </div>
-              <span v-if="i < chainSteps.length - 1" class="step-arrow">→</span>
             </template>
           </div>
           <div class="chain-legend">
@@ -508,14 +506,18 @@ onMounted(async () => {
 }
 .chain-clear:hover { color: var(--text); }
 .chain-steps {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
 }
 .chain-card { display: flex; flex-direction: column; gap: 14px; }
-.chain-steps-wrap { display: flex; gap: 20px; align-items: flex-start; }
+.chain-steps-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
 .chain-step {
   display: flex;
   flex-direction: column;
@@ -525,7 +527,8 @@ onMounted(async () => {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 10px 16px;
-  min-width: 110px;
+  width: 100%;
+  min-height: 72px;
   transition: all 0.2s;
 }
 .chain-step-done {
@@ -545,27 +548,8 @@ onMounted(async () => {
   background: rgba(239,68,68,.06);
   border-color: rgba(239,68,68,.3);
 }
-.chain-step-failed .step-num { background: rgba(239,68,68,.2); color: var(--danger); }
 .chain-step-failed .step-label { color: var(--danger); }
 .chain-step-failed .step-status { color: var(--danger); }
-
-.step-num {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--muted);
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-bottom: 2px;
-}
-.chain-step-pending .step-num { background: rgba(245,158,11,.22); color: #f59e0b; }
-.chain-step-done .step-num    { background: rgba(0,230,118,.3); color: var(--accent); }
-.chain-step-skipped .step-num { background: rgba(96,165,250,.22); color: #60a5fa; }
 
 .step-label { font-size: 12px; font-weight: 500; color: var(--text2); text-align: center; }
 .chain-step-pending .step-label { color: #f59e0b; }
@@ -583,11 +567,8 @@ onMounted(async () => {
 .chain-step-done .step-status    { color: var(--accent); opacity: 0.7; }
 .chain-step-skipped .step-status { color: #60a5fa; }
 
-.step-arrow { color: var(--muted); font-size: 14px; margin: 0 2px; padding-bottom: 16px; }
-
 .chain-legend {
-  min-width: 320px;
-  max-width: 360px;
+  width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface2);
@@ -622,8 +603,10 @@ onMounted(async () => {
   text-decoration: underline;
 }
 @media (max-width: 1200px) {
-  .chain-steps-wrap { flex-direction: column; }
-  .chain-legend { max-width: 100%; width: 100%; }
+  .chain-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .chain-steps { grid-template-columns: 1fr; }
 }
 
 .filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
