@@ -9,16 +9,21 @@ We store:
 - Raw HTML dumps (.html)
 - PDF evidence (.pdf)
 - Structured document JSON (.json)
+- Processed markdown (.md)
+- Chunks metadata (chunks.json)
+- Embedding backups (.npy, .npz)
 
 Files are organized by: source_id / job_id / filename
 """
 
+import json
 import logging
 from io import BytesIO
 
 import boto3
 from botocore.exceptions import ClientError
 from botocore.config import Config
+import numpy as np
 
 from config import get_settings
 
@@ -122,3 +127,166 @@ class StorageService:
         """List all file keys in a bucket with optional prefix filter."""
         response = self.client.list_objects_v2(Bucket=bucket, Prefix=prefix)
         return [obj["Key"] for obj in response.get("Contents", [])]
+
+    def store_document_bundle(
+        self,
+        source_id: str,
+        job_id: str,
+        markdown: str,
+        chunks: list[dict],
+        metadata: dict
+    ) -> tuple[str, str, str]:
+        """
+        Store complete document bundle to S3 for resilient storage.
+
+        Args:
+            source_id: Source UUID
+            job_id: IngestJob UUID
+            markdown: Processed markdown content
+            chunks: List of chunk dictionaries (serializable)
+            metadata: Job metadata (strategy, quality_score, timestamps)
+
+        Returns:
+            Tuple of (markdown_uri, chunks_uri, metadata_uri)
+        """
+        base_key = f"{source_id}/{job_id}"
+
+        # Upload markdown
+        markdown_key = f"{base_key}/document.md"
+        self.upload(
+            bucket=settings.s3_bucket_docs,
+            key=markdown_key,
+            data=markdown.encode('utf-8'),
+            content_type="text/markdown"
+        )
+        markdown_uri = f"s3://{settings.s3_bucket_docs}/{markdown_key}"
+
+        # Upload chunks JSON
+        chunks_key = f"{base_key}/chunks.json"
+        chunks_json = json.dumps(chunks, indent=2, ensure_ascii=False)
+        self.upload(
+            bucket=settings.s3_bucket_docs,
+            key=chunks_key,
+            data=chunks_json.encode('utf-8'),
+            content_type="application/json"
+        )
+        chunks_uri = f"s3://{settings.s3_bucket_docs}/{chunks_key}"
+
+        # Upload metadata
+        metadata_key = f"{base_key}/metadata.json"
+        metadata_json = json.dumps(metadata, indent=2, ensure_ascii=False)
+        self.upload(
+            bucket=settings.s3_bucket_docs,
+            key=metadata_key,
+            data=metadata_json.encode('utf-8'),
+            content_type="application/json"
+        )
+        metadata_uri = f"s3://{settings.s3_bucket_docs}/{metadata_key}"
+
+        logger.info(
+            "Stored document bundle to S3",
+            extra={
+                "event": "document_bundle_stored",
+                "source_id": source_id,
+                "job_id": job_id,
+                "chunk_count": len(chunks),
+                "markdown_size": len(markdown)
+            }
+        )
+
+        return markdown_uri, chunks_uri, metadata_uri
+
+    def load_chunks_from_s3(self, chunks_uri: str) -> list[dict]:
+        """
+        Load chunks.json from S3.
+
+        Args:
+            chunks_uri: Full S3 URI (s3://bucket/path/to/chunks.json)
+
+        Returns:
+            List of chunk dictionaries
+        """
+        # Parse S3 URI
+        if not chunks_uri.startswith("s3://"):
+            raise ValueError(f"Invalid S3 URI: {chunks_uri}")
+
+        parts = chunks_uri[5:].split("/", 1)
+        bucket = parts[0]
+        key = parts[1]
+
+        # Download and parse JSON
+        data = self.download(bucket, key)
+        chunks = json.loads(data.decode('utf-8'))
+
+        logger.debug(
+            "Loaded chunks from S3",
+            extra={
+                "event": "chunks_loaded_from_s3",
+                "chunks_uri": chunks_uri,
+                "chunk_count": len(chunks)
+            }
+        )
+
+        return chunks
+
+    def store_embedding_backup(
+        self,
+        chunk_id: str,
+        dense_vector: np.ndarray,
+        sparse_indices: list[int],
+        sparse_values: list[float]
+    ) -> str:
+        """
+        Optional: backup embedding vectors to S3 for disaster recovery.
+
+        Args:
+            chunk_id: Chunk UUID
+            dense_vector: NumPy array of dense embeddings (1024 floats)
+            sparse_indices: Sparse vector indices
+            sparse_values: Sparse vector values
+
+        Returns:
+            S3 URI where embeddings are stored
+        """
+        if not settings.enable_embedding_backup_s3:
+            return ""
+
+        base_key = f"{chunk_id}"
+
+        # Store dense vector as .npy
+        dense_key = f"{base_key}/dense.npy"
+        dense_bytes = BytesIO()
+        np.save(dense_bytes, dense_vector, allow_pickle=False)
+        self.upload(
+            bucket=settings.s3_bucket_embeddings,
+            key=dense_key,
+            data=dense_bytes.getvalue(),
+            content_type="application/octet-stream"
+        )
+
+        # Store sparse as .npz (compressed)
+        sparse_key = f"{base_key}/sparse.npz"
+        sparse_bytes = BytesIO()
+        np.savez_compressed(
+            sparse_bytes,
+            indices=np.array(sparse_indices, dtype=np.int32),
+            values=np.array(sparse_values, dtype=np.float32)
+        )
+        self.upload(
+            bucket=settings.s3_bucket_embeddings,
+            key=sparse_key,
+            data=sparse_bytes.getvalue(),
+            content_type="application/octet-stream"
+        )
+
+        embedding_uri = f"s3://{settings.s3_bucket_embeddings}/{base_key}"
+        logger.debug(
+            "Backed up embedding to S3",
+            extra={
+                "event": "embedding_backed_up",
+                "chunk_id": chunk_id,
+                "embedding_uri": embedding_uri
+            }
+        )
+
+        return embedding_uri

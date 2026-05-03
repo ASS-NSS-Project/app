@@ -12,8 +12,9 @@ import enum
 from datetime import datetime
 from sqlalchemy import (
     Column, String, Text, DateTime, Integer, Float,
-    ForeignKey, Enum, Boolean, JSON
+    ForeignKey, Enum, Boolean, JSON, Index
 )
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -232,6 +233,10 @@ class Document(Base):
     # Full document content stored as Markdown (populated at ingest time)
     content_markdown = Column(Text, nullable=True)
 
+    # S3 URIs for resilient storage
+    markdown_uri = Column(String, nullable=True)  # S3 path to processed markdown
+    chunks_uri   = Column(String, nullable=True)  # S3 path to chunks.json
+
     # Legacy S3 path (unused — kept for future use)
     content_uri = Column(String, nullable=True)
 
@@ -277,8 +282,29 @@ class Chunk(Base):
     # For screenshots: where in the image was this text found?
     bounding_box = Column(JSON, nullable=True)  # {"x": 10, "y": 20, "w": 300, "h": 50}
     
-    # Whether this chunk has been embedded in Qdrant
+    # Whether this chunk has been embedded in Qdrant (legacy field, kept for compatibility)
     is_embedded = Column(Boolean, default=False)
+
+    # Embedding status tracking
+    embedding_status = Column(String(20), nullable=False, default='pending', index=True)
+        # Values: pending | in_progress | done | failed
+    embedded_at = Column(DateTime(timezone=True), nullable=True)
+        # Timestamp when embedding completed
+    embedding_error = Column(Text, nullable=True)
+        # Last error message if failed
+    retry_count = Column(Integer, nullable=False, default=0)
+        # Number of embedding attempts
+
+    # Qdrant sync status tracking
+    qdrant_sync_status = Column(String(20), nullable=False, default='missing', index=True)
+        # Values: synced | out_of_sync | missing
+    qdrant_synced_at = Column(DateTime(timezone=True), nullable=True)
+        # Last successful sync to Qdrant
+    s3_embedding_uri = Column(String, nullable=True)
+        # Optional backup path: s3://bucket/embeddings/{chunk_id}.npy
+
+    # Full-text search vector (for keyword fallback)
+    text_vector = Column(TSVECTOR, nullable=True)
 
     # Extended metadata
     parent_chunk_id = Column(String, ForeignKey("chunks.id"), nullable=True)
@@ -290,6 +316,10 @@ class Chunk(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     document = relationship("Document", back_populates="chunks")
+
+    __table_args__ = (
+        Index('idx_chunk_text_vector', 'text_vector', postgresql_using='gin'),
+    )
 
 
 # ─────────────────────────────────────────────────────

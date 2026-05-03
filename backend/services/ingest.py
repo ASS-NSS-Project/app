@@ -575,36 +575,69 @@ class IngestService:
         lines = [l.strip() for l in text.split("\n") if l.strip()]
         title = lines[0][:200] if lines else job.url
 
+        # Pick chunker based on strategy BEFORE creating document
+        source_method = strategy.value if strategy else "html"
+        all_chunks: list[TextChunk] = []
+
+        if strategy in (IngestStrategy.screenshot, IngestStrategy.api):
+            all_chunks = split_vlm(text)
+        else:
+            table_chunks = split_tables(text, source_method=source_method)
+            prose_chunks = split_prose(text, source_method=source_method)
+            all_chunks = table_chunks + prose_chunks
+
+        # Serialize chunks for S3 storage
+        chunks_json = [
+            {
+                "chunk_index": idx,
+                "text": tc.text,
+                "chunk_type": tc.chunk_type.value if hasattr(tc.chunk_type, 'value') else str(tc.chunk_type),
+                "section_path": tc.section_path,
+                "token_count": tc.token_count,
+                "source_method": tc.source_method or source_method
+            }
+            for idx, tc in enumerate(all_chunks)
+        ]
+
+        # Store document bundle to S3
+        from services.storage import StorageService
+        storage = StorageService()
+
+        job_metadata = {
+            "source_id": job.source_id,
+            "job_id": job.id,
+            "url": job.url,
+            "strategy": strategy.value if strategy else "unknown",
+            "quality_score": min(1.0, len(text) / 5000),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+        markdown_uri, chunks_uri, metadata_uri = storage.store_document_bundle(
+            source_id=job.source_id,
+            job_id=job.id,
+            markdown=text,
+            chunks=chunks_json,
+            metadata=job_metadata
+        )
+
+        # Create document with S3 URIs
         doc = Document(
             source_id=job.source_id,
             url=job.url,
             title=title,
             doc_version=version,
-            quality_score=min(1.0, len(text) / 5000),  # Simple proxy
+            quality_score=min(1.0, len(text) / 5000),
             ingest_strategy=strategy,
             content_hash=content_hash,
             content_markdown=text,
+            markdown_uri=markdown_uri,
+            chunks_uri=chunks_uri,
         )
         self.db.add(doc)
         self.db.commit()
         self.db.refresh(doc)
 
-        # Pick chunker based on strategy
-        source_method = strategy.value if strategy else "html"
-        all_chunks: list[TextChunk] = []
-
-        if strategy in (IngestStrategy.screenshot, IngestStrategy.api):
-            # api: Jina.ai returns clean markdown — the VLM chunker splits on blank
-            # lines and "---" separators, which matches Jina's output structure.
-            # The HTML prose chunker finds no <p>/<h1>/… tags in markdown and falls
-            # back to a naive blank-line split with no heading context.
-            all_chunks = split_vlm(text)
-        else:
-            # For HTML and rendered strategies: extract tables first, then prose
-            table_chunks = split_tables(text, source_method=source_method)
-            prose_chunks = split_prose(text, source_method=source_method)
-            all_chunks = table_chunks + prose_chunks
-
+        # Create chunks with new status fields
         for idx, tc in enumerate(all_chunks):
             chunk = Chunk(
                 document_id=doc.id,
@@ -616,6 +649,9 @@ class IngestService:
                 section_path=tc.section_path,
                 token_count=tc.token_count,
                 source_method=tc.source_method or source_method,
+                embedding_status='pending',
+                qdrant_sync_status='missing',
+                retry_count=0,
             )
             self.db.add(chunk)
 

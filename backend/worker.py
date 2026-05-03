@@ -29,7 +29,7 @@ from models import IngestJob, JobStatus, Source
 from services.ingest import IngestService
 from services.embedding import EmbeddingService, get_embedding_model
 from services.logging_config import setup_logging
-from services.queue import QUEUE_NAME, wait_for_rabbitmq
+from services.queue import INGEST_QUEUE, wait_for_rabbitmq
 
 setup_logging(os.getenv("LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
@@ -92,7 +92,7 @@ def process_ingest_job(job_id: str) -> None:
         job = asyncio.run(ingest_service.run(job_id))
 
         if job.status == JobStatus.done:
-            _embed_job_chunks(db, job)
+            _queue_embedding_job(db, job)
             logger.info("Worker job fully processed", extra={
                 "event": "worker_job_completed",
                 "job_id": job_id,
@@ -128,12 +128,13 @@ def process_ingest_job(job_id: str) -> None:
         db.close()
 
 
-def _embed_job_chunks(db, job: IngestJob) -> None:
+def _queue_embedding_job(db, job: IngestJob) -> None:
     """
     After a successful ingest, finds the document created by this job
-    and embeds its chunks into Qdrant.
+    and queues it for asynchronous embedding.
     """
     from models import Document
+    from services.queue import publish_embedding_job
 
     doc = (
         db.query(Document)
@@ -149,8 +150,16 @@ def _embed_job_chunks(db, job: IngestJob) -> None:
         logger.warning(f"No document found for job {job.id} / URL {job.url}")
         return
 
-    embedder = EmbeddingService()
-    embedder.embed_chunks(db, doc.id)
+    # Publish to embedding queue instead of embedding inline
+    publish_embedding_job(doc.id, priority='normal')
+    logger.info(
+        "Queued document for embedding",
+        extra={
+            "event": "embedding_queued",
+            "document_id": doc.id,
+            "job_id": job.id
+        }
+    )
 
 
 def on_message(channel, method, _properties, body: bytes) -> None:
@@ -207,12 +216,12 @@ if __name__ == "__main__":
     channel = connection.channel()
 
     # Declare the queue (idempotent – no-op if it already exists)
-    channel.queue_declare(queue=QUEUE_NAME, durable=True)
+    channel.queue_declare(queue=INGEST_QUEUE, durable=True)
 
     # Process one message at a time (fair dispatch)
     # The worker won't receive the next message until it acknowledges the current one
     channel.basic_qos(prefetch_count=1)
-    channel.basic_consume(queue=QUEUE_NAME, on_message_callback=on_message)
+    channel.basic_consume(queue=INGEST_QUEUE, on_message_callback=on_message)
 
-    logger.info(f"Worker ready. Listening on queue: {QUEUE_NAME}")
+    logger.info(f"Worker ready. Listening on queue: {INGEST_QUEUE}")
     channel.start_consuming()

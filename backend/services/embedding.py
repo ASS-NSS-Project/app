@@ -13,6 +13,7 @@ import logging
 import os
 import time
 import uuid
+from datetime import datetime
 from typing import Optional
 
 from FlagEmbedding import BGEM3FlagModel
@@ -144,12 +145,21 @@ class EmbeddingService:
         """Embed all un-embedded chunks for a document and upsert into Qdrant."""
         chunks = (
             db.query(Chunk)
-            .filter(Chunk.document_id == document_id, Chunk.is_embedded == False)
+            .filter(
+                Chunk.document_id == document_id,
+                Chunk.embedding_status.in_(['pending', 'failed'])
+            )
             .all()
         )
         if not chunks:
             logger.info(f"No unembedded chunks for document {document_id}")
             return
+
+        # Mark chunks as in_progress
+        for chunk in chunks:
+            chunk.embedding_status = 'in_progress'
+            chunk.retry_count += 1
+        db.commit()
 
         logger.info(f"Embedding {len(chunks)} chunks for document {document_id}")
         model = get_embedding_model()
@@ -198,8 +208,14 @@ class EmbeddingService:
             raise
 
         elapsed = time.time() - t0
+        now = datetime.utcnow()
         for chunk in chunks:
-            chunk.is_embedded = True
+            chunk.is_embedded = True  # Legacy field
+            chunk.embedding_status = 'done'
+            chunk.embedded_at = now
+            chunk.qdrant_sync_status = 'synced'
+            chunk.qdrant_synced_at = now
+            chunk.embedding_error = None
         db.commit()
         CHUNKS_EMBEDDED_TOTAL.inc(len(chunks))
         EMBEDDING_DURATION.observe(elapsed)

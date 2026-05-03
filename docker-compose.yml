@@ -172,6 +172,7 @@ services:
       - S3_USE_PATH_STYLE=${S3_USE_PATH_STYLE:-true}
       - S3_BUCKET_EVIDENCE=${S3_BUCKET_EVIDENCE:-rag-evidence}
       - S3_BUCKET_DOCS=${S3_BUCKET_DOCS:-rag-documents}
+      - S3_BUCKET_EMBEDDINGS=${S3_BUCKET_EMBEDDINGS:-rag-embeddings}
       - AIAAS_BASE_URL=${AIAAS_BASE_URL}
       - AIAAS_API_KEY=${AIAAS_API_KEY}
       - AIAAS_LLM_MODEL=${AIAAS_LLM_MODEL}
@@ -196,6 +197,47 @@ services:
     networks:
       - ragnet
 
+  worker_embed:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rag_worker_embed
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-raguser}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-ragdb}
+      - POSTGRES_HOST=postgres
+      - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER:-rabbit}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
+      - QDRANT_URL=http://qdrant:6333
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY}
+      - S3_SECRET_KEY=${S3_SECRET_KEY}
+      - S3_REGION=${S3_REGION:-us-east-1}
+      - S3_USE_PATH_STYLE=${S3_USE_PATH_STYLE:-true}
+      - S3_BUCKET_DOCS=${S3_BUCKET_DOCS:-rag-documents}
+      - S3_BUCKET_EMBEDDINGS=${S3_BUCKET_EMBEDDINGS:-rag-embeddings}
+      - ENABLE_EMBEDDING_BACKUP_S3=${ENABLE_EMBEDDING_BACKUP_S3:-false}
+      - EMBEDDING_WORKER_METRICS_PORT=9091
+      - SERVICE_NAME=worker_embed
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    command: >
+      sh -c "
+        until python -c \"import socket; socket.create_connection(('postgres', 5432), timeout=2)\" 2>/dev/null; do
+          echo 'Waiting for postgres TCP…'; sleep 2;
+        done &&
+        python worker_embed.py
+      "
+    volumes:
+      - ./backend:/app:z
+      - worker_embed:/root/.cache/huggingface
+    networks:
+      - ragnet
+
   frontend:
     build:
       context: ./frontend
@@ -212,8 +254,9 @@ volumes:
   postgres_data:
   rabbitmq_data:  # Persists erlang cookie and queued messages across restarts
   qdrant_data:
-  api:            # BGE-M3 weights shared between api and worker (~570 MB, downloaded once)
-  worker:         # BGE-M3 weights shared between api and worker (~570 MB, downloaded once)
+  api:            # BGE-M3 weights for API (~570 MB, downloaded once)
+  worker:         # BGE-M3 weights for ingest worker (~570 MB, downloaded once)
+  worker_embed:   # BGE-M3 weights for embedding worker (~570 MB, downloaded once)
 
 networks:
   ragnet:

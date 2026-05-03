@@ -1,8 +1,9 @@
 """
 services/queue_service.py - RabbitMQ integration
 
-Provides helper functions for publishing messages to the "ingest" queue
-and waiting for RabbitMQ to become available.
+Provides helper functions for publishing messages to queues:
+- "ingest" queue: scraping jobs
+- "embeddings" queue: embedding jobs (async from ingest)
 
 Why RabbitMQ?
 - AMQP protocol: messages are acknowledged only after successful processing (ack)
@@ -21,8 +22,9 @@ from config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Queue name – must match between the API (publisher) and the worker (consumer)
-QUEUE_NAME = "ingest"
+# Queue names – must match between publishers and consumers
+INGEST_QUEUE = "ingest"
+EMBEDDING_QUEUE = "embeddings"
 
 
 def _get_connection() -> pika.BlockingConnection:
@@ -34,26 +36,66 @@ def _get_connection() -> pika.BlockingConnection:
 
 def publish_job(job_id: str) -> None:
     """
-    Publishes a job ID to the RabbitMQ queue.
+    Publishes an ingest job ID to the "ingest" queue.
 
-    The worker picks up the message and calls process_ingest_job(job_id).
+    The ingest worker picks up the message and calls process_ingest_job(job_id).
     The queue is durable (durable=True) and messages are persistent (delivery_mode=2),
     so a RabbitMQ restart won't lose pending jobs.
     """
     connection = _get_connection()
     try:
         channel = connection.channel()
-        # Declare the queue – if it already exists this is a no-op
-        channel.queue_declare(queue=QUEUE_NAME, durable=True)
+        channel.queue_declare(queue=INGEST_QUEUE, durable=True)
         channel.basic_publish(
             exchange="",
-            routing_key=QUEUE_NAME,
+            routing_key=INGEST_QUEUE,
             body=json.dumps({"job_id": job_id}),
             properties=pika.BasicProperties(
-                delivery_mode=2,  # persistent message (survives broker restart)
+                delivery_mode=2,
             ),
         )
-        logger.info(f"Job {job_id} published to queue '{QUEUE_NAME}'")
+        logger.info(
+            f"Ingest job published",
+            extra={"event": "ingest_job_published", "job_id": job_id}
+        )
+    finally:
+        connection.close()
+
+
+def publish_embedding_job(document_id: str, priority: str = 'normal') -> None:
+    """
+    Publishes an embedding job to the "embeddings" queue.
+
+    The embedding worker picks up the message and embeds all chunks for the document.
+
+    Args:
+        document_id: Document UUID
+        priority: 'high' (stuck/manual) | 'normal' (regular) | 'low' (healing)
+    """
+    connection = _get_connection()
+    try:
+        channel = connection.channel()
+        channel.queue_declare(queue=EMBEDDING_QUEUE, durable=True)
+        channel.basic_publish(
+            exchange="",
+            routing_key=EMBEDDING_QUEUE,
+            body=json.dumps({
+                "document_id": document_id,
+                "priority": priority,
+                "retry_count": 0
+            }),
+            properties=pika.BasicProperties(
+                delivery_mode=2,
+            ),
+        )
+        logger.info(
+            f"Embedding job published",
+            extra={
+                "event": "embedding_job_published",
+                "document_id": document_id,
+                "priority": priority
+            }
+        )
     finally:
         connection.close()
 

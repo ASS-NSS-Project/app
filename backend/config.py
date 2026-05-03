@@ -92,6 +92,9 @@ class Settings(BaseSettings):
     # ── Embeddings (local FlagEmbedding / BGE-M3) ─
     embedding_model: str = "BAAI/bge-m3"
     embedding_dim: int = 1024
+    embedding_timeout_minutes: int = 5
+    enable_embedding_backup_s3: bool = False
+    s3_bucket_embeddings: str = "rag-embeddings"
 
     # ── Authentication ────────────────────────────
     jwt_secret: str = "changeme"
@@ -122,6 +125,19 @@ class Settings(BaseSettings):
 
     # ── Chunking configuration ────────────────────
     chunking: ChunkConfig = ChunkConfig()
+
+    # ── Fallback search ───────────────────────────
+    enable_keyword_fallback: bool = True
+    fallback_search_engine: str = "postgres_tsvector"  # or: bm25, simple
+    qdrant_health_check_timeout: float = 2.0
+
+    # ── Healing and sync ──────────────────────────
+    heal_interval_minutes: int = 15
+    drift_alert_threshold_pct: float = 10.0
+    auto_resync_on_drift: bool = True
+
+    # ── API docs (disabled by default in prod) ───
+    api_docs: bool = False
 
 
 @lru_cache()

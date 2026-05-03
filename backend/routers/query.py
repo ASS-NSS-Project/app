@@ -113,6 +113,7 @@ class QueryResponse(BaseModel):
     mode: str
     citations: list[CitationResponse]
     chunks_retrieved: int
+    warning: Optional[str] = None
 
 
 @router.get("/models", response_model=list[ModelInfo])

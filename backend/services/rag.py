@@ -107,6 +107,102 @@ class RAGService:
         QUERY_DURATION.labels(mode=mode).observe(time.monotonic() - t0)
         return result
 
+    def _check_qdrant_health(self) -> bool:
+        """Ping Qdrant to check if it's responsive"""
+        try:
+            self.embedder.qdrant.get_collection(settings.qdrant_collection)
+            return True
+        except Exception as e:
+            logger.warning(
+                "Qdrant health check failed",
+                extra={
+                    "event": "qdrant_health_check_failed",
+                    "error": str(e)
+                }
+            )
+            return False
+
+    def _keyword_search(
+        self,
+        db: Session,
+        query: str,
+        top_k: int,
+        source_id: Optional[str] = None
+    ) -> list[dict]:
+        """
+        Fallback to Postgres full-text search using tsvector.
+
+        Args:
+            db: Database session
+            query: Search query
+            top_k: Number of results to return
+            source_id: Optional source filter
+
+        Returns:
+            List of chunk dicts with same format as vector search
+        """
+        from models import Chunk, Document
+        from sqlalchemy import func, text
+
+        logger.info(
+            "Using keyword fallback search",
+            extra={
+                "event": "keyword_search_start",
+                "query": query[:100],
+                "top_k": top_k
+            }
+        )
+
+        # Convert query to tsquery format
+        tsquery = func.plainto_tsquery('english', query)
+
+        # Build base query
+        q = db.query(Chunk).filter(
+            func.ts_match(Chunk.text_vector, tsquery)
+        )
+
+        # Optional source filter
+        if source_id:
+            q = q.join(Document).filter(Document.source_id == source_id)
+
+        # Order by relevance rank and limit
+        q = q.order_by(
+            func.ts_rank(Chunk.text_vector, tsquery).desc()
+        ).limit(top_k * 2)  # Fetch extra for diversity
+
+        try:
+            results = q.all()
+        except Exception as e:
+            logger.error(
+                f"Keyword search failed: {e}",
+                extra={
+                    "event": "keyword_search_failed",
+                    "error": str(e)
+                }
+            )
+            return []
+
+        # Format results to match vector search output
+        formatted = []
+        for chunk in results[:top_k]:
+            formatted.append({
+                "chunk_id": chunk.id,
+                "document_id": chunk.document_id,
+                "text": chunk.text,
+                "citation_url": chunk.citation_url,
+                "score": 0.5  # Fixed score for keyword matches
+            })
+
+        logger.info(
+            f"Keyword search returned {len(formatted)} chunks",
+            extra={
+                "event": "keyword_search_complete",
+                "chunk_count": len(formatted)
+            }
+        )
+
+        return formatted
+
     async def _query_rag(
         self,
         question: str,
@@ -118,15 +214,45 @@ class RAGService:
         model: Optional[str] = None,
         aiaas_extras: bool = True,
     ) -> dict:
-        # Step 1: Retrieve relevant chunks (text fetched from Postgres via db)
-        chunks = self.embedder.search(query=question, top_k=top_k, source_id=source_id, db=db)
+        # Step 1: Retrieve relevant chunks
+        chunks = []
+        search_mode = "rag"
+        warning = None
 
+        # Try vector search first (if Qdrant is healthy)
+        if self._check_qdrant_health():
+            try:
+                chunks = self.embedder.search(
+                    query=question,
+                    top_k=top_k,
+                    source_id=source_id,
+                    db=db
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Vector search failed: {e}",
+                    extra={
+                        "event": "vector_search_failed",
+                        "error": str(e)
+                    }
+                )
+                chunks = []
+
+        # Fallback to keyword search if no results or Qdrant down
+        if not chunks and settings.enable_keyword_fallback and db:
+            logger.info("Falling back to keyword search")
+            chunks = self._keyword_search(db, question, top_k, source_id)
+            search_mode = "keyword_fallback"
+            warning = "Vector search unavailable, using keyword fallback"
+
+        # If still no chunks, return "no information" response
         if not chunks:
             return {
                 "answer": "I could not find any relevant information in the knowledge base for this question.",
                 "mode": "rag",
                 "citations": [],
                 "chunks_retrieved": 0,
+                "warning": "No sources available"
             }
 
         # Step 2: Build context string from retrieved chunks
@@ -190,9 +316,10 @@ class RAGService:
 
         return {
             "answer": answer,
-            "mode": "rag",
+            "mode": search_mode,
             "citations": citations,
             "chunks_retrieved": len(chunks),
+            "warning": warning,
         }
 
     async def _query_no_rag(

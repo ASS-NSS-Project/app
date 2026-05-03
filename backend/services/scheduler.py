@@ -30,8 +30,9 @@ from config import get_settings
 from database import SessionLocal
 from models import Chunk, Document, Evidence, Incident, IncidentStatus, IngestJob, Source, JobStatus
 from services.metrics import ACTIVE_SOURCES, OPEN_INCIDENTS, QDRANT_COLLECTION_SIZE
-from services.queue import publish_job
+from services.queue import publish_job, publish_embedding_job
 from services.storage import StorageService
+from services.sync import SyncService
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -298,6 +299,64 @@ def create_scheduler() -> AsyncIOScheduler:
         name="Prometheus gauge refresh",
         replace_existing=True,
         next_run_time=datetime.utcnow(),
+    )
+
+    # Initialize sync service for healing jobs
+    from services.embedding import EmbeddingService
+    from services.queue import publish_embedding_job as queue_embed_fn
+
+    class QueueServiceAdapter:
+        """Adapter to make queue function compatible with SyncService"""
+        def publish_embedding_job(self, doc_id: str, priority: str = 'normal'):
+            queue_embed_fn(doc_id, priority)
+
+    sync_service = SyncService(
+        embedding_service=EmbeddingService(),
+        queue_service=QueueServiceAdapter()
+    )
+
+    # Task 5: heal pending embeddings every 5 minutes
+    scheduler.add_job(
+        lambda: sync_service.heal_pending_embeddings(SessionLocal()),
+        trigger="interval",
+        minutes=5,
+        id="heal_pending_embeddings",
+        name="Heal pending embeddings",
+        replace_existing=True,
+        next_run_time=datetime.utcnow() + timedelta(minutes=5),
+    )
+
+    # Task 6: retry failed embeddings every 15 minutes
+    scheduler.add_job(
+        lambda: sync_service.heal_failed_embeddings(SessionLocal()),
+        trigger="interval",
+        minutes=settings.heal_interval_minutes,
+        id="heal_failed_embeddings",
+        name="Retry failed embeddings",
+        replace_existing=True,
+        next_run_time=datetime.utcnow() + timedelta(minutes=10),
+    )
+
+    # Task 7: detect Qdrant drift every 15 minutes
+    scheduler.add_job(
+        lambda: sync_service.detect_qdrant_drift(SessionLocal()),
+        trigger="interval",
+        minutes=settings.heal_interval_minutes,
+        id="detect_qdrant_drift",
+        name="Detect Qdrant drift",
+        replace_existing=True,
+        next_run_time=datetime.utcnow() + timedelta(minutes=15),
+    )
+
+    # Task 8: heal Qdrant sync every 30 minutes
+    scheduler.add_job(
+        lambda: sync_service.heal_qdrant_sync(SessionLocal(), max_chunks=100),
+        trigger="interval",
+        minutes=30,
+        id="heal_qdrant_sync",
+        name="Heal Qdrant sync",
+        replace_existing=True,
+        next_run_time=datetime.utcnow() + timedelta(minutes=20),
     )
 
     return scheduler
