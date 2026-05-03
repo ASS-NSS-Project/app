@@ -50,7 +50,6 @@
     <div class="sidebar-footer">
       <div class="footer-user">
         <span class="footer-name">{{ auth.user?.username ?? auth.user?.email }}</span>
-        <span class="role-chip" :class="`role-${auth.user?.role}`">{{ auth.user?.role }}</span>
       </div>
       <div class="footer-bottom">
         <div class="status-row">
@@ -233,20 +232,6 @@ onUnmounted(() => clearInterval(pingInterval))
   text-overflow: ellipsis;
   min-width: 0;
 }
-.role-chip {
-  font-size: 9px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  padding: 1px 5px;
-  border-radius: 99px;
-  border: 1px solid;
-  flex-shrink: 0;
-}
-.role-rag_admin   { color: #f472b6; border-color: rgba(244,114,182,.3); background: rgba(244,114,182,.08); }
-.role-rag_curator { color: var(--warning); border-color: rgba(251,191,36,.3); background: rgba(251,191,36,.08); }
-.role-rag_analyst { color: var(--accent2); border-color: rgba(167,139,250,.3); background: rgba(167,139,250,.08); }
-.role-rag_user    { color: var(--muted); border-color: var(--border); background: transparent; }
 
 .footer-bottom {
   display: flex;
