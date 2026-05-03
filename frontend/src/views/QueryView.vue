@@ -51,61 +51,67 @@
       </div>
 
       <!-- Custom API override -->
-      <div class="custom-endpoint-section">
-        <div class="custom-header">
-          <span class="custom-title">Pass Values for Your Own API</span>
-          <button class="help-toggle" @click="showCustomHelp = !showCustomHelp">
-            <i :class="showCustomHelp ? 'pi pi-chevron-up' : 'pi pi-info-circle'"></i>
-          </button>
-        </div>
+      <div class="custom-endpoint-wrap">
+        <button class="custom-toggle-btn" @click="showCustomFields = !showCustomFields">
+          {{ showCustomFields ? 'Hide Custom API Values' : 'Pass Values for Your Own API' }}
+        </button>
 
-        <div v-if="showCustomHelp" class="custom-help">
-          <div class="help-title">Example Endpoints</div>
-          <div class="help-examples">
-            <div class="help-example">
-              <span class="help-provider">OpenAI</span>
-              <code class="help-url">https://api.openai.com/v1</code>
-              <span class="help-models">gpt-4o, gpt-4.1, o4-mini</span>
-            </div>
-            <div class="help-example">
-              <span class="help-provider">Anthropic</span>
-              <code class="help-url">https://api.anthropic.com/v1</code>
-              <span class="help-models">claude-opus-4-7, claude-sonnet-4-6</span>
-            </div>
-            <div class="help-example">
-              <span class="help-provider">Groq</span>
-              <code class="help-url">https://api.groq.com/openai/v1</code>
-              <span class="help-models">llama-3.3-70b, mixtral-8x7b</span>
-            </div>
-            <div class="help-example">
-              <span class="help-provider">DeepSeek</span>
-              <code class="help-url">https://api.deepseek.com/v1</code>
-              <span class="help-models">deepseek-chat, deepseek-reasoner</span>
-            </div>
-            <div class="help-example">
-              <span class="help-provider">Local Ollama</span>
-              <code class="help-url">http://localhost:11434/v1</code>
-              <span class="help-models">llama3.3, qwen2.5, mistral</span>
-            </div>
+        <div v-if="showCustomFields" class="custom-endpoint-section">
+          <div class="custom-header">
+            <span class="custom-title">Custom API Override</span>
+            <button class="help-toggle" @click="showCustomHelp = !showCustomHelp">
+              <i :class="showCustomHelp ? 'pi pi-chevron-up' : 'pi pi-info-circle'"></i>
+            </button>
           </div>
-          <div class="help-note">
-            <i class="pi pi-info-circle"></i>
-            <span>Leave blank to use the server-configured default. Endpoint must be OpenAI-compatible. Your API key is sent directly to the provider and never stored.</span>
-          </div>
-        </div>
 
-        <div class="custom-fields">
-          <div class="model-key-wrap">
-            <label class="model-label">BASE URL</label>
-            <input v-model="customBaseUrl" class="model-key-input mono" placeholder="server default" spellcheck="false" />
+          <div v-if="showCustomHelp" class="custom-help">
+            <div class="help-title">Example Endpoints</div>
+            <div class="help-examples">
+              <div class="help-example">
+                <span class="help-provider">OpenAI</span>
+                <code class="help-url">https://api.openai.com/v1</code>
+                <span class="help-models">gpt-4o, gpt-4.1, o4-mini</span>
+              </div>
+              <div class="help-example">
+                <span class="help-provider">Anthropic</span>
+                <code class="help-url">https://api.anthropic.com/v1</code>
+                <span class="help-models">claude-opus-4-7, claude-sonnet-4-6</span>
+              </div>
+              <div class="help-example">
+                <span class="help-provider">Groq</span>
+                <code class="help-url">https://api.groq.com/openai/v1</code>
+                <span class="help-models">llama-3.3-70b, mixtral-8x7b</span>
+              </div>
+              <div class="help-example">
+                <span class="help-provider">DeepSeek</span>
+                <code class="help-url">https://api.deepseek.com/v1</code>
+                <span class="help-models">deepseek-chat, deepseek-reasoner</span>
+              </div>
+              <div class="help-example">
+                <span class="help-provider">Local Ollama</span>
+                <code class="help-url">http://localhost:11434/v1</code>
+                <span class="help-models">llama3.3, qwen2.5, mistral</span>
+              </div>
+            </div>
+            <div class="help-note">
+              <i class="pi pi-info-circle"></i>
+              <span>Leave blank to use the server-configured default. Endpoint must be OpenAI-compatible. Your API key is sent directly to the provider and never stored.</span>
+            </div>
           </div>
-          <div class="model-key-wrap">
-            <label class="model-label">API KEY</label>
-            <input v-model="customApiKey" type="password" class="model-key-input" placeholder="server default" autocomplete="off" />
-          </div>
-          <div class="model-key-wrap">
-            <label class="model-label">MODEL NAME</label>
-            <input v-model="customModel" class="model-key-input mono" placeholder="server default" spellcheck="false" />
+
+          <div class="custom-fields">
+            <div class="model-key-wrap">
+              <label class="model-label">BASE URL</label>
+              <input v-model="customBaseUrl" class="model-key-input mono" placeholder="server default" spellcheck="false" />
+            </div>
+            <div class="model-key-wrap">
+              <label class="model-label">API KEY</label>
+              <input v-model="customApiKey" type="password" class="model-key-input" placeholder="server default" autocomplete="off" />
+            </div>
+            <div class="model-key-wrap">
+              <label class="model-label">MODEL NAME</label>
+              <input v-model="customModel" class="model-key-input mono" placeholder="server default" spellcheck="false" />
+            </div>
           </div>
         </div>
       </div>
@@ -258,6 +264,7 @@ watch(() => store.question, (q) => {
 const customBaseUrl = ref('')
 const customApiKey = ref('')
 const customModel = ref('')
+const showCustomFields = ref(false)
 const showCustomHelp = ref(false)
 
 // Persist base URL + model name across page loads (never persist API key)
@@ -639,6 +646,29 @@ onMounted(async () => {
 .model-key-input::placeholder { color: var(--muted); }
 
 /* Custom endpoint section */
+.custom-endpoint-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.custom-toggle-btn {
+  border: 1px solid var(--border2);
+  background: var(--surface2);
+  color: var(--text2);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.custom-toggle-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
 .custom-endpoint-section {
   display: flex;
   flex-direction: column;
@@ -647,6 +677,7 @@ onMounted(async () => {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  width: min(920px, 100%);
 }
 
 .custom-header {
