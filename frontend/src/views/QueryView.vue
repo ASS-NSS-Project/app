@@ -68,17 +68,63 @@
 
         <!-- Custom endpoint fields -->
         <template v-if="isCustom">
-          <div class="model-key-wrap">
-            <label class="model-label">BASE URL</label>
-            <input v-model="customBaseUrl" class="model-key-input mono" placeholder="https://api.openai.com/v1" spellcheck="false" />
-          </div>
-          <div class="model-key-wrap">
-            <label class="model-label">API KEY</label>
-            <input v-model="customApiKey" type="password" class="model-key-input" placeholder="sk-..." autocomplete="off" />
-          </div>
-          <div class="model-key-wrap">
-            <label class="model-label">MODEL NAME</label>
-            <input v-model="customModel" class="model-key-input mono" placeholder="gpt-4o / gemini-2.0-flash / moonshot-v1-8k" spellcheck="false" />
+          <div class="custom-endpoint-section">
+            <div class="custom-header">
+              <span class="custom-title">Custom Endpoint Configuration</span>
+              <button class="help-toggle" @click="showCustomHelp = !showCustomHelp">
+                <i :class="showCustomHelp ? 'pi pi-chevron-up' : 'pi pi-info-circle'"></i>
+              </button>
+            </div>
+
+            <div v-if="showCustomHelp" class="custom-help">
+              <div class="help-title">Example Endpoints</div>
+              <div class="help-examples">
+                <div class="help-example">
+                  <span class="help-provider">OpenAI</span>
+                  <code class="help-url">https://api.openai.com/v1</code>
+                  <span class="help-models">gpt-4o, gpt-4.1, o4-mini</span>
+                </div>
+                <div class="help-example">
+                  <span class="help-provider">Anthropic</span>
+                  <code class="help-url">https://api.anthropic.com/v1</code>
+                  <span class="help-models">claude-opus-4-7, claude-sonnet-4-6</span>
+                </div>
+                <div class="help-example">
+                  <span class="help-provider">Groq</span>
+                  <code class="help-url">https://api.groq.com/openai/v1</code>
+                  <span class="help-models">llama-3.3-70b, mixtral-8x7b</span>
+                </div>
+                <div class="help-example">
+                  <span class="help-provider">DeepSeek</span>
+                  <code class="help-url">https://api.deepseek.com/v1</code>
+                  <span class="help-models">deepseek-chat, deepseek-reasoner</span>
+                </div>
+                <div class="help-example">
+                  <span class="help-provider">Local Ollama</span>
+                  <code class="help-url">http://localhost:11434/v1</code>
+                  <span class="help-models">llama3.3, qwen2.5, mistral</span>
+                </div>
+              </div>
+              <div class="help-note">
+                <i class="pi pi-info-circle"></i>
+                <span>Endpoint must be OpenAI-compatible. Your API key is sent directly to the provider and never stored.</span>
+              </div>
+            </div>
+
+            <div class="custom-fields">
+              <div class="model-key-wrap">
+                <label class="model-label">BASE URL</label>
+                <input v-model="customBaseUrl" class="model-key-input mono" placeholder="https://api.openai.com/v1" spellcheck="false" required />
+              </div>
+              <div class="model-key-wrap">
+                <label class="model-label">API KEY</label>
+                <input v-model="customApiKey" type="password" class="model-key-input" placeholder="sk-proj-..." autocomplete="off" required />
+              </div>
+              <div class="model-key-wrap">
+                <label class="model-label">MODEL NAME</label>
+                <input v-model="customModel" class="model-key-input mono" placeholder="gpt-4o" spellcheck="false" required />
+              </div>
+            </div>
           </div>
         </template>
       </div>
@@ -216,6 +262,31 @@ const selectedModelId = ref('aiaas:qwen3.5-122b')
 const customBaseUrl = ref('')
 const customApiKey = ref('')
 const customModel = ref('')
+const showCustomHelp = ref(false)
+
+// Load saved custom endpoint from localStorage (not the API key, just URL + model)
+onMounted(() => {
+  const saved = localStorage.getItem('custom_endpoint')
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved)
+      customBaseUrl.value = parsed.baseUrl || ''
+      customModel.value = parsed.model || ''
+    } catch (e) {
+      console.error('Failed to parse saved custom endpoint', e)
+    }
+  }
+})
+
+// Save custom endpoint when changed (not the API key)
+watch([customBaseUrl, customModel], () => {
+  if (customBaseUrl.value || customModel.value) {
+    localStorage.setItem('custom_endpoint', JSON.stringify({
+      baseUrl: customBaseUrl.value,
+      model: customModel.value,
+    }))
+  }
+})
 
 // ─── Computed ─────────────────────────────────────────────────────────────────
 
@@ -608,6 +679,139 @@ onMounted(async () => {
 .model-key-input.mono { font-family: monospace; }
 .model-key-input:focus { border-color: var(--accent); }
 .model-key-input::placeholder { color: var(--muted); }
+
+/* Custom endpoint section */
+.custom-endpoint-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.custom-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.custom-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+}
+
+.help-toggle {
+  background: none;
+  border: 1px solid var(--border2);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  transition: all 0.15s;
+}
+.help-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.custom-help {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+}
+
+.help-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.help-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.help-example {
+  display: grid;
+  grid-template-columns: 100px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  font-size: 11px;
+  padding: 6px 8px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+}
+
+.help-provider {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.help-url {
+  font-family: monospace;
+  font-size: 10px;
+  color: var(--accent);
+  background: rgba(0, 230, 118, 0.08);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.help-models {
+  font-size: 10px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.help-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(0, 230, 118, 0.05);
+  border: 1px solid rgba(0, 230, 118, 0.2);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--text2);
+}
+
+.help-note i {
+  color: var(--accent);
+  font-size: 14px;
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+
+.custom-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+@media (max-width: 700px) {
+  .help-example {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
 
 .query-error { color: var(--danger); font-size: 12px; }
 
