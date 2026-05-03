@@ -185,6 +185,20 @@ These types are derived from the FastAPI Pydantic schemas and should be kept in 
 - Citations are displayed below the answer with relevance scores
 - `mode` toggle: `rag` (default) retrieves chunks first; `no_rag` asks the LLM directly
 
+**Resilience indicators:**
+- Mode tag shows: **RAG** (blue) | **NO_RAG** (gray) | **KEYWORD SEARCH** (orange)
+- When backend falls back to keyword search (Qdrant down or embeddings not ready):
+  - Warning banner appears: "Vector search unavailable, using keyword fallback"
+  - Mode tag shows "KEYWORD SEARCH" in orange
+  - Results are functional but may have lower relevance than vector search
+
+**Response fields:**
+- `answer` — LLM-generated answer
+- `mode` — `"rag"` | `"no_rag"` | `"keyword_fallback"`
+- `citations[]` — Retrieved chunks with URLs and relevance scores
+- `chunks_retrieved` — Number of chunks used
+- `warning` — Optional message explaining degraded mode
+
 ### Pipeline View
 
 - Fallback chain renders as four equal-width cards: API/Feed → HTML → Rendered → Screenshot+VLM
