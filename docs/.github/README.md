@@ -2,19 +2,52 @@
 
 GitHub Actions workflow for testing, building, and publishing container images.
 
+**Optimized with path-based conditionals** — only runs jobs when relevant files change.
+
 ---
 
 ## Triggers
 
 | Event | Branches/Tags | Jobs Run |
 |-------|--------------|----------|
-| Pull request | any | conventional-commits, backend-tests, frontend-build |
-| Push | `main`, `kost` | All jobs + build-and-push |
-| Tag | `v*.*.*` | All jobs + build-and-push |
+| Pull request | any | conventional-commits + path-filtered jobs |
+| Push | `main`, `kost` | conventional-commits + path-filtered jobs + build-and-push (if code changed) |
+| Tag | `v*.*.*` | conventional-commits + path-filtered jobs + build-and-push (if code changed) |
+
+---
+
+## Path Filters
+
+The `changes` job detects which parts of the codebase changed:
+
+| Filter | Paths | Affects Jobs |
+|--------|-------|--------------|
+| `backend` | `backend/**`, `docker-compose.yml`, `ci.yml` | backend-tests, build API image |
+| `frontend` | `frontend/**`, `docker-compose.yml`, `ci.yml` | frontend-build, build frontend image |
+| `tests` | `tests/**`, `backend/**` | backend-tests |
+
+**Examples:**
+
+| Changed Files | Jobs Run | Images Built |
+|---------------|----------|--------------|
+| `README.md`, `docs/**` | conventional-commits only | None |
+| `tests/test_api.py` | conventional-commits + backend-tests | None (tests don't trigger builds) |
+| `backend/services/rag.py` | conventional-commits + backend-tests | rag-api |
+| `frontend/src/views/QueryView.vue` | conventional-commits + frontend-build | rag-frontend |
+| `backend/**` + `frontend/**` | all jobs | rag-api + rag-frontend |
 
 ---
 
 ## Jobs
+
+### Changes (path filter)
+
+Detects which parts of the codebase changed using `dorny/paths-filter@v3`.
+
+**Outputs:**
+- `backend` — true if backend/** or related files changed
+- `frontend` — true if frontend/** or related files changed
+- `tests` — true if tests/** or backend/** changed
 
 ### Conventional commits
 
