@@ -8,13 +8,17 @@ LLM and VLM inference runs on **CERIT-SC AIaaS** (e-INFRA). Object storage uses 
 
 ## What This System Does
 
-1. **Ingests** websites using a multi-strategy pipeline:
+1. **Ingests** websites using a multi-strategy pipeline (completes in 30 seconds):
    - API/Feed (Jina.ai reader + RSS fallback) → HTML fetch → Rendered DOM (Playwright) → Screenshot + vision AI
+   - All content standardized to markdown and stored in S3 + Postgres
 2. **Extracts** structured content from screenshots using a VLM on AIaaS
 3. **Indexes** content in Qdrant using BGE-M3 hybrid embeddings (dense + sparse, RRF fusion)
+   - Embedding happens **asynchronously in background** (1-5 minutes)
 4. **Answers** questions using RAG — retrieves relevant passages, then answers with citations via a text LLM on AIaaS
+   - **Keyword fallback** if Qdrant is down (Postgres full-text search)
 5. **Tracks** CAPTCHA incidents, audit logs, and evidence files in CESNET S3
 6. **Experiments** — run named batch query sets to benchmark retrieval quality over time
+7. **Auto-heals** drift between Postgres and Qdrant (background service runs every 15-30 minutes)
 
 ---
 
@@ -670,25 +674,44 @@ Frontend / Nginx :8080 (host) → :80 (container)
             │── Auth (JWT + Keycloak OIDC)
             │── Sources API
             │── Query API ──────────────► Qdrant :6333 (hybrid vector search)
-            │── Documents API               ▲
-            │── Experiments API             │ embed BGE-M3 (dense + sparse)
-            │── Incidents API               │
-            │                               │
-            ▼                               │
-       RabbitMQ :5672 ──────► Worker ──────┘
-                                  │
-                                  ├── HTML fetch (httpx)
-                                  ├── Rendered DOM (Playwright/Chrome)
-                                  ├── Screenshot (Playwright)
-                                  │       └── VLM (CERIT-SC AIaaS)
-                                  │
-                                  ├── PostgreSQL :5432 (metadata, jobs, audit)
-                                  └── CESNET S3 (screenshots, HTML evidence)
+            │                              ▲    │  OR (if down)
+            │                              │    └──► Postgres full-text (fallback)
+            │── Documents API              │
+            │── Experiments API            │
+            │── Incidents API              │
+            │── Scheduler (healing)        │
+            │                              │
+            ▼                              │
+       RabbitMQ :5672                      │
+            │                              │
+            ├──► Ingest Worker (30s) ─────┤
+            │       ├── HTML fetch         │
+            │       ├── Playwright         │
+            │       ├── VLM extraction     │
+            │       ├── Store to S3 (markdown + chunks.json)
+            │       └── Store to Postgres  │
+            │                              │
+            └──► Embedding Worker (1-5min) ┘
+                    ├── BGE-M3 embed (dense + sparse)
+                    ├── Upsert to Qdrant
+                    ├── Optional: backup to S3
+                    └── Update chunk status
+
+Storage layers:
+├─ PostgreSQL :5432 (metadata, jobs, audit, chunks with status tracking)
+├─ CESNET S3 (screenshots, markdown, chunks.json, optional embedding backups)
+└─ Qdrant :6333 (rebuilable vector index, hot cache)
 
 LLM/VLM inference: CERIT-SC AIaaS (OpenAI-compatible API)
-Embeddings: BGE-M3 via FlagEmbedding (runs locally in the API and worker)
+Embeddings: BGE-M3 via FlagEmbedding (runs locally in embedding worker)
 Production deployment: Kubernetes — see infra/
 ```
+
+**Key features:**
+- **5-minute SLA:** Keyword search works immediately, vectors ready in 1-5 minutes
+- **Resilience:** Qdrant down? Falls back to Postgres full-text automatically
+- **Auto-healing:** Background jobs fix drift every 15-30 minutes
+- **S3 as truth:** Qdrant is rebuilable from S3/Postgres backups
 
 ---
 
