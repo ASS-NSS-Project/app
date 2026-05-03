@@ -130,11 +130,13 @@ services:
       - S3_USE_PATH_STYLE=${S3_USE_PATH_STYLE:-true}
       - S3_BUCKET_EVIDENCE=${S3_BUCKET_EVIDENCE:-rag-evidence-dev}
       - S3_BUCKET_DOCS=${S3_BUCKET_DOCS:-rag-documents-dev}
-      - AIAAS_BASE_URL=${AIAAS_BASE_URL}
-      - AIAAS_API_KEY=${AIAAS_API_KEY}
-      - AIAAS_LLM_MODEL=${AIAAS_LLM_MODEL}
-      - AIAAS_VLM_MODEL=${AIAAS_VLM_MODEL}
-      
+      - QUERY_BASE_URL=${QUERY_BASE_URL}
+      - QUERY_API_KEY=${QUERY_API_KEY}
+      - QUERY_MODEL=${QUERY_MODEL}
+      - VLM_BASE_URL=${VLM_BASE_URL}
+      - VLM_API_KEY=${VLM_API_KEY}
+      - VLM_MODEL=${VLM_MODEL}
+
       - FIRST_ADMIN_USERNAME=${FIRST_ADMIN_USERNAME:-admin}
       - FIRST_ADMIN_EMAIL=${FIRST_ADMIN_EMAIL:-admin@example.com}
       - FIRST_ADMIN_PASSWORD=${FIRST_ADMIN_PASSWORD}
@@ -142,13 +144,8 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - API_DOCS=${API_DOCS:-false}
       - DEFAULT_SOURCE_URLS=${DEFAULT_SOURCE_URLS:-}
-      
-      - SERVICE_NAME=api
 
-      # Optional: external LLM providers (set any to unlock in query UI)
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - SERVICE_NAME=api
 
       # Optional: Keycloak OIDC (leave empty to disable SSO in local dev)
       - KEYCLOAK_URL=${KEYCLOAK_URL:-}
@@ -188,11 +185,11 @@ services:
     networks:
       - ragnet
 
-  worker:
+  worker_ingest:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: rag_worker
+    container_name: rag_worker_ingest
     restart: unless-stopped
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-raguser}
@@ -209,12 +206,14 @@ services:
       - S3_BUCKET_EVIDENCE=${S3_BUCKET_EVIDENCE:-rag-evidence-dev}
       - S3_BUCKET_DOCS=${S3_BUCKET_DOCS:-rag-documents-dev}
       - S3_BUCKET_EMBEDDINGS=${S3_BUCKET_EMBEDDINGS:-rag-embeddings}
-      - AIAAS_BASE_URL=${AIAAS_BASE_URL}
-      - AIAAS_API_KEY=${AIAAS_API_KEY}
-      - AIAAS_LLM_MODEL=${AIAAS_LLM_MODEL}
-      - AIAAS_VLM_MODEL=${AIAAS_VLM_MODEL}
+      - QUERY_BASE_URL=${QUERY_BASE_URL}
+      - QUERY_API_KEY=${QUERY_API_KEY}
+      - QUERY_MODEL=${QUERY_MODEL}
+      - VLM_BASE_URL=${VLM_BASE_URL}
+      - VLM_API_KEY=${VLM_API_KEY}
+      - VLM_MODEL=${VLM_MODEL}
       - JWT_SECRET=${JWT_SECRET}
-      - SERVICE_NAME=worker
+      - SERVICE_NAME=worker_ingest
     depends_on:
       postgres:
         condition: service_healthy
@@ -229,11 +228,11 @@ services:
         until python -c \"import socket; socket.create_connection(('postgres', 5432), timeout=2)\" 2>/dev/null; do
           echo 'Waiting for postgres TCP…'; sleep 2;
         done &&
-        python worker.py
+        python worker_ingest.py
       "
     volumes:
       - ./backend:/app:z
-      - worker:/root/.cache/huggingface
+      - worker_ingest:/root/.cache/huggingface
     networks:
       - ragnet
 
@@ -300,7 +299,7 @@ volumes:
   rabbitmq_data:  # Persists erlang cookie and queued messages across restarts
   qdrant_data:
   api:            # BGE-M3 weights for API (~570 MB, downloaded once)
-  worker:         # BGE-M3 weights for ingest worker (~570 MB, downloaded once)
+  worker_ingest:  # BGE-M3 weights for ingest worker (~570 MB, downloaded once)
   worker_embed:   # BGE-M3 weights for embedding worker (~570 MB, downloaded once)
 
 networks:

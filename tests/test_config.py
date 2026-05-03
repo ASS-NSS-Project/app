@@ -43,16 +43,20 @@ def test_settings_s3_fields():
 
 def test_settings_llm_vlm_fields():
     s = Settings(
-        aiaas_base_url="https://aiaas.example.com/v1",
-        aiaas_api_key="shared-key",
-        aiaas_llm_model="llama-3.3-70b-instruct",
-        aiaas_vlm_model="qwen2.5-vl-7b-instruct",
+        query_base_url="https://llm.example.com/v1",
+        query_api_key="query-key",
+        query_model="llama-3.3-70b-instruct",
+        vlm_base_url="https://vlm.example.com/v1",
+        vlm_api_key="vlm-key",
+        vlm_model="qwen2.5-vl-7b-instruct",
     )
 
-    assert s.aiaas_base_url == "https://aiaas.example.com/v1"
-    assert s.aiaas_api_key == "shared-key"
-    assert s.aiaas_llm_model == "llama-3.3-70b-instruct"
-    assert s.aiaas_vlm_model == "qwen2.5-vl-7b-instruct"
+    assert s.query_base_url == "https://llm.example.com/v1"
+    assert s.query_api_key == "query-key"
+    assert s.query_model == "llama-3.3-70b-instruct"
+    assert s.vlm_base_url == "https://vlm.example.com/v1"
+    assert s.vlm_api_key == "vlm-key"
+    assert s.vlm_model == "qwen2.5-vl-7b-instruct"
 
 
 def test_settings_chunking_defaults():

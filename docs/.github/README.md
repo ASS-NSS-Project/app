@@ -32,9 +32,9 @@ The `changes` job detects which parts of the codebase changed:
 |---------------|----------|--------------|
 | `README.md`, `docs/**` | conventional-commits only | None |
 | `tests/test_api.py` | conventional-commits + backend-tests | None (tests don't trigger builds) |
-| `backend/services/rag.py` | conventional-commits + backend-tests | rag-api |
-| `frontend/src/views/QueryView.vue` | conventional-commits + frontend-build | rag-frontend |
-| `backend/**` + `frontend/**` | all jobs | rag-api + rag-frontend |
+| `backend/services/rag.py` | conventional-commits + backend-tests | webrag-backend |
+| `frontend/src/views/QueryView.vue` | conventional-commits + frontend-build | webrag-frontend |
+| `backend/**` + `frontend/**` | all jobs | webrag-backend + webrag-frontend |
 
 ---
 
@@ -103,7 +103,7 @@ Verifies that the frontend builds successfully and TypeScript types are valid.
 
 ### Build and push
 
-Builds Docker images for `rag-api` (backend) and `rag-frontend` and pushes them to GitHub Container Registry (`ghcr.io/ass-nss-project/`).
+Builds Docker images for `webrag-backend` and `webwebrag-frontend` and pushes them to GitHub Container Registry (`ghcr.io/ass-nss-project/`).
 
 **Conditions:**
 - **Only runs on push events** (not PRs)
@@ -111,8 +111,8 @@ Builds Docker images for `rag-api` (backend) and `rag-frontend` and pushes them 
 - **Only runs for:** `main`, `kost` branches, or semver tags (`v*.*.*`)
 
 **Images:**
-- `ghcr.io/ass-nss-project/rag-api` — FastAPI backend (also used for worker with different command)
-- `ghcr.io/ass-nss-project/rag-frontend` — Vue 3 + nginx SPA
+- `ghcr.io/ass-nss-project/webrag-backend` — FastAPI backend (also used for workers with different command)
+- `ghcr.io/ass-nss-project/webwebrag-frontend` — Vue 3 + nginx SPA
 
 **Tag strategy:**
 
@@ -163,10 +163,10 @@ npm run build
 
 ```bash
 # API image
-docker build -t rag-api:local ./backend
+docker build -t webrag-backend:local ./backend
 
 # Frontend image
-docker build -t rag-frontend:local ./frontend
+docker build -t webwebrag-frontend:local ./frontend
 ```
 
 ---

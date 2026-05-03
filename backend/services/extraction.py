@@ -2,7 +2,7 @@
 services/extraction_service.py - AI Vision Extraction
 
 When a webpage can't be read as text, we take a screenshot and send it
-to a vision-language model via the e-INFRA AIaaS OpenAI-compatible API.
+to a vision-language model via any OpenAI-compatible API endpoint.
 
 The model extracts:
 - Headings and structure
@@ -24,13 +24,13 @@ settings = get_settings()
 
 class ExtractionService:
     """
-    Uses a vision-language model (e-INFRA AIaaS) to extract structured text from screenshots.
+    Uses a vision-language model to extract structured text from screenshots.
     """
 
     def __init__(self):
         self.client = AsyncOpenAI(
-            base_url=settings.aiaas_base_url,
-            api_key=settings.aiaas_api_key,
+            base_url=settings.vlm_base_url,
+            api_key=settings.vlm_api_key,
         )
 
     async def extract_from_screenshot(
@@ -43,11 +43,11 @@ class ExtractionService:
         """
         image_b64 = base64.standard_b64encode(screenshot_bytes).decode("utf-8")
 
-        logger.info(f"Sending screenshot to {settings.aiaas_vlm_model} for URL: {url}")
+        logger.info(f"Sending screenshot to {settings.vlm_model} for URL: {url}")
 
         try:
             response = await self.client.chat.completions.create(
-                model=settings.aiaas_vlm_model,
+                model=settings.vlm_model,
                 max_tokens=4096,
                 messages=[
                     {
@@ -82,7 +82,7 @@ class ExtractionService:
         """
         try:
             response = await self.client.chat.completions.create(
-                model=settings.aiaas_llm_model,
+                model=settings.query_model,
                 max_tokens=4096,
                 messages=[
                     {

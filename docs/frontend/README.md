@@ -85,7 +85,7 @@ Uses native **fetch API** (not Axios). All requests include the JWT token from t
 - All errors are caught by the Vue global error handler in `main.ts` which logs `event: vue_error`
 - Unhandled promise rejections log `event: unhandled_promise_rejection`
 
-Frontend errors appear in the `rag-frontend` pod's stdout in production and are collected by Alloy → Loki.
+Frontend errors appear in the `webrag-frontend` pod's stdout in production and are collected by Alloy → Loki.
 
 ---
 
@@ -154,9 +154,9 @@ Outputs static files to `dist/`. The Dockerfile copies these into an nginx:alpin
 
 - **SPA fallback:** `try_files $uri $uri/ /index.html` — all unknown routes serve `index.html` for client-side routing
 - **Security headers:** `X-Frame-Options`, `X-Content-Type-Options`, `X-XSS-Protection`, `Referrer-Policy`
-- **API proxy (production only):** `/api/*` → `http://rag-api:8000/*` (path rewrite) — disabled in Docker Compose (nginx doesn't resolve `rag-api` hostname at startup)
+- **API proxy (production only):** `/api/*` → `http://webrag-api:8000/*` (path rewrite) — disabled in Docker Compose (nginx doesn't resolve `webrag-api` hostname at startup)
 
-In Kubernetes, the frontend nginx uses a ConfigMap (`rag-frontend-nginx`) that includes the `proxy_pass` blocks. In Docker Compose, those blocks are stripped to avoid startup crashes.
+In Kubernetes, the frontend nginx uses a ConfigMap (`webrag-frontend-nginx`). In Docker Compose, proxy_pass blocks are stripped to avoid startup crashes.
 
 ---
 

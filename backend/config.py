@@ -73,21 +73,15 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://qdrant.qdrant.svc:6333"
     qdrant_collection: str = "rag_chunks"
 
-    # ── AIaaS (e-INFRA, shared base URL + key for LLM and VLM) ──
-    aiaas_base_url: str = ""
-    aiaas_api_key: str = ""
+    # ── LLM (text generation — any OpenAI-compatible endpoint) ──
+    query_base_url: str = ""
+    query_api_key: str = ""
+    query_model: str = ""
 
-    # ── LLM (text generation) ─────────────────────
-    aiaas_llm_model: str = ""
-
-    # ── VLM (vision extraction) ───────────────────
-    aiaas_vlm_model: str = ""
-
-    # ── Optional external LLM providers ──────────
-    # Set these to enable the corresponding models in the query UI.
-    openai_api_key: str = ""     # enables GPT-4.1, GPT-4o, o4-mini, o3 family
-    gemini_api_key: str = ""     # enables Gemini 2.5, 3.0, 3.1 family
-    anthropic_api_key: str = ""  # enables Claude Opus 4.7, Sonnet 4.6, Haiku 4.5
+    # ── VLM (vision extraction — may differ from LLM endpoint) ──
+    vlm_base_url: str = ""
+    vlm_api_key: str = ""
+    vlm_model: str = ""
 
     # ── Embeddings (local FlagEmbedding / BGE-M3) ─
     embedding_model: str = "BAAI/bge-m3"

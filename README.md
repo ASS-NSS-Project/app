@@ -65,15 +65,15 @@ S3_USE_PATH_STYLE=true
 S3_BUCKET_EVIDENCE=rag-evidence-dev
 S3_BUCKET_DOCS=rag-documents-dev
 
-# CERIT-SC AIaaS — shared base URL and key for both LLM and VLM
-AIAAS_BASE_URL=https://llm.ai.e-infra.cz/v1
-AIAAS_API_KEY=<provided-by-e-INFRA>
-AIAAS_LLM_MODEL=qwen3.5-122b
-AIAAS_VLM_MODEL=qwen3.5-122b
+# LLM — text generation (any OpenAI-compatible endpoint)
+QUERY_BASE_URL=https://llm.ai.e-infra.cz/v1
+QUERY_API_KEY=<your-api-key>
+QUERY_MODEL=qwen3.5-122b
 
-# Optional external LLM providers — set any to unlock those models in the query UI
-# OPENAI_API_KEY=sk-...        # enables GPT-4.1, GPT-4.1-mini, GPT-4.1-nano, GPT-4o, o4-mini, o3
-# GEMINI_API_KEY=AIza...       # enables Gemini 2.5 Pro/Flash, 2.0 Flash, 3.0 Flash, 3.1 Pro
+# VLM — vision extraction (can use a different endpoint/model)
+VLM_BASE_URL=https://llm.ai.e-infra.cz/v1
+VLM_API_KEY=<your-api-key>
+VLM_MODEL=qwen3.5-122b
 # ANTHROPIC_API_KEY=sk-ant-... # enables Claude Opus 4.7, Sonnet 4.6, Haiku 4.5 (direct Anthropic API)
 
 # JWT signing secret
@@ -105,7 +105,7 @@ docker compose up --build
 You'll know it's ready when you see:
 ```
 rag_api    | INFO: Startup complete. API ready.
-rag_worker | INFO: Worker ready. Listening on queue: ingest
+rag_worker_ingest | INFO: Worker ready. Listening on queue: ingest
 ```
 
 ### 4. Open the UI
@@ -432,7 +432,7 @@ Ask a question. Returns an answer with citations from the knowledge base.
   "top_k": 5,
   "source_id": null,
   "strict_grounding": true,
-  "model_id": "aiaas:qwen3.5-122b"
+  "upstream_model": "qwen3.5-122b"
 }
 ```
 
@@ -443,12 +443,11 @@ Ask a question. Returns an answer with citations from the knowledge base.
 | `top_k` | `5` | Number of chunks to retrieve |
 | `source_id` | `null` | Restrict retrieval to one source (UUID) |
 | `strict_grounding` | `true` | If true, LLM only uses retrieved context; if false, may use general knowledge |
-| `model_id` | `null` | Preset model ID from `GET /query/models` (e.g. `"anthropic:claude-opus-4-7"`). Backend resolves URL and API key. |
-| `upstream_base_url` | `null` | Custom endpoint — any OpenAI-compatible URL (overrides `model_id`) |
+| `upstream_base_url` | `null` | Override the server-configured LLM endpoint (any OpenAI-compatible URL) |
 | `upstream_api_key` | `null` | API key for the custom upstream endpoint |
-| `upstream_model` | `null` | Model name for the custom upstream endpoint |
+| `upstream_model` | `null` | Model name for the upstream endpoint |
 
-When `model_id` is set, the backend resolves the provider URL and API key from its environment. For a fully custom endpoint, set `upstream_base_url` + `upstream_api_key` + `upstream_model` instead. The `enable_thinking` extra body is only sent to AIaaS — suppressed for all other providers.
+Leave all `upstream_*` fields empty to use the server-configured defaults (`QUERY_BASE_URL` / `QUERY_MODEL`). The `enable_thinking` extra body is only sent when using the default endpoint — suppressed for custom upstreams.
 
 In the Query UI, the autosizing input resets back to compact height when cleared (including whitespace-only content).
 
@@ -815,7 +814,7 @@ docker compose restart api   # or: podman compose restart api
 
 All services emit structured JSON logs. Each line includes `timestamp`, `level`, `logger`, `service`, `message`, and an `event` slug for machine parsing.
 
-Frontend errors (`api_error`, `network_error`, `vue_error`, `unhandled_promise_rejection`) are written as structured JSON to `console.error` by `api/client.ts` and `main.ts`. In production, these appear in the `rag-frontend` pod's stdout and are collected by Alloy → Loki.
+Frontend errors (`api_error`, `network_error`, `vue_error`, `unhandled_promise_rejection`) are written as structured JSON to `console.error` by `api/client.ts` and `main.ts`. In production, these appear in the `webrag-frontend` pod's stdout and are collected by Alloy → Loki.
 
 The frontend HTML document title is `WebRAG` (browser tab title).
 
@@ -919,7 +918,7 @@ docker compose down -v       # Stop and delete all data (fresh start)
 → Check `podman compose logs worker`. If it shows import errors, run `podman compose build` again.
 
 **Vision extraction fails**
-→ Verify `AIAAS_BASE_URL`, `AIAAS_API_KEY`, and `AIAAS_VLM_MODEL` in `.env`. Test the endpoint with `curl -H "Authorization: Bearer $AIAAS_API_KEY" $AIAAS_BASE_URL/models`.
+→ Verify `VLM_BASE_URL`, `VLM_API_KEY`, and `VLM_MODEL` in `.env`. Test the endpoint with `curl -H "Authorization: Bearer $VLM_API_KEY" $VLM_BASE_URL/models`.
 
 **S3 upload errors**
 → Verify `S3_ENDPOINT_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`. For default local compose, ensure `minio` and `minio_init` containers are healthy and completed, and that `S3_BUCKET_EVIDENCE` (`rag-evidence-dev`) and `S3_BUCKET_DOCS` (`rag-documents-dev`) exist.
@@ -1007,7 +1006,7 @@ See **[docs/.github/README.md](docs/.github/README.md)** for complete CI/CD docu
 **Published images:**
 - `ghcr.io/ass-nss-project/webrag-backend` — Monorepo image containing API + workers
   - Used by: API Deployment, ingest worker StatefulSet, embedding worker StatefulSet
-  - Same image, different commands: `uvicorn main:app`, `python worker.py`, `python worker_embed.py`
+  - Same image, different commands: `uvicorn main:app`, `python worker_ingest.py`, `python worker_embed.py`
 - `ghcr.io/ass-nss-project/webrag-frontend` — Vue 3 / nginx SPA
 
 **Image tags:**

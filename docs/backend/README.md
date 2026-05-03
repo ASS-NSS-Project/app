@@ -12,7 +12,7 @@ backend/
 ├── config.py               # All settings via env vars (pydantic-settings, lru_cache)
 ├── database.py             # SQLAlchemy engine + SessionLocal + Base
 ├── models.py               # ORM table definitions (see Data Model below)
-├── worker.py               # RabbitMQ consumer: pulls job_id → runs ingest pipeline → embeds chunks
+├── worker_ingest.py               # RabbitMQ consumer: pulls job_id → runs ingest pipeline → embeds chunks
 ├── Dockerfile              # Multi-stage build: Poetry deps → FastAPI/worker container
 ├── pyproject.toml          # Poetry dependency manifest (uses pytorch-cpu supplemental source)
 ├── poetry.lock             # Locked dependency tree
@@ -76,7 +76,7 @@ POST /sources/{id}/ingest
   → create IngestJob (status: pending)
   → publish {job_id} to RabbitMQ "ingest" queue
 
-worker.py (ingest worker) on_message()
+worker_ingest.py (ingest worker) on_message()
   → process_ingest_job(job_id)
   → IngestService.run(job_id):
 
@@ -151,7 +151,7 @@ worker_embed.py (embedding worker) on_message()
 ## RAG Query Flow (with Fallback)
 
 ```text
-POST /query {question, top_k, source_id?, strict_grounding, mode, model_id?}
+POST /query {question, top_k, source_id?, strict_grounding, mode, upstream_base_url?, upstream_api_key?, upstream_model?}
   
   → check Qdrant health (ping collection)
   
@@ -244,7 +244,7 @@ All backend services emit **structured JSON** via `python-json-logger` (configur
 
 **Critical invariants — do not break these:**
 
-- `setup_logging()` must be called at the top of `main.py` and `worker.py` before anything else imports `logging`.
+- `setup_logging()` must be called at the top of `main.py` and `worker_ingest.py` before anything else imports `logging`.
 - `HF_HUB_DISABLE_PROGRESS_BARS=1` must be set in every environment (K8s Deployment env, `.env`) — otherwise HuggingFace tqdm bars print raw text to stdout and pollute structured logs.
 - Every module that can execute independently (routers, services, worker tasks) must have its own `logger = logging.getLogger(__name__)` and log entry/exit/error with an `event` slug.
 - HTTP middleware in `main.py` logs every request/response (`event: http_request`). Skips `/health` and `/metrics` to avoid noise.
@@ -266,11 +266,11 @@ All backend services emit **structured JSON** via `python-json-logger` (configur
 | `scheduler_job_triggered` / `scheduler_crawl_failed` / `scheduler_run_complete` | scheduler.py | Scheduler activity |
 | `experiment_started` / `experiment_executing` / `experiment_query_done` / `experiment_completed` / `experiment_failed` / `experiment_background_crashed` | experiment.py | Experiment lifecycle |
 | `presigned_url_failed` | storage.py | S3 presigned URL generation failed |
-| `ingest_started` / `ingest_completed` / `ingest_failed` | worker.py | Job lifecycle |
+| `ingest_started` / `ingest_completed` / `ingest_failed` | worker_ingest.py | Job lifecycle |
 | `ingest_strategy_attempt` / `ingest_strategy_fallback` / `ingest_strategy_error` | ingest.py | Strategy execution |
 | `captcha_detected` | captcha.py | CAPTCHA found — also fires `rag_app=incident` Loki label |
-| `document_created` | worker.py | Document + chunks saved to DB |
-| `worker_job_started` / `worker_job_completed` / `worker_job_incomplete` / `worker_job_crashed` / `worker_invalid_message` | worker.py | Worker message handling |
+| `document_created` | worker_ingest.py | Document + chunks saved to DB |
+| `worker_job_started` / `worker_job_completed` / `worker_job_incomplete` / `worker_job_crashed` / `worker_invalid_message` | worker_ingest.py | Worker message handling |
 | `chunking_prose` / `chunking_tables` / `chunking_vlm` | chunking.py | Chunking complete (DEBUG level) |
 | `llm_timeout` / `llm_error` | rag.py | LLM request failures |
 
@@ -278,7 +278,7 @@ All backend services emit **structured JSON** via `python-json-logger` (configur
 
 ## Worker Details
 
-### Ingest Worker (`worker.py`)
+### Ingest Worker (`worker_ingest.py`)
 
 **Purpose:** Scrapes web content and stores to S3/Postgres (fast, 30 seconds).
 
@@ -367,7 +367,7 @@ After adding or updating dependencies, run `poetry lock` to regenerate `poetry.l
 
 ## Metrics
 
-The `/metrics` endpoint exposes Prometheus metrics (no authentication). Scraped by the `rag-api` ServiceMonitor (`infra/argocd/apps/rag-system/config/rag-api-ServiceMonitor.yaml`) every 30 s.
+The `/metrics` endpoint exposes Prometheus metrics (no authentication). Scraped by the `webrag-api` ServiceMonitor (`infra/argocd/apps/webrag/config/webrag-api-ServiceMonitor.yaml`) every 30 s.
 
 **Exported metrics:**
 
@@ -390,7 +390,7 @@ The three Gauges (`rag_active_sources`, `rag_open_incidents`, `rag_qdrant_collec
 
 ## Recommended Refactors
 
-The current backend is a **monolith**: the same image runs both the FastAPI service (`uvicorn main:app`) and the RabbitMQ consumer (`python worker.py`). Both processes load BGE-M3 (~2.3 GB) into memory independently because every replica needs the model for either embedding (worker) or query-time embedding (API).
+The current backend is a **monolith**: the same image runs both the FastAPI service (`uvicorn main:app`) and the RabbitMQ consumer (`python worker_ingest.py`). Both processes load BGE-M3 (~2.3 GB) into memory independently because every replica needs the model for either embedding (worker) or query-time embedding (API).
 
 ### Split the embedding service into its own microservice
 
@@ -416,7 +416,7 @@ Until the split is justified, the startup-blocking problem can be solved without
 - Move `get_embedding_model()` out of the FastAPI lifespan startup
 - Spawn it as a background `asyncio.to_thread` task that records a `model_ready` future
 - Have `/query` and embedding-touching endpoints `await` that future on first call
-- Keep the synchronous load in `worker.py` — workers can block, no user is waiting
+- Keep the synchronous load in `worker_ingest.py` — workers can block, no user is waiting
 
 This keeps the monolith but makes login (and all non-embedding endpoints) responsive within seconds of container start, matching the behaviour you would get from a separate embedding service.
 

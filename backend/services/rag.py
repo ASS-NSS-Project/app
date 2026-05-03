@@ -9,7 +9,7 @@ With RAG:    Ask the LLM a question →
              2. Give those chunks to the LLM as context
              3. LLM answers based on OUR data, with citations
 
-Uses the e-INFRA AIaaS OpenAI-compatible API (AIAAS_BASE_URL / AIAAS_LLM_MODEL).
+Uses any OpenAI-compatible API endpoint (QUERY_BASE_URL / QUERY_MODEL).
 """
 
 import logging
@@ -44,8 +44,8 @@ def _get_llm_client() -> AsyncOpenAI:
     global _llm_client
     if _llm_client is None:
         _llm_client = AsyncOpenAI(
-            base_url=settings.aiaas_base_url,
-            api_key=settings.aiaas_api_key,
+            base_url=settings.query_base_url,
+            api_key=settings.query_api_key,
             timeout=httpx.Timeout(connect=10.0, read=180.0, write=10.0, pool=5.0),
         )
     return _llm_client
@@ -87,7 +87,7 @@ class RAGService:
                 api_key=upstream_api_key,
                 timeout=httpx.Timeout(connect=10.0, read=180.0, write=10.0, pool=5.0),
             )
-            model = upstream_model or settings.aiaas_llm_model
+            model = upstream_model or settings.query_model
             # enable_thinking is an AIaaS-specific extension (suppresses chain-of-thought
             # output from DeepSeek/Qwen3 reasoning models). Standard OpenAI/Anthropic APIs
             # reject unknown extra_body fields, so we must not send it to external providers.
@@ -96,7 +96,7 @@ class RAGService:
                         extra={"event": "upstream_provider", "base_url": upstream_base_url, "model": model})
         else:
             client = self.client
-            model = upstream_model or settings.aiaas_llm_model
+            model = upstream_model or settings.query_model
             aiaas_extras = True
 
         if mode == "rag":
@@ -263,7 +263,7 @@ class RAGService:
 
         # Step 3: Call LLM
         client = client or self.client
-        model = model or settings.aiaas_llm_model
+        model = model or settings.query_model
         logger.info("Sending RAG query to LLM (%s): '%s'", model, question[:80])
         extra_kwargs = {"extra_body": {"enable_thinking": False}} if aiaas_extras else {}
         try:
@@ -331,7 +331,7 @@ class RAGService:
     ) -> dict:
         """No-RAG mode: ask the LLM directly, no retrieval."""
         client = client or self.client
-        model = model or settings.aiaas_llm_model
+        model = model or settings.query_model
         logger.info("Sending no-RAG query to LLM (%s)", model)
         extra_kwargs = {"extra_body": {"enable_thinking": False}} if aiaas_extras else {}
         try:

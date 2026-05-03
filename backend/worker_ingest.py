@@ -1,5 +1,5 @@
 """
-worker.py - Background ingest job processor
+worker_ingest.py - Background ingest job processor
 
 Runs as a separate Docker container.
 Listens to the "ingest" queue in RabbitMQ and processes scraping jobs.
