@@ -929,6 +929,7 @@ app/
 - **[Backend Documentation](docs/backend/README.md)** — directory structure, data model, ingest flow, RAG query flow, authentication, scheduler, logging, worker details, embedding model, metrics, recommended refactors
 - **[Frontend Documentation](docs/frontend/README.md)** — directory structure, views, components, API client, authentication flow, styling, nginx configuration, TypeScript types, UI behavior notes
 - **[Tests Documentation](docs/tests/README.md)** — test structure, fixtures, what is tested, running tests locally, CI status, adding new tests, troubleshooting
+- **[CI/CD Documentation](docs/.github/README.md)** — GitHub Actions workflow, jobs (conventional commits, backend tests, frontend build, build-and-push), triggers, image tagging strategy
 
 ---
 
@@ -972,20 +973,19 @@ poetry run pytest ../tests/ -v
 
 ## CI / CD
 
-Images are built and pushed to **GitHub Container Registry** on every push to `main` or `kost`, and on semver git tags (`v*.*.*`).
+See **[docs/.github/README.md](docs/.github/README.md)** for complete CI/CD documentation.
 
-| Trigger | Tags produced |
-|---------|---------------|
-| push to `main` | `main-<short-sha>` |
-| push to `kost` | `kost-<short-sha>` |
-| git tag `v1.2.3` | `1.2.3`, `1.2` |
+**GitHub Actions workflow:**
+1. Conventional commits check
+2. Backend tests (pytest against Postgres 16)
+3. Frontend build (TypeScript check + Vite build)
+4. Build & push images to GHCR (on `main`/`kost` push or semver tags only)
 
-Images:
+**Published images:**
+- `ghcr.io/ass-nss-project/rag-api` — FastAPI backend (also used for worker)
+- `ghcr.io/ass-nss-project/rag-frontend` — Vue 3 / nginx SPA
 
-- `ghcr.io/ass-nss-project/rag-api` — FastAPI backend (also used for the worker, different `command` in k8s)
-- `ghcr.io/ass-nss-project/rag-frontend` — Vue 3 / Nginx SPA
-
-The workflow: commit-message lint → backend tests + frontend build → build & push (main/kost/tags only).
+**Image tags:** `main-<sha>`, `kost-<sha>`, or `1.2.3` (semver)
 
 ---
 
