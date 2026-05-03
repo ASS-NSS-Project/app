@@ -112,6 +112,25 @@ rag_worker_ingest | INFO: Worker ready. Listening on queue: ingest
 
 Open **http://localhost:8080** and log in with `FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_PASSWORD` from your `.env`.
 
+### 5. Example helper scripts
+
+Two helper scripts are available in `app/example/`:
+
+- `seed_sources.sh` — creates a few sample sources and immediately queues ingest jobs.
+- `list_sources.sh` — lists current sources (`GET /sources/`).
+- `check_knowledge_base.sh` — prints KB stats + documents (`GET /documents/stats`, `GET /documents/`).
+- `query.sh` — sends a question to RAG query endpoint (`POST /query/`).
+
+Run from the `app/` directory:
+
+```bash
+cd app
+./example/seed_sources.sh
+./example/list_sources.sh
+./example/check_knowledge_base.sh
+./example/query.sh "What is Terraform?"
+```
+
 ---
 
 ## API Reference

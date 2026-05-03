@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Seed the four example sources and trigger an initial ingest for each.
+# Seed the example sources and trigger an initial ingest for each.
 # Usage:
-#   ./seed_sources.sh                        # uses defaults below
+#   ./add_sources.sh 
 
-#   API_URL=https://rag.nss.jkzl.eu
+#   export API_URL=https://rag.nss.jkzl.eu
 #   export ADMIN_EMAIL=admin 
 #   export ADMIN_PASSWORD=secret 
-#   ./seed_sources.sh
+#   ./addsources.sh
 
 set -euo pipefail
 
@@ -65,10 +65,15 @@ create_and_ingest() {
 
 # ── 3. Seed sources ───────────────────────────────────────────────────────────
 
-create_and_ingest "MENDELU"        "https://mendelu.cz"                          "html"
-create_and_ingest "ITHope"         "https://www.ithope.cz/"                      "rendered"
-create_and_ingest "FarmAI"         "https://farmai.eu/"                          "screenshot"
-create_and_ingest "ReCAPTCHA Demo" "https://www.google.com/recaptcha/api2/demo"  "html"
+create_and_ingest "MENDELU" "https://mendelu.cz" "html"
+create_and_ingest "ITHope" "https://www.ithope.cz/" "rendered"
+create_and_ingest "FarmAI" "https://farmai.eu/" "screenshot"
+create_and_ingest "ReCAPTCHA Demo" "https://www.google.com/recaptcha/api2/demo" "html"
+create_and_ingest "ReCAPTCHA Demo" "https://www.google.com/recaptcha/api2/demo" "api"
+create_and_ingest "Overview - Qdrant" "https://qdrant.tech/documentation/overview/" "api"
+create_and_ingest "What is Terraform? | Terraform | HashiCorp Developer" "https://developer.hashicorp.com/terraform/intro" "api"
+create_and_ingest "Terraform (Software) - Wikipedia" "https://en.wikipedia.org/wiki/Terraform_(software)" "api"
+create_and_ingest "What is Terraform? | IBM" "https://www.ibm.com/think/topics/terraform" "api"
 
 echo ""
 echo "Done. Monitor progress at ${API_URL}/sources/ or in the Pipeline view."
