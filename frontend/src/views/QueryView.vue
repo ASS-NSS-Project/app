@@ -50,83 +50,64 @@
         <Button label="Submit" icon="pi pi-send" :loading="loading" :disabled="!store.question.trim()" class="submit-btn" @click="doQuery" />
       </div>
 
-      <!-- Model selector row -->
-      <div class="model-row">
-        <div class="model-select-wrap">
-          <label class="model-label">MODEL</label>
-          <select v-model="selectedModelId" class="model-select">
-            <template v-for="[group, models] in modelGroups" :key="group">
-              <optgroup :label="group">
-                <option v-for="m in models" :key="m.id" :value="m.id">{{ m.label }}</option>
-              </optgroup>
-            </template>
-            <optgroup label="Custom">
-              <option value="custom:">Custom endpoint…</option>
-            </optgroup>
-          </select>
+      <!-- Custom API override -->
+      <div class="custom-endpoint-section">
+        <div class="custom-header">
+          <span class="custom-title">Pass Values for Your Own API</span>
+          <button class="help-toggle" @click="showCustomHelp = !showCustomHelp">
+            <i :class="showCustomHelp ? 'pi pi-chevron-up' : 'pi pi-info-circle'"></i>
+          </button>
         </div>
 
-        <!-- Custom endpoint fields -->
-        <template v-if="isCustom">
-          <div class="custom-endpoint-section">
-            <div class="custom-header">
-              <span class="custom-title">Custom Endpoint Configuration</span>
-              <button class="help-toggle" @click="showCustomHelp = !showCustomHelp">
-                <i :class="showCustomHelp ? 'pi pi-chevron-up' : 'pi pi-info-circle'"></i>
-              </button>
+        <div v-if="showCustomHelp" class="custom-help">
+          <div class="help-title">Example Endpoints</div>
+          <div class="help-examples">
+            <div class="help-example">
+              <span class="help-provider">OpenAI</span>
+              <code class="help-url">https://api.openai.com/v1</code>
+              <span class="help-models">gpt-4o, gpt-4.1, o4-mini</span>
             </div>
-
-            <div v-if="showCustomHelp" class="custom-help">
-              <div class="help-title">Example Endpoints</div>
-              <div class="help-examples">
-                <div class="help-example">
-                  <span class="help-provider">OpenAI</span>
-                  <code class="help-url">https://api.openai.com/v1</code>
-                  <span class="help-models">gpt-4o, gpt-4.1, o4-mini</span>
-                </div>
-                <div class="help-example">
-                  <span class="help-provider">Anthropic</span>
-                  <code class="help-url">https://api.anthropic.com/v1</code>
-                  <span class="help-models">claude-opus-4-7, claude-sonnet-4-6</span>
-                </div>
-                <div class="help-example">
-                  <span class="help-provider">Groq</span>
-                  <code class="help-url">https://api.groq.com/openai/v1</code>
-                  <span class="help-models">llama-3.3-70b, mixtral-8x7b</span>
-                </div>
-                <div class="help-example">
-                  <span class="help-provider">DeepSeek</span>
-                  <code class="help-url">https://api.deepseek.com/v1</code>
-                  <span class="help-models">deepseek-chat, deepseek-reasoner</span>
-                </div>
-                <div class="help-example">
-                  <span class="help-provider">Local Ollama</span>
-                  <code class="help-url">http://localhost:11434/v1</code>
-                  <span class="help-models">llama3.3, qwen2.5, mistral</span>
-                </div>
-              </div>
-              <div class="help-note">
-                <i class="pi pi-info-circle"></i>
-                <span>Endpoint must be OpenAI-compatible. Your API key is sent directly to the provider and never stored.</span>
-              </div>
+            <div class="help-example">
+              <span class="help-provider">Anthropic</span>
+              <code class="help-url">https://api.anthropic.com/v1</code>
+              <span class="help-models">claude-opus-4-7, claude-sonnet-4-6</span>
             </div>
-
-            <div class="custom-fields">
-              <div class="model-key-wrap">
-                <label class="model-label">BASE URL</label>
-                <input v-model="customBaseUrl" class="model-key-input mono" placeholder="https://api.openai.com/v1" spellcheck="false" required />
-              </div>
-              <div class="model-key-wrap">
-                <label class="model-label">API KEY</label>
-                <input v-model="customApiKey" type="password" class="model-key-input" placeholder="sk-proj-..." autocomplete="off" required />
-              </div>
-              <div class="model-key-wrap">
-                <label class="model-label">MODEL NAME</label>
-                <input v-model="customModel" class="model-key-input mono" placeholder="gpt-4o" spellcheck="false" required />
-              </div>
+            <div class="help-example">
+              <span class="help-provider">Groq</span>
+              <code class="help-url">https://api.groq.com/openai/v1</code>
+              <span class="help-models">llama-3.3-70b, mixtral-8x7b</span>
+            </div>
+            <div class="help-example">
+              <span class="help-provider">DeepSeek</span>
+              <code class="help-url">https://api.deepseek.com/v1</code>
+              <span class="help-models">deepseek-chat, deepseek-reasoner</span>
+            </div>
+            <div class="help-example">
+              <span class="help-provider">Local Ollama</span>
+              <code class="help-url">http://localhost:11434/v1</code>
+              <span class="help-models">llama3.3, qwen2.5, mistral</span>
             </div>
           </div>
-        </template>
+          <div class="help-note">
+            <i class="pi pi-info-circle"></i>
+            <span>Leave blank to use the server-configured default. Endpoint must be OpenAI-compatible. Your API key is sent directly to the provider and never stored.</span>
+          </div>
+        </div>
+
+        <div class="custom-fields">
+          <div class="model-key-wrap">
+            <label class="model-label">BASE URL</label>
+            <input v-model="customBaseUrl" class="model-key-input mono" placeholder="server default" spellcheck="false" />
+          </div>
+          <div class="model-key-wrap">
+            <label class="model-label">API KEY</label>
+            <input v-model="customApiKey" type="password" class="model-key-input" placeholder="server default" autocomplete="off" />
+          </div>
+          <div class="model-key-wrap">
+            <label class="model-label">MODEL NAME</label>
+            <input v-model="customModel" class="model-key-input mono" placeholder="server default" spellcheck="false" />
+          </div>
+        </div>
       </div>
 
       <div v-if="queryError" class="query-error">{{ queryError }}</div>
@@ -139,7 +120,7 @@
         <span class="ctx-sep">·</span>
         <span class="ctx-label">Strict: {{ store.strictGrounding ? 'on' : 'off' }}</span>
         <span class="ctx-sep">·</span>
-        <span class="ctx-label">{{ activePreset?.label ?? (isCustom ? 'Custom endpoint' : selectedModelId) }}</span>
+        <span class="ctx-label">{{ activeModelLabel }}</span>
       </div>
 
       <!-- Loading state -->
@@ -230,7 +211,7 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
 import { get, post } from '@/api/client'
-import type { SourceResponse, QueryResponse, ModelInfo } from '@/api/types'
+import type { SourceResponse, QueryResponse } from '@/api/types'
 import { useQueryStore } from '@/stores/query'
 import Button from 'primevue/button'
 import Textarea from 'primevue/textarea'
@@ -243,7 +224,6 @@ const store = useQueryStore()
 const loading = ref(false)
 const queryError = ref('')
 const sources = ref<SourceResponse[]>([])
-const availableModels = ref<ModelInfo[]>([])
 const sessionStartIndex = ref(0)
 const showPrevious = ref(false)
 const shareCopied = ref(false)
@@ -257,14 +237,13 @@ watch(() => store.question, (q) => {
   if (!q.trim()) resetQueryInputHeight()
 })
 
-// Model selection
-const selectedModelId = ref('aiaas:qwen3.5-122b')
+// Custom API override (optional — leave blank to use server defaults)
 const customBaseUrl = ref('')
 const customApiKey = ref('')
 const customModel = ref('')
 const showCustomHelp = ref(false)
 
-// Load saved custom endpoint from localStorage (not the API key, just URL + model)
+// Persist base URL + model name across page loads (never persist API key)
 onMounted(() => {
   const saved = localStorage.getItem('custom_endpoint')
   if (saved) {
@@ -272,37 +251,22 @@ onMounted(() => {
       const parsed = JSON.parse(saved)
       customBaseUrl.value = parsed.baseUrl || ''
       customModel.value = parsed.model || ''
-    } catch (e) {
-      console.error('Failed to parse saved custom endpoint', e)
-    }
+    } catch { /* ignore corrupt storage */ }
   }
 })
 
-// Save custom endpoint when changed (not the API key)
 watch([customBaseUrl, customModel], () => {
-  if (customBaseUrl.value || customModel.value) {
-    localStorage.setItem('custom_endpoint', JSON.stringify({
-      baseUrl: customBaseUrl.value,
-      model: customModel.value,
-    }))
-  }
+  localStorage.setItem('custom_endpoint', JSON.stringify({
+    baseUrl: customBaseUrl.value,
+    model: customModel.value,
+  }))
 })
 
 // ─── Computed ─────────────────────────────────────────────────────────────────
 
 const previousTurns = computed(() => store.history.slice(0, sessionStartIndex.value))
 const activeTurn = computed(() => store.history.length ? store.history[store.history.length - 1] : null)
-const activePreset = computed(() => availableModels.value.find(m => m.id === selectedModelId.value) ?? null)
-const isCustom = computed(() => selectedModelId.value === 'custom:')
-
-const modelGroups = computed(() => {
-  const groups = new Map<string, ModelInfo[]>()
-  for (const m of availableModels.value) {
-    if (!groups.has(m.group)) groups.set(m.group, [])
-    groups.get(m.group)!.push(m)
-  }
-  return [...groups.entries()]
-})
+const activeModelLabel = computed(() => customModel.value || customBaseUrl.value || 'server default')
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -351,9 +315,9 @@ async function doQuery() {
       top_k: store.topK,
       strict_grounding: store.strictGrounding,
       source_id: store.sourceId || null,
-      ...(isCustom.value
-        ? { upstream_base_url: customBaseUrl.value || null, upstream_api_key: customApiKey.value || null, upstream_model: customModel.value || null }
-        : { model_id: selectedModelId.value }),
+      upstream_base_url: customBaseUrl.value || null,
+      upstream_api_key: customApiKey.value || null,
+      upstream_model: customModel.value || null,
     })
     store.addTurn(q, result)
   } catch (e: unknown) {
@@ -374,7 +338,7 @@ function exportMd() {
   const turn = activeTurn.value
   if (!turn) return
   const ts = timestampFilename()
-  const modelLabel = activePreset.value?.label ?? (isCustom.value ? 'Custom endpoint' : selectedModelId.value)
+  const modelLabel = activeModelLabel.value
   const lines: string[] = [
     `# WebRAG Query Export`,
     ``,
@@ -413,7 +377,7 @@ function exportPdf() {
   const turn = activeTurn.value
   if (!turn) return
   const ts = timestampFilename()
-  const modelLabel = activePreset.value?.label ?? (isCustom.value ? 'Custom endpoint' : selectedModelId.value)
+  const modelLabel = activeModelLabel.value
 
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const citHtml = turn.result.citations.map(c => `
@@ -499,7 +463,6 @@ function onClearChat() {
 onMounted(async () => {
   sessionStartIndex.value = store.history.length
   try { sources.value = await get<SourceResponse[]>('/sources/') } catch { /* ignore */ }
-  try { availableModels.value = await get<ModelInfo[]>('/query/models') } catch { /* ignore */ }
 })
 </script>
 
@@ -630,20 +593,11 @@ onMounted(async () => {
 }
 .submit-btn { flex-shrink: 0; }
 
-/* Model selector row */
-.model-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.model-select-wrap,
 .model-key-wrap {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-.model-select-wrap { min-width: 220px; }
 .model-key-wrap { flex: 1; min-width: 160px; max-width: 280px; }
 .model-label {
   font-size: 10px;
@@ -651,19 +605,6 @@ onMounted(async () => {
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
-.model-select {
-  background: var(--surface2);
-  border: 1px solid var(--border2);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  font-size: 12px;
-  font-family: inherit;
-  padding: 6px 10px;
-  outline: none;
-  cursor: pointer;
-  transition: border-color 0.15s;
-}
-.model-select:focus { border-color: var(--accent); }
 .model-key-input {
   background: var(--surface2);
   border: 1px solid var(--border2);
