@@ -913,85 +913,34 @@ docker compose down -v       # Stop and delete all data (fresh start)
 
 ```text
 app/
-├── docker-compose.yml          # Local dev — all services (Docker + Podman)
-├── .env.example                # Config template (copy to .env)
-├── backend/                    # FastAPI Python service
-│   ├── Dockerfile
-│   ├── pyproject.toml          # Poetry dependency manifest
-│   ├── poetry.lock             # Locked dependency tree (commit this)
-│   ├── main.py                 # App entry point, startup (create_all, admin init, Qdrant init, scheduler)
-│   ├── config.py               # Settings from environment variables (pydantic-settings)
-│   ├── database.py             # SQLAlchemy engine + SessionLocal + Base
-│   ├── models.py               # All database tables (ORM); column declarations use aligned formatting for readability
-│   ├── worker.py               # RabbitMQ consumer: pulls job_id → runs ingest pipeline → embeds chunks
-│   ├── routers/
-│   │   ├── auth.py             # Login, local-login, me, refresh, stats, providers
-│   │   ├── auth_keycloak.py    # Keycloak OIDC callback → JWT
-│   │   ├── sources.py          # Source CRUD + ingest trigger (SSRF-protected)
-│   │   ├── query.py            # RAG query + model list endpoints
-│   │   ├── documents.py        # Document/chunk browsing + evidence pre-signed URLs
-│   │   ├── experiments.py      # Batch query benchmarks
-│   │   └── incidents.py        # CAPTCHA incident management
-│   └── services/
-│       ├── ingest.py           # Core scraping pipeline (Jina.ai/RSS → HTML → Playwright → VLM)
-│       ├── chunking.py         # Structure-aware chunking (prose / table / VLM)
-│       ├── extraction.py       # VLM screenshot analysis via AIaaS
-│       ├── embedding.py        # BGE-M3 FlagEmbedding + Qdrant hybrid search
-│       ├── rag.py              # RAG query engine (Qdrant → LLM → citations)
-│       ├── storage.py          # CESNET S3 upload/download + pre-signed URLs
-│       ├── captcha.py          # CAPTCHA detection + incident creation
-│       ├── auth.py             # JWT signing (python-jose), bcrypt, ensure_admin_exists
-│       ├── scheduler.py        # APScheduler: periodic crawls, cleanup, gauge refresh
-│       ├── queue.py            # pika: publish job_id to RabbitMQ "ingest" queue
-│       ├── experiment.py       # Run batch experiment queries, compute recall@k / MRR / nDCG
-│       ├── metrics.py          # prometheus_client counters, histograms, gauges
-│       └── logging_config.py   # Structured JSON logging (python-json-logger)
-└── frontend/                   # Vue 3 + TypeScript SPA
-    ├── Dockerfile
-    ├── nginx.conf              # Nginx static file server with security headers
-    ├── src/
-    │   ├── main.ts             # App entry point + Keycloak token handler (?token= param)
-    │   ├── App.vue             # Root component (auth expiry listener)
-    │   ├── router/             # Vue Router (hash-based routing)
-    │   ├── stores/             # Pinia state management (auth, query history)
-    │   ├── api/                # Axios API client + TypeScript types
-    │   ├── views/              # Page components:
-    │   │                       #   LoginView, QueryView, SourcesView, PipelineView,
-    │   │                       #   IncidentsView, KnowledgeBaseView, ExperimentsView
-    │   └── components/         # AppLayout, AppSidebar, StatusBadge
-    └── package.json
+├── backend/          # FastAPI Python service — see docs/backend/README.md
+├── frontend/         # Vue 3 + TypeScript SPA — see docs/frontend/README.md
+├── tests/            # Pytest test suite — see docs/tests/README.md
+├── docker-compose.yml
+├── .env.example
+└── docs/
+    ├── backend/      # Backend architecture, data model, flows, services
+    ├── frontend/     # Frontend views, components, routing, auth
+    └── tests/        # Test structure, fixtures, coverage
 ```
+
+**Detailed documentation:**
+
+- **[Backend Documentation](docs/backend/README.md)** — directory structure, data model, ingest flow, RAG query flow, authentication, scheduler, logging, worker details, embedding model, metrics, recommended refactors
+- **[Frontend Documentation](docs/frontend/README.md)** — directory structure, views, components, API client, authentication flow, styling, nginx configuration, TypeScript types, UI behavior notes
+- **[Tests Documentation](docs/tests/README.md)** — test structure, fixtures, what is tested, running tests locally, CI status, adding new tests, troubleshooting
 
 ---
 
 ## Testing
 
-Tests live in `tests/` and run against a real PostgreSQL database (no mocking). The suite is intentionally minimal — it covers the critical paths and acts as a regression gate.
+See **[docs/tests/README.md](docs/tests/README.md)** for complete testing documentation.
 
-### Running locally
-
-```bash
-# from app/backend
-poetry install          # includes dev group (pytest, pytest-asyncio)
-```
-
-Set the required environment variables (same as local dev — copy `.env.example` to `.env`):
-
-```bash
-export POSTGRES_USER=rag
-export POSTGRES_PASSWORD=rag
-export POSTGRES_DB=rag
-export POSTGRES_HOST=localhost
-export JWT_SECRET=local-test-secret
-export FIRST_ADMIN_EMAIL=admin@test.local
-export FIRST_ADMIN_PASSWORD=testpassword123
-export FRONTEND_URL=http://localhost:5173
-```
-
-Then run:
+**Quick start:**
 
 ```bash
 cd backend
+poetry install
 poetry run pytest ../tests/ -v
 ```
 
@@ -1080,36 +1029,4 @@ ArgoCD sync waves:
 
 Secrets are provisioned via `terraform/vault` in `infra/`. DNS records are managed via `terraform/cloudflare`.
 
----
-
-## Recommended Refactors
-
-The current backend is a **monolith**: the same image runs both the FastAPI service (`uvicorn main:app`) and the RabbitMQ consumer (`python worker.py`). Both processes load BGE-M3 (~2.3 GB) into memory independently because every replica needs the model for either embedding (worker) or query-time embedding (API).
-
-### Split the embedding service into its own microservice
-
-**Motivation:**
-
-- **Memory**: today each API replica + each worker replica holds its own BGE-M3 weights. With N API and M worker pods that is `(N + M) × 2.3 GB`. A single embedding service would hold one copy.
-- **Independent scaling**: embedding is CPU-bursty (worker batches), the API is light and steady. They have very different resource profiles and should scale independently.
-- **Fast API startup**: today login (and every other endpoint) waits 15–45 s for BGE-M3 to load in the lifespan startup. An embedding microservice removes that dependency from the API entirely.
-- **Model upgrades**: swapping the embedding model becomes a deploy of one service, not a full backend rebuild.
-
-**Trade-offs:**
-
-- **Network overhead**: every query and every chunk batch becomes an RPC. Negligible at low QPS, real cost at scale — needs batching, timeouts, retries.
-- **Operational surface**: one more pod to monitor, alert on, and recover. Requires a circuit breaker so an embedding outage degrades gracefully instead of taking the API down.
-- **Code complexity**: define a stable HTTP/gRPC contract, serialise tensors, version the API.
-
-**When to do it:** when the project moves beyond student-scale traffic (e.g., dozens of QPS, more than a handful of worker replicas) or when the model needs to change frequently.
-
-### Cheaper interim fix — background model loading
-
-Until the split is justified, the startup-blocking problem can be solved without architectural change:
-
-- Move `get_embedding_model()` out of the FastAPI lifespan startup
-- Spawn it as a background `asyncio.to_thread` task that records a `model_ready` future
-- Have `/query` and embedding-touching endpoints `await` that future on first call
-- Keep the synchronous load in `worker.py` — workers can block, no user is waiting
-
-This keeps the monolith but makes login (and all non-embedding endpoints) responsive within seconds of container start, matching the behaviour you would get from a separate embedding service.
+For architectural recommendations and future refactoring considerations, see **[docs/backend/README.md](docs/backend/README.md#recommended-refactors)**.
