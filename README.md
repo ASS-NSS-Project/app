@@ -623,7 +623,7 @@ No authentication required. Returns `200` if the API is running.
 ```
 
 #### `GET /metrics`
-Prometheus metrics endpoint (no authentication). Scraped by the `rag-api` ServiceMonitor (`infra/argocd/apps/rag-system/config/rag-api-ServiceMonitor.yaml`) every 30 s.
+Prometheus metrics endpoint (no authentication). Scraped by the `webrag-api` ServiceMonitor (`infra/argocd/apps/webrag/config/webrag-api-ServiceMonitor.yaml`) every 30 s.
 
 Exported metrics:
 
@@ -1005,10 +1005,12 @@ See **[docs/.github/README.md](docs/.github/README.md)** for complete CI/CD docu
 4. Build & push images to GHCR (on `main`/`kost` push or semver tags only)
 
 **Published images:**
-- `ghcr.io/ass-nss-project/rag-api` — FastAPI backend (also used for worker)
-- `ghcr.io/ass-nss-project/rag-frontend` — Vue 3 / nginx SPA
+- `ghcr.io/ass-nss-project/webrag-api` — FastAPI backend (also used for workers)
+- `ghcr.io/ass-nss-project/webrag-frontend` — Vue 3 / nginx SPA
 
-**Image tags:** `main-<sha>`, `kost-<sha>`, or `1.2.3` (semver)
+**Image tags:**
+- Branch: `main-<sha>`, `kost-<sha>`
+- Semver: `0.1.0`, `0.1`, `0` (tag v0.1.0 produces all three)
 
 ---
 
@@ -1048,7 +1050,7 @@ ArgoCD sync waves:
 
 - Wave 19 — `rabbitmq-operator` (RabbitMQ Cluster Operator)
 - Wave 20 — `qdrant` (Qdrant via Helm)
-- Wave 21 — `rag-system` (API, worker, frontend, CNPG Postgres, secrets via ESO/Vault)
+- Wave 19 — `webrag` (API, workers, frontend, CNPG Postgres, secrets via ESO/Vault)
 
 Secrets are provisioned via `terraform/vault` in `infra/`. DNS records are managed via `terraform/cloudflare`.
 
