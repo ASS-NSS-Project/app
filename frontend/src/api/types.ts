@@ -108,6 +108,7 @@ export interface QueryResponse {
   answer: string
   mode: string
   chunks_retrieved: number
+  model_name?: string | null
   citations: Citation[]
   warning?: string
   grounding_mode: 'strict' | 'relaxed'

@@ -52,6 +52,7 @@ class QueryResponse(BaseModel):
     mode: str
     citations: list[CitationResponse]
     chunks_retrieved: int
+    model_name: Optional[str] = None
     warning: Optional[str] = None
     grounding_mode: str = "strict"
     grounded_claim_ratio: Optional[float] = None

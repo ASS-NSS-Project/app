@@ -279,8 +279,8 @@ const queryInputRef = ref<any>(null)
 watch(() => store.mode, (mode) => {
   if (mode === 'no_rag') store.strictGrounding = false
 })
-watch(() => store.question, (q) => {
-  if (!q.trim()) resetQueryInputHeight()
+watch(() => store.question, () => {
+  syncQueryInputHeight()
 })
 
 // Custom API override (optional — leave blank to use server defaults)
@@ -313,7 +313,10 @@ watch([customBaseUrl, customModel], () => {
 
 const previousTurns = computed(() => store.history.slice(0, sessionStartIndex.value))
 const activeTurn = computed(() => store.history.length ? store.history[store.history.length - 1] : null)
-const activeModelLabel = computed(() => customModel.value || customBaseUrl.value || 'server default')
+const activeModelLabel = computed(() => {
+  if (activeTurn.value?.result.model_name) return activeTurn.value.result.model_name
+  return customModel.value || customBaseUrl.value || 'server default'
+})
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -344,6 +347,16 @@ function resetQueryInputHeight() {
     if (!textarea) return
     textarea.style.height = 'auto'
     textarea.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
+function syncQueryInputHeight() {
+  nextTick(() => {
+    const rootEl = queryInputRef.value?.$el ?? null
+    const textarea = rootEl?.querySelector?.('textarea') as HTMLTextAreaElement | null
+    if (!textarea) return
+    textarea.style.height = 'auto'
+    textarea.style.height = `${textarea.scrollHeight}px`
   })
 }
 
