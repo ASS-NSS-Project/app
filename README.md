@@ -1005,12 +1005,14 @@ See **[docs/.github/README.md](docs/.github/README.md)** for complete CI/CD docu
 4. Build & push images to GHCR (on `main`/`kost` push or semver tags only)
 
 **Published images:**
-- `ghcr.io/ass-nss-project/webrag-api` — FastAPI backend (also used for workers)
+- `ghcr.io/ass-nss-project/webrag-backend` — Monorepo image containing API + workers
+  - Used by: API Deployment, ingest worker StatefulSet, embedding worker StatefulSet
+  - Same image, different commands: `uvicorn main:app`, `python worker.py`, `python worker_embed.py`
 - `ghcr.io/ass-nss-project/webrag-frontend` — Vue 3 / nginx SPA
 
 **Image tags:**
-- Branch: `main-<sha>`, `kost-<sha>`
-- Semver: `0.1.0`, `0.1`, `0` (tag v0.1.0 produces all three)
+- Branch: `main-<sha>`, `kost-<sha>` (automatic on push)
+- Semver: `0.1.0`, `0.1`, `0` (manual: `git tag v0.1.0 && git push --tags`)
 
 ---
 
