@@ -2,7 +2,7 @@
 
 A production system for scraping web content, extracting structured data with AI vision, and answering questions via RAG (Retrieval-Augmented Generation).
 
-LLM and VLM inference runs on **CERIT-SC AIaaS** (e-INFRA). Object storage uses **CESNET S3**. Everything else — Postgres, RabbitMQ, Qdrant, the API, the worker — runs in Docker/Podman.
+LLM and VLM inference runs on **CERIT-SC AIaaS** (e-INFRA). Object storage uses **MinIO** for local dev and **CESNET S3** in production. Everything else — Postgres, RabbitMQ, Qdrant, the API, the worker — runs in Docker/Podman.
 
 ---
 
@@ -16,7 +16,7 @@ LLM and VLM inference runs on **CERIT-SC AIaaS** (e-INFRA). Object storage uses 
    - Embedding happens **asynchronously in background** (1-5 minutes)
 4. **Answers** questions using RAG — retrieves relevant passages, then answers with citations via a text LLM on AIaaS
    - **Keyword fallback** if Qdrant is down (Postgres full-text search)
-5. **Tracks** CAPTCHA incidents, audit logs, and evidence files in CESNET S3
+5. **Tracks** CAPTCHA incidents, audit logs, and evidence files in S3-compatible object storage
 6. **Experiments** — run named batch query sets to benchmark retrieval quality over time
 7. **Auto-heals** drift between Postgres and Qdrant (background service runs every 15-30 minutes)
 
@@ -26,7 +26,7 @@ LLM and VLM inference runs on **CERIT-SC AIaaS** (e-INFRA). Object storage uses 
 
 - **Docker** with Compose v2, or **Podman** with podman-compose
 - **Git**
-- Credentials for **CESNET S3** (object storage) and **CERIT-SC AIaaS** (LLM/VLM endpoints)
+- Credentials for **CERIT-SC AIaaS** (LLM/VLM endpoints)
 
 ---
 
@@ -57,10 +57,10 @@ POSTGRES_DB=ragdb
 RABBITMQ_DEFAULT_USER=raguser
 RABBITMQ_DEFAULT_PASS=change_me_strong_password
 
-# CESNET S3 (dev uses separate buckets — see Object Storage section)
-S3_ENDPOINT_URL=https://s3.cl4.du.cesnet.cz
-S3_ACCESS_KEY=<provided-by-team>
-S3_SECRET_KEY=<provided-by-team>
+# Local dev object storage (MinIO from docker-compose)
+S3_ENDPOINT_URL=http://minio:9000
+S3_ACCESS_KEY=minioadmin
+S3_SECRET_KEY=minioadmin
 S3_USE_PATH_STYLE=true
 S3_BUCKET_EVIDENCE=rag-evidence-dev
 S3_BUCKET_DOCS=rag-documents-dev
@@ -699,7 +699,7 @@ Frontend / Nginx :8080 (host) → :80 (container)
 
 Storage layers:
 ├─ PostgreSQL :5432 (metadata, jobs, audit, chunks with status tracking)
-├─ CESNET S3 (screenshots, markdown, chunks.json, optional embedding backups)
+├─ MinIO/CESNET S3 (screenshots, markdown, chunks.json, optional embedding backups)
 └─ Qdrant :6333 (rebuilable vector index, hot cache)
 
 LLM/VLM inference: CERIT-SC AIaaS (OpenAI-compatible API)
@@ -715,13 +715,13 @@ Production deployment: Kubernetes — see infra/
 
 ---
 
-## Object Storage (CESNET S3)
+## Object Storage (MinIO + CESNET S3)
 
-The system stores evidence files (screenshots, HTML dumps) and extracted document content in CESNET Metacentrum S3 (Ceph-backed, S3-compatible).
+The system stores evidence files (screenshots, HTML dumps) and extracted document content in S3-compatible object storage.
 
 ### Local development
 
-Dev uses **separate buckets** so that test data never touches production:
+Local compose includes a MinIO container and auto-creates dev buckets on startup:
 
 | Variable | Dev value |
 |----------|-----------|
@@ -729,16 +729,16 @@ Dev uses **separate buckets** so that test data never touches production:
 | `S3_BUCKET_DOCS` | `rag-documents-dev` |
 | `S3_USE_PATH_STYLE` | `true` |
 
-Create the dev buckets once via the CESNET S3 console or CLI before first run. The app no longer creates buckets automatically — if a bucket is missing or the credentials are wrong, the API logs a structured error on startup (`event: s3_bucket_missing` or `event: s3_bucket_auth_error`) and refuses to start.
+If you disable MinIO and point to a different S3 endpoint, those buckets must already exist. The app no longer creates buckets automatically — if a bucket is missing or the credentials are wrong, the API logs a structured error on startup (`event: s3_bucket_missing` or `event: s3_bucket_auth_error`) and refuses to start.
 
-### Production (Kubernetes)
+### Production (Kubernetes, CESNET S3)
 
-Prod buckets are provisioned by Terraform and locked down with a bucket policy that **denies all anonymous requests**:
+Prod buckets are provisioned by Terraform (`infra/terraform/du-cesnet`) and locked down with a bucket policy that **denies all anonymous requests**:
 
 | Variable | Prod value |
 |----------|-----------|
-| `S3_BUCKET_EVIDENCE` | `rag-evidence` |
-| `S3_BUCKET_DOCS` | `rag-documents` |
+| `S3_BUCKET_EVIDENCE` | `rag-evidence-prod` |
+| `S3_BUCKET_DOCS` | `rag-documents-prod` |
 | `S3_USE_PATH_STYLE` | `false` |
 
 Credentials are injected via Vault → ESO → Kubernetes Secret. A random internet user who obtains an object URL gets `403 AccessDenied` — the bucket policy rejects requests without valid HMAC credentials.
@@ -922,7 +922,7 @@ docker compose down -v       # Stop and delete all data (fresh start)
 → Verify `AIAAS_BASE_URL`, `AIAAS_API_KEY`, and `AIAAS_VLM_MODEL` in `.env`. Test the endpoint with `curl -H "Authorization: Bearer $AIAAS_API_KEY" $AIAAS_BASE_URL/models`.
 
 **S3 upload errors**
-→ Verify `S3_ENDPOINT_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`. Check that the buckets named in `S3_BUCKET_EVIDENCE` (`rag-evidence-dev` for local dev) and `S3_BUCKET_DOCS` (`rag-documents-dev` for local dev) exist and the credentials have write access. The app does not create buckets — they must exist before startup.
+→ Verify `S3_ENDPOINT_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`. For default local compose, ensure `minio` and `minio_init` containers are healthy and completed, and that `S3_BUCKET_EVIDENCE` (`rag-evidence-dev`) and `S3_BUCKET_DOCS` (`rag-documents-dev`) exist.
 
 **Playwright/screenshot errors**
 → Screenshot strategy needs Chromium in the worker container. If it fails, rebuild: `docker compose build --no-cache worker`.
