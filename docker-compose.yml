@@ -143,7 +143,6 @@ services:
 
       - JWT_SECRET=${JWT_SECRET}
       - API_DOCS=${API_DOCS:-false}
-      - DEFAULT_SOURCE_URLS=${DEFAULT_SOURCE_URLS:-}
 
       - SERVICE_NAME=api
 
