@@ -206,7 +206,7 @@ import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import { get, del } from '@/api/client'
-import type { DocumentResponse, ChunkResponse, SourceResponse } from '@/api/types'
+import type { DocumentResponse, ChunkResponse, SourceResponse, DocumentStatsResponse } from '@/api/types'
 import { relTime } from '@/utils/time'
 import { useAuthStore } from '@/stores/auth'
 
@@ -270,7 +270,6 @@ async function loadDocuments() {
     const params = new URLSearchParams({ limit: String(limit.value), offset: String(offset.value) })
     if (sourceFilter.value.trim()) params.append('source_id', sourceFilter.value.trim())
     documents.value = await get<DocumentResponse[]>(`/documents/?${params}`)
-    stats.value.documents = offset.value + documents.value.length
   } catch (e: any) {
     error.value = e.message ?? 'Failed to load documents'
   } finally {
@@ -278,10 +277,24 @@ async function loadDocuments() {
   }
 }
 
+async function loadStats() {
+  try {
+    const params = new URLSearchParams()
+    if (sourceFilter.value.trim()) params.append('source_id', sourceFilter.value.trim())
+    const s = await get<DocumentStatsResponse>(`/documents/stats${params.toString() ? `?${params}` : ''}`)
+    stats.value.documents = s.documents
+    stats.value.chunks = s.chunks
+    stats.value.embeddedPct = s.embedded_pct
+    stats.value.sources = s.sources
+  } catch {
+    // keep previous stats if stats endpoint fails
+  }
+}
+
 function applyFilter() {
   offset.value = 0
   page.value = 0
-  loadDocuments()
+  Promise.all([loadDocuments(), loadStats()])
 }
 
 function clearFilter() {
@@ -308,11 +321,6 @@ async function openChunks(doc: DocumentResponse) {
   chunksLoading.value = true
   try {
     chunks.value = await get<ChunkResponse[]>(`/documents/${doc.id}/chunks`)
-    const embedded = chunks.value.filter(c => c.is_embedded).length
-    stats.value.chunks = Math.max(stats.value.chunks, chunks.value.length)
-    stats.value.embeddedPct = chunks.value.length
-      ? Math.round((embedded / chunks.value.length) * 100)
-      : 0
   } catch (e: any) {
     error.value = e.message ?? 'Failed to load chunks'
   } finally {
@@ -333,6 +341,7 @@ async function deleteDocument(doc: DocumentResponse) {
   try {
     await del<void>(`/documents/${doc.id}`)
     documents.value = documents.value.filter((d) => d.id !== doc.id)
+    await loadStats()
     if (selectedDoc.value?.id === doc.id) {
       selectedDoc.value = null
       chunksVisible.value = false
@@ -344,7 +353,7 @@ async function deleteDocument(doc: DocumentResponse) {
 }
 
 onMounted(async () => {
-  await loadDocuments()
+  await Promise.all([loadDocuments(), loadStats()])
   try {
     const sources = await get<SourceResponse[]>('/sources/?limit=200')
     sourceOptions.value = [

@@ -2,8 +2,11 @@
 # Seed the four example sources and trigger an initial ingest for each.
 # Usage:
 #   ./seed_sources.sh                        # uses defaults below
-#   API_URL=https://rag.nss.jkzl.eu ./seed_sources.sh
-#   ADMIN_EMAIL=me@example.com ADMIN_PASSWORD=secret ./seed_sources.sh
+
+#   API_URL=https://rag.nss.jkzl.eu
+#   export ADMIN_EMAIL=admin 
+#   export ADMIN_PASSWORD=secret 
+#   ./seed_sources.sh
 
 set -euo pipefail
 

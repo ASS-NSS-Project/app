@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from database import get_db
 from models import User, UserRole, Document, Chunk, Evidence
@@ -58,6 +59,13 @@ class EvidenceUrlResponse(BaseModel):
     expires_in: int = 3600
 
 
+class DocumentStatsResponse(BaseModel):
+    documents: int
+    chunks: int
+    embedded_pct: int
+    sources: int
+
+
 @router.get("/", response_model=list[DocumentResponse])
 def list_documents(
     source_id: Optional[str] = Query(None),
@@ -70,6 +78,35 @@ def list_documents(
     if source_id:
         q = q.filter(Document.source_id == source_id)
     return q.order_by(Document.created_at.desc()).offset(offset).limit(limit).all()
+
+
+@router.get("/stats", response_model=DocumentStatsResponse)
+def get_document_stats(
+    source_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_authenticated_user),
+):
+    doc_q = db.query(Document)
+    if source_id:
+        doc_q = doc_q.filter(Document.source_id == source_id)
+
+    documents = doc_q.count()
+    sources = doc_q.with_entities(Document.source_id).distinct().count()
+
+    chunk_q = db.query(Chunk)
+    if source_id:
+        chunk_q = chunk_q.join(Document, Chunk.document_id == Document.id).filter(Document.source_id == source_id)
+
+    chunks = chunk_q.count()
+    embedded = chunk_q.filter(Chunk.is_embedded == True).count()
+    embedded_pct = round((embedded / chunks) * 100) if chunks else 0
+
+    return DocumentStatsResponse(
+        documents=documents,
+        chunks=chunks,
+        embedded_pct=embedded_pct,
+        sources=sources,
+    )
 
 
 @router.get("/{doc_id}", response_model=DocumentResponse)

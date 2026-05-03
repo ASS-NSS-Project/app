@@ -220,9 +220,31 @@
           {{ showPrevious ? '▴' : '▾' }} {{ previousTurns.length }} previous {{ previousTurns.length === 1 ? 'query' : 'queries' }}
         </button>
         <template v-if="showPrevious">
-          <div v-for="turn in previousTurns" :key="turn.id" class="prev-turn">
-            <div class="prev-question">{{ turn.question }}</div>
-            <div class="prev-answer">{{ turn.result.answer.slice(0, 200) }}{{ turn.result.answer.length > 200 ? '…' : '' }}</div>
+          <div
+            v-for="turn in previousTurns"
+            :key="turn.id"
+            class="prev-turn"
+            :class="{ expanded: expandedPreviousTurnId === turn.id }"
+            @click="togglePreviousTurn(turn.id)"
+          >
+            <div class="prev-head">
+              <div class="prev-question">{{ turn.question }}</div>
+              <button
+                v-if="expandedPreviousTurnId === turn.id"
+                class="prev-hide-btn"
+                title="Hide message"
+                @click.stop="expandedPreviousTurnId = null"
+              >
+                <i class="pi pi-eye-slash"></i>
+              </button>
+            </div>
+            <div class="prev-answer">
+              {{
+                expandedPreviousTurnId === turn.id
+                  ? turn.result.answer
+                  : turn.result.answer.slice(0, 200) + (turn.result.answer.length > 200 ? '…' : '')
+              }}
+            </div>
           </div>
         </template>
       </div>
@@ -249,6 +271,7 @@ const queryError = ref('')
 const sources = ref<SourceResponse[]>([])
 const sessionStartIndex = ref(0)
 const showPrevious = ref(false)
+const expandedPreviousTurnId = ref<string | null>(null)
 const shareCopied = ref(false)
 const showLegend = ref(false)
 const queryInputRef = ref<any>(null)
@@ -482,6 +505,11 @@ function onClearChat() {
   resetQueryInputHeight()
   sessionStartIndex.value = 0
   showPrevious.value = false
+  expandedPreviousTurnId.value = null
+}
+
+function togglePreviousTurn(turnId: string) {
+  expandedPreviousTurnId.value = expandedPreviousTurnId.value === turnId ? null : turnId
 }
 
 onMounted(async () => {
@@ -932,9 +960,45 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.prev-turn:hover {
+  border-color: var(--border2);
+}
+.prev-turn.expanded {
+  border-color: rgba(0, 230, 118, 0.35);
+  background: rgba(0, 230, 118, 0.03);
+}
+.prev-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.prev-hide-btn {
+  border: 1px solid var(--border2);
+  background: var(--surface2);
+  color: var(--muted);
+  border-radius: 6px;
+  width: 26px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.prev-hide-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
 }
 .prev-question { font-size: 13px; font-weight: 500; color: var(--text2); }
-.prev-answer { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.prev-answer {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
 
 /* Empty state */
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 40px 0; color: var(--muted); }

@@ -147,6 +147,13 @@ export interface DocumentResponse {
   created_at: string
 }
 
+export interface DocumentStatsResponse {
+  documents: number
+  chunks: number
+  embedded_pct: number
+  sources: number
+}
+
 export interface ChunkResponse {
   id: string
   document_id: string

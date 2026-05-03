@@ -485,6 +485,23 @@ List all ingested documents (paginated).
 
 ---
 
+#### `GET /documents/stats`
+Return aggregate knowledge-base counters used by the Knowledge Base header cards.
+
+**Query params**: `source_id` (optional UUID filter).
+
+**Response `200`**:
+```json
+{
+  "documents": 42,
+  "chunks": 1280,
+  "embedded_pct": 96,
+  "sources": 7
+}
+```
+
+---
+
 #### `GET /documents/{doc_id}`
 Fetch a single document by ID.
 
