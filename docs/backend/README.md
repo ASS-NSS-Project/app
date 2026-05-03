@@ -52,77 +52,169 @@ All tables are defined in `models.py`. PKs are UUID strings. Database tables are
 | `sources` | Monitored URLs | `base_url`, `preferred_strategy`, `crawl_frequency_hours`, `last_crawled_at` |
 | `ingest_jobs` | One per scrape attempt | `status` (pending/running/done/failed/captcha_blocked), `strategy_used`, `quality_score` |
 | `evidence` | Scraped artifacts (screenshots, HTML dumps) | `storage_uri` (S3 path), `file_hash`, `type` |
-| `documents` | Extracted page content | `url`, `doc_version`, `content_uri`, `ingest_strategy`, `content_hash` |
-| `chunks` | Text segments for vector search | `text`, `chunk_type` (text/table/block), `is_embedded`, `bounding_box`, `citation_evidence_id` |
+| `documents` | Extracted page content | `url`, `doc_version`, `markdown_uri`, `chunks_uri`, `ingest_strategy`, `content_hash` |
+| `chunks` | Text segments for vector search | `text`, `chunk_type`, `embedding_status`, `qdrant_sync_status`, `text_vector` (TSVECTOR), `retry_count` |
 | `incidents` | CAPTCHA / rate-limit / block events | `type`, `status` (open/in_progress/resolved), `evidence_screenshot_uri` |
 | `audit_logs` | Immutable action log | `action`, `object_type`, `object_id`, `extra` (JSON) |
 | `experiments` | Batch query benchmarks | `status`, `recall_at_k`, `mrr`, `ndcg`, `avg_latency_ms` |
 | `experiment_queries` | Individual queries within an experiment | `query_text`, `expected_keywords`, per-query metrics |
 
+**Key changes:**
+- `documents.markdown_uri` / `chunks_uri` — S3 paths for resilient storage
+- `chunks.embedding_status` — tracks embedding lifecycle (pending → in_progress → done | failed)
+- `chunks.qdrant_sync_status` — tracks Qdrant sync state (missing → synced | out_of_sync)
+- `chunks.text_vector` — PostgreSQL TSVECTOR for keyword fallback search
+
 ---
 
-## Ingest Flow
+## Ingest Flow (Async Architecture)
+
+### Phase 1: Ingest (30 seconds — returns immediately)
 
 ```text
 POST /sources/{id}/ingest
   → create IngestJob (status: pending)
   → publish {job_id} to RabbitMQ "ingest" queue
 
-worker.py on_message()
+worker.py (ingest worker) on_message()
   → process_ingest_job(job_id)
   → IngestService.run(job_id):
 
       Strategy 0 — RSS/Atom feed (api)
-        feedparser → concatenate entry titles + summaries
+        Jina.ai reader + RSS fallback → markdown
 
       Strategy 1 — HTML (httpx + BeautifulSoup)
-        fetch URL → parse visible text → check len >= quality_threshold_chars (default 200)
+        fetch URL → parse visible text → markdownify → markdown
         → CAPTCHA check (keyword scan of HTML)
 
       Strategy 2 — Rendered DOM (Playwright headless Chrome)
-        launch browser → wait for JS → read DOM + take screenshot
-        → CAPTCHA check
+        launch browser → wait for JS → read DOM → markdownify → markdown
+        → take screenshot → CAPTCHA check
 
       Strategy 3 — VLM screenshot (ExtractionService)
-        send screenshot to AIaaS vision model → get structured text back
+        take screenshot → send to AIaaS vision model → get structured text
         → CAPTCHA check
 
       If CAPTCHA detected at any step:
         → create Incident, set job status: captcha_blocked, upload screenshot to S3
 
       If success:
-        → save Document (text) to Postgres
+        → process markdown via markdownify (standardize format)
         → split into Chunks (split_prose / split_tables / split_vlm)
-        → upload screenshot + HTML to S3 docs bucket
+        → serialize chunks to JSON
+        → upload to S3: document.md + chunks.json + metadata.json
+        → create Document (markdown_uri, chunks_uri set)
+        → create Chunks (embedding_status='pending', qdrant_sync_status='missing')
+        → save to Postgres
         → set job status: done
 
-  → _embed_job_chunks(db, job):
-      → EmbeddingService.embed_chunks(db, doc.id)
-      → BGE-M3 dense + sparse vectors per chunk
-      → upsert into Qdrant (RRF hybrid scoring)
+  → _queue_embedding_job(db, job):
+      → publish {document_id} to RabbitMQ "embeddings" queue
+      → return immediately (embedding happens async)
   → update source.last_crawled_at
 ```
 
-**Worker recovery behavior:** If a RabbitMQ message is redelivered after a worker restart (for example OOMKill during embedding), the worker does not blindly skip non-`pending` jobs. It resumes `running` jobs and retries the embedding step for `done` jobs to prevent "document/chunks saved but vectors missing" drift.
+**User sees:** Ingest completes in 30 seconds. Content is immediately queryable via keyword search (Postgres full-text).
 
-**Qdrant/Postgres drift handling:** On API startup, if Postgres has zero chunks but Qdrant still contains vectors (for example after DB reset with persistent Qdrant volume), the collection is recreated automatically. During search, stale vectors whose `chunk_id` no longer exists in Postgres are filtered out and deleted from Qdrant as best-effort cleanup.
+### Phase 2: Embedding (1-5 minutes — background worker)
+
+```text
+worker_embed.py (embedding worker) on_message()
+  → process_embedding_job(document_id)
+  → load Chunks WHERE embedding_status IN ('pending', 'failed')
+  → mark chunks as 'in_progress', increment retry_count
+  → batch embed using BGE-M3 (dense + sparse vectors)
+  → build PointStruct for each chunk
+  → upsert to Qdrant (wait=True)
+  → optional: backup embeddings to S3 (if ENABLE_EMBEDDING_BACKUP_S3=true)
+  → mark chunks as 'done':
+      - embedding_status='done'
+      - embedded_at=NOW()
+      - qdrant_sync_status='synced'
+      - qdrant_synced_at=NOW()
+      - is_embedded=True (legacy)
+  → commit to Postgres
+
+  If error:
+    → mark chunks as 'failed', set embedding_error
+    → requeue if retry_count < 3
+```
+
+**User sees:** After 1-5 minutes, queries now use vector search (faster, better relevance).
+
+**Worker recovery behavior:** If a RabbitMQ message is redelivered after a worker restart, the worker resumes `running` jobs and retries the embedding step for `done` jobs to prevent drift.
+
+**Qdrant/Postgres drift handling:** Background heal service runs every 15-30 minutes to detect and fix drift automatically.
 
 ---
 
-## RAG Query Flow
+## RAG Query Flow (with Fallback)
 
 ```text
 POST /query {question, top_k, source_id?, strict_grounding, mode, model_id?}
-  → embed question with BGE-M3 (dense + sparse)
-  → Qdrant hybrid search: prefetch 50 dense + 50 sparse, RRF fusion, return top_k
+  
+  → check Qdrant health (ping collection)
+  
+  IF Qdrant healthy:
+    → embed question with BGE-M3 (dense + sparse)
+    → Qdrant hybrid search: prefetch 50 dense + 50 sparse, RRF fusion, return top_k
+    → mode='rag'
+  
+  ELSE (Qdrant down OR no results):
+    → fallback to Postgres full-text search:
+      - convert question to tsquery
+      - search chunks.text_vector using ts_match()
+      - rank by ts_rank(), return top_k
+    → mode='keyword_fallback', warning='Vector search unavailable, using keyword fallback'
+  
   → chunks + question → LLM (AIaaS / OpenAI / Gemini / Anthropic)
       strict_grounding=true: system prompt forces LLM to use only retrieved context
   → _strip_thinking(): remove <think>…</think> tags from response
   → build citations: url + truncated text + relevance_score per chunk
-  → return {answer, citations[], chunks_retrieved, mode}
+  → return {answer, citations[], chunks_retrieved, mode, warning?}
 ```
 
+**Resilience:**
+- Qdrant down? Falls back to keyword search automatically (no 502 errors)
+- New sources? Keyword search works immediately, vectors ready in 1-5 minutes
+- Embedding fails? Heal service retries automatically (max 3 attempts)
+
 The `GET /query/models` endpoint returns the list of available LLM models. AIaaS models are always present; external provider models (OpenAI, Gemini, Anthropic) are included only when the corresponding API key is configured in the backend environment. The frontend uses this list to populate the model selector — no API keys are ever sent to or stored by the frontend.
+
+---
+
+## Sync & Heal Service
+
+**File:** `services/sync.py`
+
+Background service that automatically detects and fixes drift between Postgres and Qdrant. Runs as scheduled jobs via APScheduler.
+
+### Jobs
+
+| Job | Interval | Purpose |
+|-----|----------|---------|
+| **heal_pending_embeddings** | 5 min | Finds chunks stuck in `pending` status for >10 minutes and requeues them |
+| **heal_failed_embeddings** | 15 min | Retries `failed` embeddings if retry_count < 3 |
+| **detect_qdrant_drift** | 15 min | Compares Postgres count (embedding_status='done') with Qdrant count, alerts if >10% difference |
+| **heal_qdrant_sync** | 30 min | Finds chunks marked as `done` but `qdrant_sync_status != 'synced'` and requeues for re-embedding |
+
+### Drift Detection
+
+```python
+postgres_count = count(chunks WHERE embedding_status='done')
+qdrant_count = qdrant.count('rag_chunks')
+drift_pct = abs(postgres_count - qdrant_count) / postgres_count * 100
+
+if drift_pct > 10%:
+  logger.warning("Qdrant drift detected")
+  if AUTO_RESYNC_ON_DRIFT:
+    heal_qdrant_sync()  # Trigger automatic resync
+```
+
+**Configuration:**
+- `HEAL_INTERVAL_MINUTES=15` — how often heal jobs run
+- `DRIFT_ALERT_THRESHOLD_PCT=10.0` — alert threshold for drift
+- `AUTO_RESYNC_ON_DRIFT=true` — auto-trigger resync when drift detected
 
 ---
 
@@ -186,9 +278,39 @@ All backend services emit **structured JSON** via `python-json-logger` (configur
 
 ## Worker Details
 
-Processes one job at a time (`prefetch_count=1`). RabbitMQ heartbeat = 600 s (prevents disconnection during BGE-M3 model download, first boot only). `hf_cache` Docker volume is shared between `api` and `worker` so the model is downloaded once. BGE-M3 (BAAI/bge-m3, fp16) occupies ~2.3 GB loaded — API memory limit is 4 Gi.
+### Ingest Worker (`worker.py`)
 
-In Kubernetes, the worker runs as a **StatefulSet** (not a Deployment) because the BGE-M3 cache volume is `ReadWriteOnce`. Each replica gets its own `hf-cache` PVC; scaling workers means setting `replicas` to any positive integer — each pulls independently from the shared RabbitMQ queue.
+**Purpose:** Scrapes web content and stores to S3/Postgres (fast, 30 seconds).
+
+- **Queue:** `"ingest"`
+- **Processes:** One job at a time (`prefetch_count=1`)
+- **Heartbeat:** 600 s (prevents disconnection during long scrapes)
+- **Output:** Document + Chunks in Postgres, markdown + chunks.json in S3
+- **Next step:** Publishes document_id to `"embeddings"` queue
+
+### Embedding Worker (`worker_embed.py`)
+
+**Purpose:** Embeds chunks and indexes in Qdrant (background, 1-5 minutes).
+
+- **Queue:** `"embeddings"`
+- **Processes:** One document at a time (`prefetch_count=1`)
+- **Heartbeat:** 600 s (prevents disconnection during BGE-M3 model download)
+- **Model:** BGE-M3 (BAAI/bge-m3, fp16) — ~2.3 GB loaded
+- **Retry:** Requeues failed jobs up to 3 times
+- **Output:** Vectors in Qdrant, chunks marked as `embedding_status='done'`
+- **Metrics port:** 9091 (separate from ingest worker)
+
+### Docker Volumes
+
+- `api` — BGE-M3 cache for API (query-time embedding)
+- `worker` — BGE-M3 cache for ingest worker (unused, kept for compatibility)
+- `worker_embed` — BGE-M3 cache for embedding worker (actual embedding work)
+
+Each worker has its own cache volume so the model is downloaded once per container.
+
+### Kubernetes Deployment
+
+In Kubernetes, both workers run as **StatefulSets** (not Deployments) because the BGE-M3 cache volume is `ReadWriteOnce`. Each replica gets its own `hf-cache` PVC; scaling workers means setting `replicas` to any positive integer — each pulls independently from the shared RabbitMQ queues.
 
 ---
 
@@ -297,3 +419,91 @@ Until the split is justified, the startup-blocking problem can be solved without
 - Keep the synchronous load in `worker.py` — workers can block, no user is waiting
 
 This keeps the monolith but makes login (and all non-embedding endpoints) responsive within seconds of container start, matching the behaviour you would get from a separate embedding service.
+
+---
+
+## Resilience Features
+
+### 5-Minute SLA
+
+New sources are queryable within 5 minutes:
+- **Ingest completes in 30 seconds** — stores to S3/Postgres
+- **Keyword fallback works immediately** — Postgres full-text search on `chunks.text_vector`
+- **Vector embeddings complete in background** — 1-5 minutes via `worker_embed.py`
+
+### Automatic Healing
+
+Background jobs run every 5-30 minutes (see `services/sync.py`):
+- **Detect stuck pending embeddings** → requeue after 10 minutes
+- **Detect failed embeddings** → retry (max 3 attempts)
+- **Detect Qdrant drift** → alert if >10% difference, trigger bulk resync if enabled
+- **Heal out-of-sync chunks** → re-embed chunks marked as done but not synced
+
+### Fallback Search
+
+If Qdrant is down or unreachable:
+- Queries automatically fall back to **Postgres full-text search** using `tsvector`
+- Response includes `mode: "keyword_fallback"` and `warning: "Vector search unavailable"`
+- **No 502 errors** — degraded but functional
+- Keyword search uses English language stemming and stop words (Postgres `english` config)
+
+**Enable/disable:** Set `ENABLE_KEYWORD_FALLBACK=true` in `.env` (enabled by default)
+
+### S3 as Source of Truth
+
+All content is stored in S3 for disaster recovery:
+
+```
+s3://rag-documents/{source_id}/{job_id}/
+  document.md       # Processed markdown (via markdownify)
+  chunks.json       # All chunks with metadata
+  metadata.json     # Job metadata (strategy, quality_score, timestamps)
+
+s3://rag-embeddings/{chunk_id}/  # Optional, if ENABLE_EMBEDDING_BACKUP_S3=true
+  dense.npy         # Dense vector (NumPy array, 1024 floats)
+  sparse.npz        # Sparse vector (compressed)
+```
+
+**Qdrant is rebuilable:**
+- Delete collection? Heal service will re-embed from Postgres within 30 minutes
+- Embedding backups in S3? Restore without re-embedding (if enabled)
+- Database lost? Reconstruct from S3 chunks.json files
+
+### Configuration
+
+**New environment variables:**
+
+```env
+# Embedding
+EMBEDDING_TIMEOUT_MINUTES=5
+ENABLE_EMBEDDING_BACKUP_S3=false
+S3_BUCKET_EMBEDDINGS=rag-embeddings
+
+# Fallback
+ENABLE_KEYWORD_FALLBACK=true
+FALLBACK_SEARCH_ENGINE=postgres_tsvector
+QDRANT_HEALTH_CHECK_TIMEOUT=2.0
+
+# Healing
+HEAL_INTERVAL_MINUTES=15
+DRIFT_ALERT_THRESHOLD_PCT=10.0
+AUTO_RESYNC_ON_DRIFT=true
+```
+
+### Setup Full-Text Search
+
+Run once after upgrading to enable keyword fallback:
+
+```bash
+psql $DATABASE_URL < backend/scripts/setup_tsvector.sql
+```
+
+This creates:
+- Trigger function `chunks_text_vector_update()`
+- Trigger on `chunks` table (auto-updates `text_vector` on insert/update)
+- GIN index on `text_vector` for fast full-text search
+- Backfills existing rows
+
+---
+
+## Authentication
