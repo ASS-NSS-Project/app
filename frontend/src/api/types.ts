@@ -109,6 +109,7 @@ export interface QueryResponse {
   mode: string
   chunks_retrieved: number
   citations: Citation[]
+  warning?: string
 }
 
 export interface IncidentResponse {

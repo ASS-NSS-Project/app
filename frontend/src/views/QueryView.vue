@@ -113,9 +113,20 @@
         <!-- Left: answer -->
         <div class="answer-panel card">
           <div class="answer-meta">
-            <Tag :value="activeTurn.result.mode.toUpperCase()" :severity="activeTurn.result.mode === 'rag' ? 'info' : 'secondary'" rounded />
+            <Tag
+              :value="formatModeLabel(activeTurn.result.mode)"
+              :severity="activeTurn.result.mode === 'rag' ? 'info' : activeTurn.result.mode === 'keyword_fallback' ? 'warn' : 'secondary'"
+              rounded
+            />
             <Tag :value="`${activeTurn.result.chunks_retrieved} chunks`" severity="secondary" rounded />
           </div>
+
+          <!-- Warning banner for fallback mode -->
+          <div v-if="activeTurn.result.warning" class="warning-banner">
+            <i class="pi pi-exclamation-triangle"></i>
+            <span>{{ activeTurn.result.warning }}</span>
+          </div>
+
           <div class="answer-text">{{ activeTurn.result.answer }}</div>
 
           <div class="answer-footer">
@@ -223,6 +234,11 @@ const modelGroups = computed(() => {
 })
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatModeLabel(mode: string): string {
+  if (mode === 'keyword_fallback') return 'KEYWORD SEARCH'
+  return mode.toUpperCase()
+}
 
 function sourceNameFromUrl(url: string): string {
   try {
@@ -641,6 +657,22 @@ onMounted(async () => {
   gap: 12px;
 }
 .answer-meta { display: flex; gap: 6px; }
+
+.warning-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius);
+  font-size: 13px;
+  color: var(--warning);
+}
+.warning-banner i {
+  font-size: 16px;
+}
+
 .answer-text {
   flex: 1;
   font-size: 14px;
