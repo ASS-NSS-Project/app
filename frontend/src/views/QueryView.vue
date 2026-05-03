@@ -29,7 +29,7 @@
           </div>
           <div class="legend-item">
             <span class="legend-badge badge-strict">Strict Grounding</span>
-            <span class="legend-text">The LLM is instructed to answer <em>only</em> from the retrieved chunks and to say "I don't know" if the context is insufficient. Prevents the model from supplementing with general knowledge. Only available in RAG mode.</span>
+            <span class="legend-text">Fail-closed mode: the system answers only from retrieved chunks, verifies citation support, and refuses if evidence is insufficient. Prevents supplementation with general knowledge. Only available in RAG mode.</span>
           </div>
         </div>
       </div>
@@ -118,7 +118,7 @@
         <span class="ctx-sep">·</span>
         <span class="ctx-label">Mode: {{ activeTurn.result.mode.toUpperCase() }}</span>
         <span class="ctx-sep">·</span>
-        <span class="ctx-label">Strict: {{ store.strictGrounding ? 'on' : 'off' }}</span>
+        <span class="ctx-label">Grounding: {{ activeTurn.result.grounding_mode }}</span>
         <span class="ctx-sep">·</span>
         <span class="ctx-label">{{ activeModelLabel }}</span>
       </div>
@@ -146,6 +146,23 @@
               rounded
             />
             <Tag :value="`${activeTurn.result.chunks_retrieved} chunks`" severity="secondary" rounded />
+            <Tag
+              :value="activeTurn.result.grounding_mode === 'strict' ? 'STRICT' : 'RELAXED'"
+              :severity="activeTurn.result.grounding_mode === 'strict' ? 'warning' : 'secondary'"
+              rounded
+            />
+            <Tag
+              v-if="activeTurn.result.verification_passed !== null && activeTurn.result.verification_passed !== undefined"
+              :value="activeTurn.result.verification_passed ? 'VERIFIED' : 'UNVERIFIED'"
+              :severity="activeTurn.result.verification_passed ? 'success' : 'danger'"
+              rounded
+            />
+            <Tag
+              v-if="activeTurn.result.grounded_claim_ratio !== null && activeTurn.result.grounded_claim_ratio !== undefined"
+              :value="`grounded ${(activeTurn.result.grounded_claim_ratio * 100).toFixed(0)}%`"
+              severity="secondary"
+              rounded
+            />
           </div>
 
           <!-- Warning banner for fallback mode -->

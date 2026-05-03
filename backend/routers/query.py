@@ -53,6 +53,9 @@ class QueryResponse(BaseModel):
     citations: list[CitationResponse]
     chunks_retrieved: int
     warning: Optional[str] = None
+    grounding_mode: str = "strict"
+    grounded_claim_ratio: Optional[float] = None
+    verification_passed: Optional[bool] = None
 
 
 @router.get("/models", response_model=list[ModelInfo])
@@ -76,6 +79,8 @@ async def query(
     """
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
+    if request.mode == "no_rag":
+        request.strict_grounding = False
 
     logger.info("Query received", extra={
         "event": "query_received",

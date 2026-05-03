@@ -247,12 +247,26 @@ class RAGService:
 
         # If still no chunks, return "no information" response
         if not chunks:
+            if strict_grounding:
+                return {
+                    "answer": "I cannot answer this from the currently retrieved sources.",
+                    "mode": search_mode,
+                    "citations": [],
+                    "chunks_retrieved": 0,
+                    "warning": "Strict grounding is enabled and no sufficient grounded context was found.",
+                    "grounding_mode": "strict",
+                    "grounded_claim_ratio": 1.0,
+                    "verification_passed": True,
+                }
             return {
                 "answer": "I could not find any relevant information in the knowledge base for this question.",
-                "mode": "rag",
+                "mode": search_mode,
                 "citations": [],
                 "chunks_retrieved": 0,
-                "warning": "No sources available"
+                "warning": "No sources available",
+                "grounding_mode": "relaxed",
+                "grounded_claim_ratio": 0.0,
+                "verification_passed": None,
             }
 
         # Step 2: Build context string from retrieved chunks
@@ -270,6 +284,7 @@ class RAGService:
             response = await client.chat.completions.create(
                 model=model,
                 max_tokens=2048,
+                temperature=0.0 if strict_grounding else 0.3,
                 **extra_kwargs,
                 messages=[
                     {"role": "system", "content": self._build_rag_system_prompt(strict_grounding)},
@@ -303,6 +318,7 @@ class RAGService:
             raise RuntimeError(f"LLM API returned {e.status_code}: {e.message}")
 
         answer = self._strip_thinking(response.choices[0].message.content or "")
+        verification = self._verify_grounding(answer, chunks) if strict_grounding else None
 
         citations = [
             {
@@ -314,12 +330,31 @@ class RAGService:
             for i, chunk in enumerate(chunks)
         ]
 
+        if strict_grounding and verification and not verification["passed"]:
+            return {
+                "answer": "I cannot provide a strictly grounded answer from the retrieved context.",
+                "mode": search_mode,
+                "citations": citations,
+                "chunks_retrieved": len(chunks),
+                "warning": "Strict grounding verification failed: unsupported claims detected.",
+                "grounding_mode": "strict",
+                "grounded_claim_ratio": verification["ratio"],
+                "verification_passed": False,
+            }
+
+        relaxed_warning = warning
+        if not strict_grounding and not relaxed_warning:
+            relaxed_warning = "Relaxed grounding mode: answer may include model knowledge beyond retrieved sources."
+
         return {
             "answer": answer,
             "mode": search_mode,
             "citations": citations,
             "chunks_retrieved": len(chunks),
-            "warning": warning,
+            "warning": relaxed_warning if not strict_grounding else warning,
+            "grounding_mode": "strict" if strict_grounding else "relaxed",
+            "grounded_claim_ratio": verification["ratio"] if verification else None,
+            "verification_passed": verification["passed"] if verification else None,
         }
 
     async def _query_no_rag(
@@ -366,6 +401,10 @@ class RAGService:
             "mode": "no_rag",
             "citations": [],
             "chunks_retrieved": 0,
+            "grounding_mode": "relaxed",
+            "grounded_claim_ratio": 0.0,
+            "verification_passed": None,
+            "warning": "No RAG mode: response is not grounded in indexed sources.",
         }
 
     @staticmethod
@@ -391,3 +430,30 @@ Your citations allow users to verify every claim you make."""
 You have been provided with context documents from a knowledge base.
 Use these documents as your primary source, but you may supplement with general knowledge when clearly needed.
 Always cite the context documents when you use them with [1], [2], etc. notation."""
+
+    def _verify_grounding(self, answer: str, chunks: list[dict]) -> dict:
+        """
+        Lightweight strict-grounding verifier.
+        Checks whether answer claim-like sentences include citations and whether
+        citation IDs are valid for retrieved chunks.
+        """
+        if not answer.strip():
+            return {"passed": False, "ratio": 0.0}
+
+        max_idx = len(chunks)
+        # Split by sentence terminators and newlines; robust enough for multilingual text.
+        claims = [c.strip() for c in re.split(r"[.!?\n]+", answer) if c.strip()]
+        if not claims:
+            return {"passed": False, "ratio": 0.0}
+
+        supported = 0
+        for claim in claims:
+            refs = re.findall(r"\[(\d+)\]", claim)
+            if not refs:
+                continue
+            valid_refs = [int(r) for r in refs if 1 <= int(r) <= max_idx]
+            if valid_refs:
+                supported += 1
+
+        ratio = supported / len(claims)
+        return {"passed": ratio >= 0.8, "ratio": round(ratio, 3)}

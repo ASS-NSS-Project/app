@@ -442,7 +442,7 @@ Ask a question. Returns an answer with citations from the knowledge base.
 | `mode` | `"rag"` | `"rag"` retrieves chunks first; `"no_rag"` asks the LLM directly |
 | `top_k` | `5` | Number of chunks to retrieve |
 | `source_id` | `null` | Restrict retrieval to one source (UUID) |
-| `strict_grounding` | `true` | If true, LLM only uses retrieved context; if false, may use general knowledge |
+| `strict_grounding` | `true` | `true`: fail-closed grounded mode (verifies citation support and refuses if insufficient evidence). `false`: relaxed mode (may use model knowledge beyond retrieved chunks). |
 | `upstream_base_url` | `null` | Override the server-configured LLM endpoint (any OpenAI-compatible URL) |
 | `upstream_api_key` | `null` | API key for the custom upstream endpoint |
 | `upstream_model` | `null` | Model name for the upstream endpoint |
@@ -464,7 +464,11 @@ In the Query UI, the autosizing input resets back to compact height when cleared
       "relevance_score": 0.912
     }
   ],
-  "chunks_retrieved": 5
+  "chunks_retrieved": 5,
+  "grounding_mode": "strict",
+  "grounded_claim_ratio": 1.0,
+  "verification_passed": true,
+  "warning": null
 }
 ```
 

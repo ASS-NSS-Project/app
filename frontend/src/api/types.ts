@@ -110,6 +110,9 @@ export interface QueryResponse {
   chunks_retrieved: number
   citations: Citation[]
   warning?: string
+  grounding_mode: 'strict' | 'relaxed'
+  grounded_claim_ratio?: number | null
+  verification_passed?: boolean | null
 }
 
 export interface IncidentResponse {
