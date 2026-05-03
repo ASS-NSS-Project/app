@@ -138,8 +138,8 @@ def process_embedding_job(document_id: str) -> None:
         )
 
         # Optional: Backup embeddings to S3
-        storage = StorageService()
         if settings.enable_embedding_backup_s3:
+            storage = StorageService()
             for chunk, emb in zip(chunks, embeddings):
                 try:
                     embedding_uri = storage.store_embedding_backup(
