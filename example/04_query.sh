@@ -3,7 +3,7 @@
 # Usage:
 #   ./04_query.sh 
 
-#   export API_URL=https://rag.nss.jkzl.eu 
+#   export API_URL=https://webrag.nss.jkzl.eu 
 #   export ADMIN_EMAIL=admin 
 #   export ADMIN_PASSWORD=secret 
 #   ./04_query.sh "What is Terraform?"

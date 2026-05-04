@@ -3,7 +3,7 @@
 # Usage:
 #   ./02_check_knowledge_base.sh
 
-#   export API_URL=https://rag.nss.jkzl.eu
+#   export API_URL=https://webrag.nss.jkzl.eu
 #   export ADMIN_EMAIL=admin 
 #   export ADMIN_PASSWORD=secret 
 #   export SOURCE_ID=<uuid>

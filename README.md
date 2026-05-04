@@ -1064,29 +1064,29 @@ The production deployment lives in [ASS-NSS-Project/infra](https://github.com/AS
 
 | Service | Production URL |
 |---------|----------------|
-| Main UI + API | <https://rag.nss.jkzl.eu> |
+| Main UI + API | <https://webrag.nss.jkzl.eu> |
 | RabbitMQ Management | <https://rabbitmq.nss.jkzl.eu> |
 
-The API is accessible via the `/api` prefix on `rag.nss.jkzl.eu` — Traefik rewrites `/api/*` → `/*` before forwarding to the backend. This lets cURL clients target a stable public endpoint without needing to know the internal path layout.
+The API is accessible via the `/api` prefix on `webrag.nss.jkzl.eu` — Traefik rewrites `/api/*` → `/*` before forwarding to the backend. This lets cURL clients target a stable public endpoint without needing to know the internal path layout.
 
 The worker runs as a **StatefulSet** in Kubernetes (not a Deployment) because the BGE-M3 cache volume is `ReadWriteOnce`. Each replica gets its own `hf-cache` PVC; scaling workers means setting `replicas` to any positive integer — each pulls independently from the shared RabbitMQ queue.
 
 **cURL example (production):**
 ```bash
 # Obtain a JWT token
-TOKEN=$(curl -s -X POST https://rag.nss.jkzl.eu/api/auth/login \
+TOKEN=$(curl -s -X POST https://webrag.nss.jkzl.eu/api/auth/login \
   -d "username=user@example.com&password=YOUR_PASSWORD" \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
 # Query the RAG system
-curl -s -X POST https://rag.nss.jkzl.eu/api/query/ \
+curl -s -X POST https://webrag.nss.jkzl.eu/api/query/ \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"question": "What are the latest findings?", "top_k": 5}' \
   | python3 -m json.tool
 
 # List available models
-curl -s https://rag.nss.jkzl.eu/api/query/models \
+curl -s https://webrag.nss.jkzl.eu/api/query/models \
   -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 ```
 
