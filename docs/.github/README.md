@@ -35,8 +35,10 @@ The `changes` job detects which parts of the codebase changed:
 | `tests/test_api.py` | conventional-commits + backend-tests | None (tests don't trigger builds) |
 | `backend/services/rag.py` | conventional-commits + backend-tests | webrag-backend |
 | `frontend/src/views/QueryView.vue` | conventional-commits + frontend-build | webrag-frontend |
-| `example/query.sh` | conventional-commits + shell-syntax | None |
+| `example/04_query.sh` | conventional-commits + shell-syntax | None |
 | `backend/**` + `frontend/**` | all jobs | webrag-backend + webrag-frontend |
+
+Changes under `example/` only set the `examples` filter. They do not set `backend` or `frontend`, so `build-and-push` is skipped and no container image is built.
 
 ---
 

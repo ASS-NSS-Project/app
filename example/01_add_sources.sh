@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Seed the example sources and trigger an initial ingest for each.
 # Usage:
-#   ./add_sources.sh 
+#   ./01_add_sources.sh 
 
 #   export API_URL=https://rag.nss.jkzl.eu
 #   export ADMIN_EMAIL=admin 
 #   export ADMIN_PASSWORD=secret 
-#   ./add_sources.sh
+#   ./01_add_sources.sh
 
 set -euo pipefail
 

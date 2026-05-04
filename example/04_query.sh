@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # Run a query against /query.
 # Usage:
-#   ./query.sh 
+#   ./04_query.sh 
 
 #   export API_URL=https://rag.nss.jkzl.eu 
 #   export ADMIN_EMAIL=admin 
 #   export ADMIN_PASSWORD=secret 
-#   ./query.sh "What is Terraform?"
+#   ./04_query.sh "What is Terraform?"
 
-#   MODE=no_rag TOP_K=3 STRICT_GROUNDING=false ./query.sh "Who is rector at MENDELU?"
-#   UPSTREAM_PROVIDER=anthropic UPSTREAM_API_KEY=sk-ant-... UPSTREAM_MODEL=claude-sonnet-4-5-20250929 ./query.sh "Explain Terraform"
-#   UPSTREAM_PROVIDER=bedrock UPSTREAM_MODEL=anthropic.claude-3-5-sonnet-20241022-v2:0 UPSTREAM_CONFIG='{"aws_region_name":"eu-central-1"}' ./query.sh "Explain Terraform"
+#   MODE=no_rag TOP_K=3 STRICT_GROUNDING=false ./04_query.sh "Who is rector at MENDELU?"
+#   UPSTREAM_PROVIDER=anthropic UPSTREAM_API_KEY=sk-ant-... UPSTREAM_MODEL=claude-sonnet-4-5-20250929 ./04_query.sh "Explain Terraform"
+#   UPSTREAM_PROVIDER=bedrock UPSTREAM_MODEL=anthropic.claude-3-5-sonnet-20241022-v2:0 UPSTREAM_CONFIG='{"aws_region_name":"eu-central-1"}' ./04_query.sh "Explain Terraform"
 
 set -euo pipefail
 

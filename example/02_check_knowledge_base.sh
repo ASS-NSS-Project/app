@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
-# List sources via API.
+# Check knowledge base stats + latest documents.
 # Usage:
-#   ./list_sources.sh
+#   ./02_check_knowledge_base.sh
 
 #   export API_URL=https://rag.nss.jkzl.eu
 #   export ADMIN_EMAIL=admin 
 #   export ADMIN_PASSWORD=secret 
-#   ./list_sources.sh
+#   export SOURCE_ID=<uuid>
+#   ./02_check_knowledge_base.sh
 
 set -euo pipefail
 
 API_URL="${API_URL:-http://localhost:8000}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@example.com}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
-LIMIT="${LIMIT:-100}"
+LIMIT="${LIMIT:-20}"
 OFFSET="${OFFSET:-0}"
+SOURCE_ID="${SOURCE_ID:-}"
 
 if [[ -z "$ADMIN_PASSWORD" ]]; then
   read -rsp "Admin password: " ADMIN_PASSWORD
@@ -31,6 +33,19 @@ if [[ -z "$TOKEN" ]]; then
   exit 1
 fi
 
-echo "=== Currently present sources ==="
-curl -sf "${API_URL}/sources/?limit=${LIMIT}&offset=${OFFSET}" \
+if [[ -n "$SOURCE_ID" ]]; then
+  STATS_PATH="/documents/stats?source_id=${SOURCE_ID}"
+  DOCS_PATH="/documents/?source_id=${SOURCE_ID}&limit=${LIMIT}&offset=${OFFSET}"
+else
+  STATS_PATH="/documents/stats"
+  DOCS_PATH="/documents/?limit=${LIMIT}&offset=${OFFSET}"
+fi
+
+echo "=== Knowledge Base Stats ==="
+curl -sf "${API_URL}${STATS_PATH}" \
   -H "Authorization: Bearer ${TOKEN}" | jq .
+echo
+echo "=== Documents ==="
+curl -sf "${API_URL}${DOCS_PATH}" \
+  -H "Authorization: Bearer ${TOKEN}" | jq . 
+echo

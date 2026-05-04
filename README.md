@@ -114,21 +114,21 @@ Open **http://localhost:8080** and log in with `FIRST_ADMIN_EMAIL` / `FIRST_ADMI
 
 ### 5. Example helper scripts
 
-Two helper scripts are available in `app/example/`:
+Helper scripts are available in `app/example/`:
 
-- `seed_sources.sh` — creates a few sample sources and immediately queues ingest jobs.
-- `list_sources.sh` — lists current sources (`GET /sources/`).
-- `check_knowledge_base.sh` — prints KB stats + documents (`GET /documents/stats`, `GET /documents/`).
-- `query.sh` — sends a question to RAG query endpoint (`POST /query/`).
+- `00_set_vars.sh` — prompts for `API_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, then opens a numbered script menu.
+- `01_add_sources.sh` — creates a few sample sources and immediately queues ingest jobs.
+- `02_check_knowledge_base.sh` — prints KB stats + documents (`GET /documents/stats`, `GET /documents/`).
+- `03_list_sources.sh` — lists current sources (`GET /sources/`).
+- `04_query.sh` — sends a question to RAG query endpoint (`POST /query/`).
 
 Run from the `app/` directory:
 
 ```bash
 cd app
-./example/seed_sources.sh
-./example/list_sources.sh
-./example/check_knowledge_base.sh
-./example/query.sh "What is Terraform?"
+./example/00_set_vars.sh
+./example/03_list_sources.sh
+./example/04_query.sh "What is Terraform?"
 ```
 
 ---
@@ -1036,7 +1036,7 @@ poetry run pytest ../tests/ -v
 
 ### CI status
 
-`backend-tests` runs in GitHub Actions against PostgreSQL 16 on every PR/push. Example helper scripts are checked with `bash -n example/*.sh` whenever they change, which catches shell syntax errors without executing API calls. The image build job is gated on both backend tests and frontend build, so failed tests block image publishing immediately.
+`backend-tests` runs in GitHub Actions against PostgreSQL 16 on every PR/push. Example helper scripts are checked with `bash -n example/*.sh` whenever they change, which catches shell syntax errors without executing API calls. Example-only changes do not trigger backend/frontend image builds. The image build job is gated on both backend tests and frontend build, so failed tests block image publishing immediately.
 
 ---
 
