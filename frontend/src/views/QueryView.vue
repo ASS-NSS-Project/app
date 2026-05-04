@@ -83,7 +83,7 @@
                 @click="applyProviderPreset(preset)"
               >
                 <span class="help-provider">{{ preset.name }}</span>
-                <code class="help-url">{{ preset.baseUrl }}</code>
+                <code class="help-url">{{ preset.endpoint }}</code>
                 <span class="help-models">{{ preset.models }}</span>
               </button>
             </div>
@@ -97,6 +97,7 @@
             <div class="model-key-wrap compact">
               <label class="model-label">PROVIDER</label>
               <select v-model="customProvider" class="model-key-input">
+                <option value="">Default</option>
                 <option value="openai_compatible">OpenAI-compatible</option>
                 <option value="openrouter">OpenRouter</option>
                 <option value="openai">OpenAI</option>
@@ -359,79 +360,108 @@ watch(() => store.question, () => {
 const customBaseUrl = ref('')
 const customApiKey = ref('')
 const customModel = ref('')
-const customProvider = ref('openai_compatible')
+const customProvider = ref('')
 const customConfigJson = ref('')
 const showCustomFields = ref(false)
 const showCustomHelp = ref(false)
 const providerPresets = [
   {
+    name: 'Default',
+    provider: '',
+    baseUrl: '',
+    endpoint: 'server env: QUERY_BASE_URL',
+    model: '',
+    configJson: '',
+    models: 'server env: QUERY_MODEL',
+  },
+  {
     name: 'OpenRouter',
     provider: 'openrouter',
     baseUrl: 'https://openrouter.ai/api/v1',
+    endpoint: 'https://openrouter.ai/api/v1',
     model: 'openrouter/auto',
+    configJson: '',
     models: 'openrouter/auto, anthropic/claude-sonnet-4.5, openai/gpt-5-mini',
   },
   {
     name: 'OpenAI',
     provider: 'openai',
     baseUrl: 'https://api.openai.com/v1',
+    endpoint: 'https://api.openai.com/v1',
     model: 'gpt-4o',
+    configJson: '',
     models: 'gpt-4o, gpt-4.1, o4-mini',
   },
   {
     name: 'Claude / Anthropic',
     provider: 'anthropic',
     baseUrl: '',
+    endpoint: 'https://api.anthropic.com',
     model: 'claude-sonnet-4-5-20250929',
+    configJson: '',
     models: 'claude-sonnet-4.5, claude-haiku-4.5',
   },
   {
     name: 'Gemini API',
     provider: 'gemini',
     baseUrl: '',
+    endpoint: 'https://generativelanguage.googleapis.com',
     model: 'gemini-2.5-flash',
+    configJson: '',
     models: 'gemini-2.5-flash, gemini-2.5-pro',
   },
   {
     name: 'AWS Bedrock',
     provider: 'bedrock',
     baseUrl: '',
+    endpoint: 'https://bedrock-runtime.<region>.amazonaws.com',
     model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    configJson: '{"aws_region_name":"eu-central-1"}',
     models: 'requires AWS keys + region in options JSON',
   },
   {
     name: 'Vertex AI',
     provider: 'vertex_ai',
     baseUrl: '',
+    endpoint: 'https://<location>-aiplatform.googleapis.com',
     model: 'gemini-2.5-flash',
+    configJson: '{"vertex_project":"your-gcp-project","vertex_location":"europe-west4"}',
     models: 'requires GCP project/location in options JSON',
   },
   {
     name: 'Azure OpenAI',
     provider: 'azure',
     baseUrl: '',
+    endpoint: 'https://<resource>.openai.azure.com',
     model: 'your-deployment-name',
+    configJson: '{"api_version":"2024-10-21"}',
     models: 'requires endpoint + api_version in options JSON',
   },
   {
     name: 'Groq',
     provider: 'groq',
     baseUrl: 'https://api.groq.com/openai/v1',
+    endpoint: 'https://api.groq.com/openai/v1',
     model: 'llama-3.3-70b-versatile',
+    configJson: '',
     models: 'llama-3.3-70b, mixtral-8x7b',
   },
   {
     name: 'DeepSeek',
     provider: 'deepseek',
     baseUrl: 'https://api.deepseek.com/v1',
+    endpoint: 'https://api.deepseek.com/v1',
     model: 'deepseek-chat',
+    configJson: '',
     models: 'deepseek-chat, deepseek-reasoner',
   },
   {
     name: 'Local Ollama',
     provider: 'ollama',
     baseUrl: 'http://localhost:11434/v1',
+    endpoint: 'http://localhost:11434/v1',
     model: 'llama3.3',
+    configJson: '',
     models: 'llama3.3, qwen2.5, mistral',
   },
 ]
@@ -444,7 +474,7 @@ onMounted(() => {
       const parsed = JSON.parse(saved)
       customBaseUrl.value = parsed.baseUrl || ''
       customModel.value = parsed.model || ''
-      customProvider.value = parsed.provider || 'openai_compatible'
+      customProvider.value = parsed.provider || ''
       customConfigJson.value = parsed.configJson || ''
     } catch { /* ignore corrupt storage */ }
   }
@@ -489,10 +519,11 @@ function timestampFilename(): string {
   return new Date().toISOString().slice(0, 19).replace(/:/g, '-')
 }
 
-function applyProviderPreset(preset: { provider: string; baseUrl: string; model: string }) {
+function applyProviderPreset(preset: { provider: string; baseUrl: string; model: string; configJson: string }) {
   customProvider.value = preset.provider
   customBaseUrl.value = preset.baseUrl
   customModel.value = preset.model
+  customConfigJson.value = preset.configJson
 }
 
 function parseCustomConfig(): Record<string, unknown> | null | undefined {

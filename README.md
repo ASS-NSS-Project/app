@@ -469,7 +469,7 @@ Ask a question. Returns an answer with citations from the knowledge base.
 | `upstream_model` | `null` | Model or deployment name. Provider prefixes are added automatically for known LiteLLM providers. |
 | `upstream_config` | `null` | Provider-specific JSON object forwarded to LiteLLM, for example `{"aws_region_name":"eu-central-1"}` or `{"api_version":"2024-10-21"}`. |
 
-Leave all `upstream_*` fields empty to use the server-configured defaults (`QUERY_BASE_URL` / `QUERY_MODEL`). The `enable_thinking` extra body is only sent when using the default endpoint — suppressed for custom upstreams.
+Leave all `upstream_*` fields empty to use the server-configured defaults (`QUERY_BASE_URL` / `QUERY_MODEL`). The Query UI exposes this as the `Default` provider preset. The `enable_thinking` extra body is only sent when using the default endpoint — suppressed for custom upstreams.
 
 Custom non-OpenAI-compatible providers are routed through LiteLLM in the backend image and CI test environment, so the same Query UI can call OpenAI, Anthropic/Claude, Gemini API, Vertex AI, AWS Bedrock, Azure OpenAI, OpenRouter, Groq, DeepSeek, Ollama, and other LiteLLM-supported providers. OpenRouter can also work through the OpenAI-compatible path (`https://openrouter.ai/api/v1`); when that base URL is used, the backend adds OpenRouter attribution headers (`HTTP-Referer`, `X-Title`) automatically.
 
