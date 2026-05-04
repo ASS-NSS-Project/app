@@ -94,6 +94,7 @@ jobs:
           poetry export -f requirements.txt --only main --without-hashes -o /tmp/requirements.txt
           cd ..
           pip install -r /tmp/requirements.txt pytest pytest-asyncio httpx
+          pip install litellm==1.83.8
 
       - name: Run tests
         env:

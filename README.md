@@ -451,6 +451,7 @@ Ask a question. Returns an answer with citations from the knowledge base.
   "top_k": 5,
   "source_id": null,
   "strict_grounding": true,
+  "upstream_provider": null,
   "upstream_model": "qwen3.5-122b"
 }
 ```
@@ -462,13 +463,19 @@ Ask a question. Returns an answer with citations from the knowledge base.
 | `top_k` | `5` | Number of chunks to retrieve |
 | `source_id` | `null` | Restrict retrieval to one source (UUID) |
 | `strict_grounding` | `true` | `true`: fail-closed grounded mode (verifies citation support and refuses if insufficient evidence). `false`: relaxed mode (may use model knowledge beyond retrieved chunks). |
-| `upstream_base_url` | `null` | Override the server-configured LLM endpoint (any OpenAI-compatible URL) |
-| `upstream_api_key` | `null` | API key for the custom upstream endpoint |
-| `upstream_model` | `null` | Model name for the upstream endpoint |
+| `upstream_provider` | `null` | Custom provider adapter. Supported UI presets include `openai_compatible`, `openrouter`, `openai`, `anthropic`, `gemini`, `vertex_ai`, `bedrock`, `azure`, `groq`, `deepseek`, `ollama`, and `custom_litellm`. |
+| `upstream_base_url` | `null` | Optional endpoint/base URL. Required for generic OpenAI-compatible endpoints and usually for Azure/OpenAI-compatible self-hosted APIs. |
+| `upstream_api_key` | `null` | API key or primary secret for the custom upstream endpoint. Some providers also need extra fields in `upstream_config`. |
+| `upstream_model` | `null` | Model or deployment name. Provider prefixes are added automatically for known LiteLLM providers. |
+| `upstream_config` | `null` | Provider-specific JSON object forwarded to LiteLLM, for example `{"aws_region_name":"eu-central-1"}` or `{"api_version":"2024-10-21"}`. |
 
 Leave all `upstream_*` fields empty to use the server-configured defaults (`QUERY_BASE_URL` / `QUERY_MODEL`). The `enable_thinking` extra body is only sent when using the default endpoint — suppressed for custom upstreams.
 
-In the Query UI, the autosizing input resets back to compact height when cleared (including whitespace-only content).
+Custom non-OpenAI-compatible providers are routed through LiteLLM in the backend image and CI test environment, so the same Query UI can call OpenAI, Anthropic/Claude, Gemini API, Vertex AI, AWS Bedrock, Azure OpenAI, OpenRouter, Groq, DeepSeek, Ollama, and other LiteLLM-supported providers. OpenRouter can also work through the OpenAI-compatible path (`https://openrouter.ai/api/v1`); when that base URL is used, the backend adds OpenRouter attribution headers (`HTTP-Referer`, `X-Title`) automatically.
+
+If no sources or chunks have been ingested yet, RAG mode returns a normal `200` response instead of initializing retrieval and failing with a server error. Empty-context and strict-grounding refusal answers are generated in the same language as the user's question. In relaxed grounding mode, the response first says that no retrieved/indexed documents contain the answer, then adds a short general-knowledge answer outside the retrieved context.
+
+In the Query UI, previous turns expand into the same answer/citation detail layout as the active turn. The mode legend explains both selectable modes (`RAG`, `No RAG`, `Strict Grounding`) and the result grounding labels (`strict`, `relaxed`) shown in the answer context line. The autosizing input also shrinks immediately when text rows are deleted and resets back to compact height when cleared.
 
 **Response `200`**:
 ```json

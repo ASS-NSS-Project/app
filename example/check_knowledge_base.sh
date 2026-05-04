@@ -43,9 +43,9 @@ fi
 
 echo "=== Knowledge Base Stats ==="
 curl -sf "${API_URL}${STATS_PATH}" \
-  -H "Authorization: Bearer ${TOKEN}"
+  -H "Authorization: Bearer ${TOKEN}" | jq .
 echo
 echo "=== Documents ==="
 curl -sf "${API_URL}${DOCS_PATH}" \
-  -H "Authorization: Bearer ${TOKEN}"
+  -H "Authorization: Bearer ${TOKEN}" | jq . 
 echo

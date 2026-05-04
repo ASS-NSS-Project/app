@@ -6,7 +6,7 @@
 #   export API_URL=https://rag.nss.jkzl.eu
 #   export ADMIN_EMAIL=admin 
 #   export ADMIN_PASSWORD=secret 
-#   ./addsources.sh
+#   ./add_sources.sh
 
 set -euo pipefail
 

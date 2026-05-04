@@ -9,13 +9,15 @@ With RAG:    Ask the LLM a question →
              2. Give those chunks to the LLM as context
              3. LLM answers based on OUR data, with citations
 
-Uses any OpenAI-compatible API endpoint (QUERY_BASE_URL / QUERY_MODEL).
+Server defaults use the configured OpenAI-compatible endpoint. User-supplied
+custom providers can be routed through LiteLLM for Anthropic, Gemini, Bedrock,
+Vertex AI, Azure OpenAI, OpenRouter, and other supported providers.
 """
 
 import logging
 import re
 import time
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 from openai import AsyncOpenAI, APITimeoutError, APIStatusError
@@ -51,6 +53,44 @@ def _get_llm_client() -> AsyncOpenAI:
     return _llm_client
 
 
+def _is_openrouter_url(base_url: str) -> bool:
+    return "openrouter.ai" in base_url.lower()
+
+
+def _openrouter_headers() -> dict[str, str]:
+    headers = {"X-Title": "ASS-NSS WebRAG"}
+    if settings.frontend_url:
+        headers["HTTP-Referer"] = settings.frontend_url
+    return headers
+
+
+def _provider_is_openai_compatible(provider: Optional[str]) -> bool:
+    return (provider or "openai_compatible") in {"openai_compatible", "openrouter"}
+
+
+def _normalize_litellm_model(provider: Optional[str], model: str) -> str:
+    provider = (provider or "").strip()
+    if not provider or provider in {"custom_litellm", "openai_compatible"}:
+        return model
+    if provider == "openrouter":
+        return model if model.startswith("openrouter/") else f"openrouter/{model}"
+    prefixes = {
+        "openai": "openai/",
+        "anthropic": "anthropic/",
+        "gemini": "gemini/",
+        "vertex_ai": "vertex_ai/",
+        "bedrock": "bedrock/",
+        "azure": "azure/",
+        "groq": "groq/",
+        "deepseek": "deepseek/",
+        "ollama": "ollama/",
+    }
+    prefix = prefixes.get(provider)
+    if prefix and not model.startswith(prefix):
+        return f"{prefix}{model}"
+    return model
+
+
 class RAGService:
     """
     Handles both RAG and no-RAG query modes.
@@ -58,7 +98,13 @@ class RAGService:
 
     def __init__(self):
         self.client = _get_llm_client()
-        self.embedder = _get_embedder()
+        self._embedder: Optional[EmbeddingService] = None
+
+    @property
+    def embedder(self) -> EmbeddingService:
+        if self._embedder is None:
+            self._embedder = _get_embedder()
+        return self._embedder
 
     async def query(
         self,
@@ -71,22 +117,44 @@ class RAGService:
         upstream_base_url: Optional[str] = None,
         upstream_api_key: Optional[str] = None,
         upstream_model: Optional[str] = None,
+        upstream_provider: Optional[str] = None,
+        upstream_config: Optional[dict[str, Any]] = None,
     ) -> dict:
         t0 = time.monotonic()
 
-        # Custom upstream client (user-provided API key + base URL)
-        if upstream_base_url and not upstream_api_key:
+        provider = upstream_provider or "openai_compatible"
+        upstream_config = upstream_config or {}
+        has_custom_provider = any([upstream_base_url, upstream_api_key, upstream_model, upstream_provider, upstream_config])
+
+        if upstream_base_url and not upstream_api_key and _provider_is_openai_compatible(provider):
             raise RuntimeError(
                 f"An API key is required for external provider ({upstream_base_url}). "
                 "Enter your key in the API KEY field."
             )
 
-        if upstream_base_url and upstream_api_key:
-            client = AsyncOpenAI(
-                base_url=upstream_base_url,
-                api_key=upstream_api_key,
-                timeout=httpx.Timeout(connect=10.0, read=180.0, write=10.0, pool=5.0),
-            )
+        litellm_config = None
+        if has_custom_provider and not _provider_is_openai_compatible(provider):
+            model = _normalize_litellm_model(provider, upstream_model or settings.query_model)
+            litellm_config = {
+                **upstream_config,
+                "api_key": upstream_api_key or upstream_config.get("api_key"),
+            }
+            if upstream_base_url:
+                litellm_config["api_base"] = upstream_base_url
+            client = None
+            aiaas_extras = False
+            logger.info("Using LiteLLM provider %s model=%s", provider, model,
+                        extra={"event": "litellm_provider", "provider": provider, "model": model})
+        elif upstream_base_url and upstream_api_key:
+            default_headers = _openrouter_headers() if _is_openrouter_url(upstream_base_url) else None
+            client_kwargs = {
+                "base_url": upstream_base_url,
+                "api_key": upstream_api_key,
+                "timeout": httpx.Timeout(connect=10.0, read=180.0, write=10.0, pool=5.0),
+            }
+            if default_headers:
+                client_kwargs["default_headers"] = default_headers
+            client = AsyncOpenAI(**client_kwargs)
             model = upstream_model or settings.query_model
             # enable_thinking is an AIaaS-specific extension (suppresses chain-of-thought
             # output from DeepSeek/Qwen3 reasoning models). Standard OpenAI/Anthropic APIs
@@ -100,9 +168,9 @@ class RAGService:
             aiaas_extras = True
 
         if mode == "rag":
-            result = await self._query_rag(question, top_k, source_id, strict_grounding, db, client, model, aiaas_extras)
+            result = await self._query_rag(question, top_k, source_id, strict_grounding, db, client, model, aiaas_extras, litellm_config)
         else:
-            result = await self._query_no_rag(question, client, model, aiaas_extras)
+            result = await self._query_no_rag(question, client, model, aiaas_extras, litellm_config)
         QUERY_REQUESTS_TOTAL.labels(mode=mode).inc()
         QUERY_DURATION.labels(mode=mode).observe(time.monotonic() - t0)
         return result
@@ -213,7 +281,45 @@ class RAGService:
         client: Optional[AsyncOpenAI] = None,
         model: Optional[str] = None,
         aiaas_extras: bool = True,
+        litellm_config: Optional[dict[str, Any]] = None,
     ) -> dict:
+        model = model or settings.query_model
+
+        if db is not None:
+            from models import Chunk, Document, Source
+
+            if not source_id and db.query(Source).count() == 0:
+                return await self._query_without_context(
+                    question=question,
+                    reason="No source has been inserted yet.",
+                    mode="rag",
+                    strict_grounding=strict_grounding,
+                    client=client,
+                    model=model,
+                    aiaas_extras=aiaas_extras,
+                    litellm_config=litellm_config,
+                )
+
+            chunk_q = db.query(Chunk)
+            if source_id:
+                chunk_q = chunk_q.join(Document, Chunk.document_id == Document.id).filter(Document.source_id == source_id)
+            if chunk_q.count() == 0:
+                message = (
+                    "No content has been ingested for the selected source yet."
+                    if source_id
+                    else "No source content has been ingested yet."
+                )
+                return await self._query_without_context(
+                    question=question,
+                    reason=message,
+                    mode="rag",
+                    strict_grounding=strict_grounding,
+                    client=client,
+                    model=model,
+                    aiaas_extras=aiaas_extras,
+                    litellm_config=litellm_config,
+                )
+
         # Step 1: Retrieve relevant chunks
         chunks = []
         search_mode = "rag"
@@ -247,29 +353,16 @@ class RAGService:
 
         # If still no chunks, return "no information" response
         if not chunks:
-            if strict_grounding:
-                return {
-                    "answer": "I cannot answer this from the currently retrieved sources.",
-                    "mode": search_mode,
-                    "citations": [],
-                    "chunks_retrieved": 0,
-                    "model_name": model,
-                    "warning": "Strict grounding is enabled and no sufficient grounded context was found.",
-                    "grounding_mode": "strict",
-                    "grounded_claim_ratio": 1.0,
-                    "verification_passed": True,
-                }
-            return {
-                "answer": "I could not find any relevant information in the knowledge base for this question.",
-                "mode": search_mode,
-                "citations": [],
-                "chunks_retrieved": 0,
-                "model_name": model,
-                "warning": "No sources available",
-                "grounding_mode": "relaxed",
-                "grounded_claim_ratio": 0.0,
-                "verification_passed": None,
-            }
+            return await self._query_without_context(
+                question=question,
+                reason="No relevant documents were retrieved from the knowledge base.",
+                mode=search_mode,
+                strict_grounding=strict_grounding,
+                client=client,
+                model=model,
+                aiaas_extras=aiaas_extras,
+                litellm_config=litellm_config,
+            )
 
         # Step 2: Build context string from retrieved chunks
         context_parts = []
@@ -278,48 +371,26 @@ class RAGService:
         context = "\n\n---\n\n".join(context_parts)
 
         # Step 3: Call LLM
-        client = client or self.client
-        model = model or settings.query_model
         logger.info("Sending RAG query to LLM (%s): '%s'", model, question[:80])
-        extra_kwargs = {"extra_body": {"enable_thinking": False}} if aiaas_extras else {}
-        try:
-            response = await client.chat.completions.create(
-                model=model,
-                max_tokens=2048,
-                temperature=0.0 if strict_grounding else 0.3,
-                **extra_kwargs,
-                messages=[
-                    {"role": "system", "content": self._build_rag_system_prompt(strict_grounding)},
-                    {"role": "user", "content": (
-                        f"Context documents:\n\n{context}\n\n---\n\n"
-                        f"Question: {question}\n\n"
-                        f"Answer based on the context documents above. "
-                        f"Cite sources using [1], [2], etc. notation. "
-                        f"If the context doesn't contain enough information to answer, say so clearly."
-                    )},
-                ],
-            )
-        except APITimeoutError:
-            logger.error("LLM request timed out", extra={
-                "event": "llm_timeout",
-                "model": model,
-                "mode": "rag",
-            })
-            raise RuntimeError(
-                f"LLM request timed out after 180 s. "
-                f"Check that the API base URL and model name are correct ({model})."
-            )
-        except APIStatusError as e:
-            logger.error("LLM API error", extra={
-                "event": "llm_error",
-                "model": model,
-                "mode": "rag",
-                "status_code": e.status_code,
-                "detail": e.message,
-            })
-            raise RuntimeError(f"LLM API returned {e.status_code}: {e.message}")
-
-        answer = self._strip_thinking(response.choices[0].message.content or "")
+        answer = await self._complete_chat(
+            client=client,
+            model=model,
+            messages=[
+                {"role": "system", "content": self._build_rag_system_prompt(strict_grounding)},
+                {"role": "user", "content": (
+                    f"Context documents:\n\n{context}\n\n---\n\n"
+                    f"Question: {question}\n\n"
+                    f"Answer based on the context documents above. "
+                    f"Cite sources using [1], [2], etc. notation. "
+                    f"If the context doesn't contain enough information to answer, say so clearly."
+                )},
+            ],
+            max_tokens=2048,
+            temperature=0.0 if strict_grounding else 0.3,
+            aiaas_extras=aiaas_extras,
+            litellm_config=litellm_config,
+            mode="rag",
+        )
         verification = self._verify_grounding(answer, chunks) if strict_grounding else None
 
         citations = [
@@ -333,8 +404,16 @@ class RAGService:
         ]
 
         if strict_grounding and verification and not verification["passed"]:
+            answer = await self._localized_strict_refusal(
+                question=question,
+                reason="Strict grounding verification failed because unsupported claims were detected.",
+                client=client,
+                model=model,
+                aiaas_extras=aiaas_extras,
+                litellm_config=litellm_config,
+            )
             return {
-                "answer": "I cannot provide a strictly grounded answer from the retrieved context.",
+                "answer": answer,
                 "mode": search_mode,
                 "citations": citations,
                 "chunks_retrieved": len(chunks),
@@ -367,41 +446,24 @@ class RAGService:
         client: Optional[AsyncOpenAI] = None,
         model: Optional[str] = None,
         aiaas_extras: bool = True,
+        litellm_config: Optional[dict[str, Any]] = None,
     ) -> dict:
         """No-RAG mode: ask the LLM directly, no retrieval."""
-        client = client or self.client
         model = model or settings.query_model
         logger.info("Sending no-RAG query to LLM (%s)", model)
-        extra_kwargs = {"extra_body": {"enable_thinking": False}} if aiaas_extras else {}
-        try:
-            response = await client.chat.completions.create(
-                model=model,
-                max_tokens=2048,
-                **extra_kwargs,
-                messages=[{"role": "user", "content": question}],
-            )
-        except APITimeoutError:
-            logger.error("LLM request timed out", extra={
-                "event": "llm_timeout",
-                "model": model,
-                "mode": "no_rag",
-            })
-            raise RuntimeError(
-                f"LLM request timed out after 180 s. "
-                f"Check that the API base URL and model name are correct ({model})."
-            )
-        except APIStatusError as e:
-            logger.error("LLM API error", extra={
-                "event": "llm_error",
-                "model": model,
-                "mode": "no_rag",
-                "status_code": e.status_code,
-                "detail": e.message,
-            })
-            raise RuntimeError(f"LLM API returned {e.status_code}: {e.message}")
+        answer = await self._complete_chat(
+            client=client,
+            model=model,
+            messages=[{"role": "user", "content": question}],
+            max_tokens=2048,
+            temperature=None,
+            aiaas_extras=aiaas_extras,
+            litellm_config=litellm_config,
+            mode="no_rag",
+        )
 
         return {
-            "answer": self._strip_thinking(response.choices[0].message.content or ""),
+            "answer": answer,
             "mode": "no_rag",
             "citations": [],
             "chunks_retrieved": 0,
@@ -411,6 +473,186 @@ class RAGService:
             "verification_passed": None,
             "warning": "No RAG mode: response is not grounded in indexed sources.",
         }
+
+    async def _query_without_context(
+        self,
+        question: str,
+        reason: str,
+        mode: str,
+        strict_grounding: bool,
+        client: Optional[AsyncOpenAI],
+        model: str,
+        aiaas_extras: bool,
+        litellm_config: Optional[dict[str, Any]] = None,
+    ) -> dict:
+        if strict_grounding:
+            answer = await self._localized_strict_refusal(
+                question=question,
+                reason=reason,
+                client=client,
+                model=model,
+                aiaas_extras=aiaas_extras,
+                litellm_config=litellm_config,
+            )
+        else:
+            answer = await self._localized_relaxed_no_context_answer(
+                question=question,
+                reason=reason,
+                client=client,
+                model=model,
+                aiaas_extras=aiaas_extras,
+                litellm_config=litellm_config,
+            )
+
+        return {
+            "answer": answer,
+            "mode": mode,
+            "citations": [],
+            "chunks_retrieved": 0,
+            "model_name": model,
+            "warning": None,
+            "grounding_mode": "strict" if strict_grounding else "relaxed",
+            "grounded_claim_ratio": 1.0 if strict_grounding else 0.0,
+            "verification_passed": True if strict_grounding else None,
+        }
+
+    async def _localized_strict_refusal(
+        self,
+        question: str,
+        reason: str,
+        client: Optional[AsyncOpenAI],
+        model: str,
+        aiaas_extras: bool,
+        litellm_config: Optional[dict[str, Any]] = None,
+    ) -> str:
+        system = (
+            "You write short user-facing RAG status messages. "
+            "Answer in the same language as the user's question. "
+            "Do not answer the user's topic. "
+            "State that the indexed/retrieved documents do not contain enough information to answer."
+        )
+        user = (
+            f"User question:\n{question}\n\n"
+            f"Internal reason:\n{reason}\n\n"
+            "Write one concise sentence for the user."
+        )
+        return await self._call_notice_llm(system, user, client, model, aiaas_extras, litellm_config)
+
+    async def _localized_relaxed_no_context_answer(
+        self,
+        question: str,
+        reason: str,
+        client: Optional[AsyncOpenAI],
+        model: str,
+        aiaas_extras: bool,
+        litellm_config: Optional[dict[str, Any]] = None,
+    ) -> str:
+        system = (
+            "You answer in the same language as the user's question. "
+            "The knowledge base retrieval returned no usable documents. "
+            "First state that no indexed/retrieved documents contain the answer. "
+            "Then add a clearly separated general-knowledge answer introduced as outside the retrieved context. "
+            "Keep the general-knowledge part to one to three sentences. Do not invent citations."
+        )
+        user = (
+            f"User question:\n{question}\n\n"
+            f"Internal reason:\n{reason}\n\n"
+            "Write the final answer for relaxed RAG mode."
+        )
+        return await self._call_notice_llm(system, user, client, model, aiaas_extras, litellm_config)
+
+    async def _call_notice_llm(
+        self,
+        system: str,
+        user: str,
+        client: Optional[AsyncOpenAI],
+        model: str,
+        aiaas_extras: bool,
+        litellm_config: Optional[dict[str, Any]] = None,
+    ) -> str:
+        return await self._complete_chat(
+            client=client,
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            max_tokens=300,
+            temperature=0.0,
+            aiaas_extras=aiaas_extras,
+            litellm_config=litellm_config,
+            mode="rag_notice",
+        )
+
+    async def _complete_chat(
+        self,
+        client: Optional[AsyncOpenAI],
+        model: str,
+        messages: list[dict[str, str]],
+        max_tokens: int,
+        temperature: Optional[float],
+        aiaas_extras: bool,
+        litellm_config: Optional[dict[str, Any]],
+        mode: str,
+    ) -> str:
+        try:
+            if litellm_config is not None:
+                try:
+                    from litellm import acompletion
+                except ImportError as e:
+                    raise RuntimeError(
+                        "Custom non-OpenAI providers require LiteLLM in the backend image."
+                    ) from e
+
+                kwargs = {k: v for k, v in litellm_config.items() if v not in (None, "")}
+                if temperature is not None:
+                    kwargs["temperature"] = temperature
+                response = await acompletion(
+                    model=model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    **kwargs,
+                )
+            else:
+                client = client or self.client
+                extra_kwargs = {"extra_body": {"enable_thinking": False}} if aiaas_extras else {}
+                if temperature is not None:
+                    extra_kwargs["temperature"] = temperature
+                response = await client.chat.completions.create(
+                    model=model,
+                    max_tokens=max_tokens,
+                    **extra_kwargs,
+                    messages=messages,
+                )
+        except APITimeoutError:
+            logger.error("LLM request timed out", extra={
+                "event": "llm_timeout",
+                "model": model,
+                "mode": mode,
+            })
+            raise RuntimeError(
+                f"LLM request timed out after 180 s. "
+                f"Check that the API base URL and model name are correct ({model})."
+            )
+        except APIStatusError as e:
+            logger.error("LLM API error", extra={
+                "event": "llm_error",
+                "model": model,
+                "mode": mode,
+                "status_code": e.status_code,
+                "detail": e.message,
+            })
+            raise RuntimeError(f"LLM API returned {e.status_code}: {e.message}")
+        except Exception as e:
+            logger.error("LLM request failed", extra={
+                "event": "llm_error",
+                "model": model,
+                "mode": mode,
+                "detail": str(e),
+            }, exc_info=True)
+            raise RuntimeError(f"LLM request failed: {e}")
+
+        return self._strip_thinking(response.choices[0].message.content or "")
 
     @staticmethod
     def _strip_thinking(text: str) -> str:
@@ -425,15 +667,17 @@ class RAGService:
 RULES:
 1. Answer ONLY using the information in the provided context documents
 2. Every factual claim must be supported by a citation [1], [2], etc.
-3. If the context doesn't contain the answer, explicitly say: "The available documents do not contain information about this."
-4. Do NOT use your general knowledge to fill gaps
-5. Be concise and factual
+3. Answer in the same language as the user's question
+4. If the context doesn't contain the answer, say so clearly in the user's language
+5. Do NOT use your general knowledge to fill gaps
+6. Be concise and factual
 
 Your citations allow users to verify every claim you make."""
         else:
             return """You are a helpful research assistant.
 You have been provided with context documents from a knowledge base.
 Use these documents as your primary source, but you may supplement with general knowledge when clearly needed.
+Answer in the same language as the user's question.
 Always cite the context documents when you use them with [1], [2], etc. notation."""
 
     def _verify_grounding(self, answer: str, chunks: list[dict]) -> dict:

@@ -31,6 +31,14 @@
             <span class="legend-badge badge-strict">Strict Grounding</span>
             <span class="legend-text">Fail-closed mode: the system answers only from retrieved chunks, verifies citation support, and refuses if evidence is insufficient. Prevents supplementation with general knowledge. Only available in RAG mode.</span>
           </div>
+          <div class="legend-item">
+            <span class="legend-badge badge-grounding-strict">Grounding: strict</span>
+            <span class="legend-text">The current answer is restricted to retrieved documents. If the retrieved context is missing or too weak, the system should say that it cannot answer from indexed sources.</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-badge badge-grounding-relaxed">Grounding: relaxed</span>
+            <span class="legend-text">The answer may include general model knowledge outside retrieved documents. When retrieval finds nothing, the response should say that first, then separate any general answer from the indexed-source result.</span>
+          </div>
         </div>
       </div>
 
@@ -41,8 +49,8 @@
           v-model="store.question"
           placeholder="Feel free to ask..."
           :rows="1"
-          autoResize
           class="query-input"
+          @input="syncQueryInputHeight"
           @keydown.enter.exact.prevent="doQuery"
           @keydown.ctrl.enter="doQuery"
           @keydown.meta.enter="doQuery"
@@ -67,39 +75,42 @@
           <div v-if="showCustomHelp" class="custom-help">
             <div class="help-title">Example Endpoints</div>
             <div class="help-examples">
-              <div class="help-example">
-                <span class="help-provider">OpenAI</span>
-                <code class="help-url">https://api.openai.com/v1</code>
-                <span class="help-models">gpt-4o, gpt-4.1, o4-mini</span>
-              </div>
-              <div class="help-example">
-                <span class="help-provider">Anthropic</span>
-                <code class="help-url">https://api.anthropic.com/v1</code>
-                <span class="help-models">claude-opus-4-7, claude-sonnet-4-6</span>
-              </div>
-              <div class="help-example">
-                <span class="help-provider">Groq</span>
-                <code class="help-url">https://api.groq.com/openai/v1</code>
-                <span class="help-models">llama-3.3-70b, mixtral-8x7b</span>
-              </div>
-              <div class="help-example">
-                <span class="help-provider">DeepSeek</span>
-                <code class="help-url">https://api.deepseek.com/v1</code>
-                <span class="help-models">deepseek-chat, deepseek-reasoner</span>
-              </div>
-              <div class="help-example">
-                <span class="help-provider">Local Ollama</span>
-                <code class="help-url">http://localhost:11434/v1</code>
-                <span class="help-models">llama3.3, qwen2.5, mistral</span>
-              </div>
+              <button
+                v-for="preset in providerPresets"
+                :key="preset.name"
+                type="button"
+                class="help-example"
+                @click="applyProviderPreset(preset)"
+              >
+                <span class="help-provider">{{ preset.name }}</span>
+                <code class="help-url">{{ preset.baseUrl }}</code>
+                <span class="help-models">{{ preset.models }}</span>
+              </button>
             </div>
             <div class="help-note">
               <i class="pi pi-info-circle"></i>
-              <span>Leave blank to use the server-configured default. Endpoint must be OpenAI-compatible. Your API key is sent directly to the provider and never stored.</span>
+              <span>Leave blank to use the server-configured default. Provider options are forwarded to LiteLLM for providers that need more than one key field. Custom secrets are used for this request and are never stored.</span>
             </div>
           </div>
 
           <div class="custom-fields">
+            <div class="model-key-wrap compact">
+              <label class="model-label">PROVIDER</label>
+              <select v-model="customProvider" class="model-key-input">
+                <option value="openai_compatible">OpenAI-compatible</option>
+                <option value="openrouter">OpenRouter</option>
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Claude / Anthropic</option>
+                <option value="gemini">Gemini API</option>
+                <option value="vertex_ai">Vertex AI</option>
+                <option value="bedrock">AWS Bedrock</option>
+                <option value="azure">Azure OpenAI</option>
+                <option value="groq">Groq</option>
+                <option value="deepseek">DeepSeek</option>
+                <option value="ollama">Ollama</option>
+                <option value="custom_litellm">LiteLLM custom</option>
+              </select>
+            </div>
             <div class="model-key-wrap">
               <label class="model-label">BASE URL</label>
               <input v-model="customBaseUrl" class="model-key-input mono" placeholder="server default" spellcheck="false" />
@@ -111,6 +122,15 @@
             <div class="model-key-wrap">
               <label class="model-label">MODEL NAME</label>
               <input v-model="customModel" class="model-key-input mono" placeholder="server default" spellcheck="false" />
+            </div>
+            <div class="model-key-wrap config-wrap">
+              <label class="model-label">PROVIDER OPTIONS JSON</label>
+              <textarea
+                v-model="customConfigJson"
+                class="model-key-input mono config-input"
+                placeholder='{"aws_region_name":"eu-central-1"}'
+                spellcheck="false"
+              />
             </div>
           </div>
         </div>
@@ -238,12 +258,64 @@
                 <i class="pi pi-eye-slash"></i>
               </button>
             </div>
-            <div class="prev-answer">
-              {{
-                expandedPreviousTurnId === turn.id
-                  ? turn.result.answer
-                  : turn.result.answer.slice(0, 200) + (turn.result.answer.length > 200 ? '…' : '')
-              }}
+            <div
+              v-if="expandedPreviousTurnId === turn.id"
+              class="prev-detail split-panel"
+              @click.stop
+            >
+              <div class="answer-panel card">
+                <div class="answer-meta">
+                  <Tag
+                    :value="formatModeLabel(turn.result.mode)"
+                    :severity="turn.result.mode === 'rag' ? 'info' : turn.result.mode === 'keyword_fallback' ? 'warn' : 'secondary'"
+                    rounded
+                  />
+                  <Tag :value="`${turn.result.chunks_retrieved} chunks`" severity="secondary" rounded />
+                  <Tag
+                    :value="turn.result.grounding_mode === 'strict' ? 'STRICT' : 'RELAXED'"
+                    :severity="turn.result.grounding_mode === 'strict' ? 'warning' : 'secondary'"
+                    rounded
+                  />
+                  <Tag
+                    v-if="turn.result.verification_passed !== null && turn.result.verification_passed !== undefined"
+                    :value="turn.result.verification_passed ? 'VERIFIED' : 'UNVERIFIED'"
+                    :severity="turn.result.verification_passed ? 'success' : 'danger'"
+                    rounded
+                  />
+                  <Tag
+                    v-if="turn.result.grounded_claim_ratio !== null && turn.result.grounded_claim_ratio !== undefined"
+                    :value="`grounded ${(turn.result.grounded_claim_ratio * 100).toFixed(0)}%`"
+                    severity="secondary"
+                    rounded
+                  />
+                </div>
+
+                <div v-if="turn.result.warning" class="warning-banner">
+                  <i class="pi pi-exclamation-triangle"></i>
+                  <span>{{ turn.result.warning }}</span>
+                </div>
+
+                <div class="answer-text">{{ turn.result.answer }}</div>
+              </div>
+
+              <div class="citations-panel">
+                <div class="citations-header">RETRIEVED CITATIONS ({{ turn.result.citations.length }})</div>
+                <div
+                  v-for="c in turn.result.citations"
+                  :key="c.index"
+                  class="citation-card card"
+                >
+                  <div class="citation-top">
+                    <span class="citation-source">[{{ c.index }}] {{ sourceNameFromUrl(c.url) }}</span>
+                    <span class="citation-score">{{ c.relevance_score.toFixed(2) }}</span>
+                  </div>
+                  <div class="citation-excerpt">{{ c.text?.slice(0, 300) }}{{ c.text?.length > 300 ? '…' : '' }}</div>
+                  <div class="citation-bottom">
+                    <a :href="c.url" target="_blank" class="view-evidence">View evidence →</a>
+                  </div>
+                </div>
+                <div v-if="!turn.result.citations.length" class="no-citations">No citations retrieved</div>
+              </div>
             </div>
           </div>
         </template>
@@ -287,8 +359,82 @@ watch(() => store.question, () => {
 const customBaseUrl = ref('')
 const customApiKey = ref('')
 const customModel = ref('')
+const customProvider = ref('openai_compatible')
+const customConfigJson = ref('')
 const showCustomFields = ref(false)
 const showCustomHelp = ref(false)
+const providerPresets = [
+  {
+    name: 'OpenRouter',
+    provider: 'openrouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    model: 'openrouter/auto',
+    models: 'openrouter/auto, anthropic/claude-sonnet-4.5, openai/gpt-5-mini',
+  },
+  {
+    name: 'OpenAI',
+    provider: 'openai',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o',
+    models: 'gpt-4o, gpt-4.1, o4-mini',
+  },
+  {
+    name: 'Claude / Anthropic',
+    provider: 'anthropic',
+    baseUrl: '',
+    model: 'claude-sonnet-4-5-20250929',
+    models: 'claude-sonnet-4.5, claude-haiku-4.5',
+  },
+  {
+    name: 'Gemini API',
+    provider: 'gemini',
+    baseUrl: '',
+    model: 'gemini-2.5-flash',
+    models: 'gemini-2.5-flash, gemini-2.5-pro',
+  },
+  {
+    name: 'AWS Bedrock',
+    provider: 'bedrock',
+    baseUrl: '',
+    model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    models: 'requires AWS keys + region in options JSON',
+  },
+  {
+    name: 'Vertex AI',
+    provider: 'vertex_ai',
+    baseUrl: '',
+    model: 'gemini-2.5-flash',
+    models: 'requires GCP project/location in options JSON',
+  },
+  {
+    name: 'Azure OpenAI',
+    provider: 'azure',
+    baseUrl: '',
+    model: 'your-deployment-name',
+    models: 'requires endpoint + api_version in options JSON',
+  },
+  {
+    name: 'Groq',
+    provider: 'groq',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    model: 'llama-3.3-70b-versatile',
+    models: 'llama-3.3-70b, mixtral-8x7b',
+  },
+  {
+    name: 'DeepSeek',
+    provider: 'deepseek',
+    baseUrl: 'https://api.deepseek.com/v1',
+    model: 'deepseek-chat',
+    models: 'deepseek-chat, deepseek-reasoner',
+  },
+  {
+    name: 'Local Ollama',
+    provider: 'ollama',
+    baseUrl: 'http://localhost:11434/v1',
+    model: 'llama3.3',
+    models: 'llama3.3, qwen2.5, mistral',
+  },
+]
 
 // Persist base URL + model name across page loads (never persist API key)
 onMounted(() => {
@@ -298,14 +444,18 @@ onMounted(() => {
       const parsed = JSON.parse(saved)
       customBaseUrl.value = parsed.baseUrl || ''
       customModel.value = parsed.model || ''
+      customProvider.value = parsed.provider || 'openai_compatible'
+      customConfigJson.value = parsed.configJson || ''
     } catch { /* ignore corrupt storage */ }
   }
 })
 
-watch([customBaseUrl, customModel], () => {
+watch([customBaseUrl, customModel, customProvider, customConfigJson], () => {
   localStorage.setItem('custom_endpoint', JSON.stringify({
     baseUrl: customBaseUrl.value,
     model: customModel.value,
+    provider: customProvider.value,
+    configJson: customConfigJson.value,
   }))
 })
 
@@ -339,21 +489,50 @@ function timestampFilename(): string {
   return new Date().toISOString().slice(0, 19).replace(/:/g, '-')
 }
 
+function applyProviderPreset(preset: { provider: string; baseUrl: string; model: string }) {
+  customProvider.value = preset.provider
+  customBaseUrl.value = preset.baseUrl
+  customModel.value = preset.model
+}
+
+function parseCustomConfig(): Record<string, unknown> | null | undefined {
+  const raw = customConfigJson.value.trim()
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+      throw new Error('Provider options must be a JSON object.')
+    }
+    return parsed
+  } catch (e) {
+    queryError.value = `Invalid provider options JSON: ${(e as Error).message}`
+    return undefined
+  }
+}
+
 // ─── Query ────────────────────────────────────────────────────────────────────
+function getQueryTextarea(): HTMLTextAreaElement | null {
+  const refValue = queryInputRef.value
+  if (!refValue) return null
+  if (refValue instanceof HTMLTextAreaElement) return refValue
+
+  const rootEl = refValue.$el ?? refValue
+  if (rootEl instanceof HTMLTextAreaElement) return rootEl
+  return rootEl?.querySelector?.('textarea') ?? null
+}
+
 function resetQueryInputHeight() {
   nextTick(() => {
-    const rootEl = queryInputRef.value?.$el ?? null
-    const textarea = rootEl?.querySelector?.('textarea') as HTMLTextAreaElement | null
+    const textarea = getQueryTextarea()
     if (!textarea) return
     textarea.style.height = 'auto'
-    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    textarea.style.height = `${textarea.scrollHeight}px`
   })
 }
 
 function syncQueryInputHeight() {
   nextTick(() => {
-    const rootEl = queryInputRef.value?.$el ?? null
-    const textarea = rootEl?.querySelector?.('textarea') as HTMLTextAreaElement | null
+    const textarea = getQueryTextarea()
     if (!textarea) return
     textarea.style.height = 'auto'
     textarea.style.height = `${textarea.scrollHeight}px`
@@ -367,6 +546,13 @@ async function doQuery() {
   resetQueryInputHeight()
   loading.value = true
   queryError.value = ''
+  const upstreamConfig = parseCustomConfig()
+  if (upstreamConfig === undefined) {
+    store.question = q
+    resetQueryInputHeight()
+    loading.value = false
+    return
+  }
 
   try {
     const result = await post<QueryResponse>('/query/', {
@@ -375,9 +561,11 @@ async function doQuery() {
       top_k: store.topK,
       strict_grounding: store.strictGrounding,
       source_id: store.sourceId || null,
+      upstream_provider: customProvider.value || null,
       upstream_base_url: customBaseUrl.value || null,
       upstream_api_key: customApiKey.value || null,
       upstream_model: customModel.value || null,
+      upstream_config: upstreamConfig,
     })
     store.addTurn(q, result)
   } catch (e: unknown) {
@@ -609,8 +797,11 @@ onMounted(async () => {
 }
 .legend-modes {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
+}
+@media (max-width: 1100px) {
+  .legend-modes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 700px) {
   .legend-modes { grid-template-columns: 1fr; }
@@ -632,6 +823,8 @@ onMounted(async () => {
 .badge-rag    { background: rgba(0,230,118,.15); color: var(--accent); }
 .badge-norag  { background: rgba(148,163,184,.15); color: var(--text2); }
 .badge-strict { background: rgba(245,158,11,.1); color: var(--warning); }
+.badge-grounding-strict { background: rgba(245,158,11,.1); color: var(--warning); }
+.badge-grounding-relaxed { background: rgba(148,163,184,.16); color: var(--text2); }
 .legend-text {
   font-size: 11px;
   color: var(--text2);
@@ -655,6 +848,9 @@ onMounted(async () => {
   box-shadow: none !important;
   resize: none;
   font-size: 14px;
+  min-height: 40px;
+  max-height: 180px;
+  overflow-y: auto !important;
 }
 .submit-btn { flex-shrink: 0; }
 
@@ -664,6 +860,11 @@ onMounted(async () => {
   gap: 4px;
 }
 .model-key-wrap { flex: 1; min-width: 160px; max-width: 280px; }
+.model-key-wrap.compact { max-width: 220px; }
+.model-key-wrap.config-wrap {
+  flex-basis: 100%;
+  max-width: 100%;
+}
 .model-label {
   font-size: 10px;
   color: var(--muted);
@@ -683,6 +884,10 @@ onMounted(async () => {
   width: 100%;
 }
 .model-key-input.mono { font-family: monospace; }
+.config-input {
+  min-height: 74px;
+  resize: vertical;
+}
 .model-key-input:focus { border-color: var(--accent); }
 .model-key-input::placeholder { color: var(--muted); }
 
@@ -788,7 +993,18 @@ onMounted(async () => {
   font-size: 11px;
   padding: 6px 8px;
   background: var(--surface);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  width: 100%;
+  transition: border-color 0.15s, background 0.15s;
+}
+.help-example:hover {
+  border-color: var(--accent);
+  background: rgba(0, 230, 118, 0.04);
 }
 
 .help-provider {
@@ -982,6 +1198,10 @@ onMounted(async () => {
 .prev-turn.expanded {
   border-color: rgba(0, 230, 118, 0.35);
   background: rgba(0, 230, 118, 0.03);
+}
+.prev-detail {
+  cursor: default;
+  padding-top: 8px;
 }
 .prev-head {
   display: flex;

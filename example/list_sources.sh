@@ -31,5 +31,6 @@ if [[ -z "$TOKEN" ]]; then
   exit 1
 fi
 
+echo "=== Currently present sources ==="
 curl -sf "${API_URL}/sources/?limit=${LIMIT}&offset=${OFFSET}" \
-  -H "Authorization: Bearer ${TOKEN}"
+  -H "Authorization: Bearer ${TOKEN}" | jq .

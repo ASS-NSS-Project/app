@@ -92,9 +92,11 @@ export interface QueryRequest {
   strict_grounding: boolean
   source_id?: string | null
   model_id?: string | null
+  upstream_provider?: string | null
   upstream_base_url?: string | null
   upstream_api_key?: string | null
   upstream_model?: string | null
+  upstream_config?: Record<string, unknown> | null
 }
 
 export interface Citation {
