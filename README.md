@@ -26,7 +26,7 @@ LLM and VLM inference runs on **CERIT-SC AIaaS** (e-INFRA). Object storage uses 
 
 - **Docker** with Compose v2, or **Podman** with podman-compose
 - **Git**
-- Credentials for **CERIT-SC AIaaS** (LLM/VLM endpoints)
+- Credentials for **Query LLM/Screenshot screening VLM**
 
 ---
 
@@ -100,7 +100,7 @@ FIRST_ADMIN_PASSWORD=change_me_strong_password
 docker compose up --build
 ```
 
-> **First-time cleanup**: if you have leftover containers from a previous run, run `podman compose down -v` first.
+> **First-time cleanup**: if you have leftover containers from a previous run, run `docker compose down -v` first.
 
 You'll know it's ready when you see:
 ```
@@ -820,7 +820,7 @@ Loading BGE-M3 from disk into memory (~2.3 GB) takes **15–45 seconds** dependi
 If startup feels stuck, watch the logs:
 
 ```bash
-podman compose logs -f api | grep '"event"'
+docker compose logs -f api | grep '"event"'
 ```
 
 You should see `model_load_start` followed by `model_load_complete`, then `startup`.
@@ -847,7 +847,7 @@ After adding or updating dependencies, run `poetry lock` to regenerate `poetry.l
 Set `API_DOCS=true` in `.env`, then restart the API container:
 
 ```bash
-docker compose restart api   # or: podman compose restart api
+docker compose restart api 
 ```
 
 - Swagger UI: **http://localhost:8000/docs**
@@ -862,26 +862,26 @@ Frontend errors (`api_error`, `network_error`, `vue_error`, `unhandled_promise_r
 The frontend HTML document title is `WebRAG` (browser tab title).
 
 ```bash
-podman compose logs -f api      # API logs
-podman compose logs -f worker   # Worker/ingest logs
-podman compose logs -f frontend # Nginx logs
+docker compose logs -f api      # API logs
+docker compose logs -f worker   # Worker/ingest logs
+docker compose logs -f frontend # Nginx logs
 ```
 
 Filter by event type:
 ```bash
-podman compose logs api | grep '"event": "ingest_completed"'
-podman compose logs worker | grep '"event": "embedding_failed"'
+docker compose logs api | grep '"event": "ingest_completed"'
+docker compose logs worker | grep '"event": "embedding_failed"'
 ```
 
 Every log line is JSON. Key fields: `timestamp`, `level`, `logger`, `service`, `event`, `message`.
 
 ```bash
 # Follow all logs
-podman compose logs -f api worker
+docker compose logs -f api worker
 
 # Filter to a specific event slug
-podman compose logs api | grep '"event": "query_failed"'
-podman compose logs api | grep '"event": "search_failed"'
+docker compose logs api | grep '"event": "query_failed"'
+docker compose logs api | grep '"event": "search_failed"'
 ```
 
 Event catalogue:
@@ -952,13 +952,13 @@ docker compose down -v       # Stop and delete all data (fresh start)
 ## Troubleshooting
 
 **API or worker is slow to start (15–45 s after Postgres is ready)**
-→ Normal — BGE-M3 (~2.3 GB) is being loaded from disk into memory. Watch `podman compose logs -f api | grep '"event"'` and wait for `model_load_complete`. On the very first run it also downloads ~570 MB from Hugging Face before loading; subsequent starts use the `hf_cache` volume.
+→ Normal — BGE-M3 (~2.3 GB) is being loaded from disk into memory. Watch `docker compose logs -f api | grep '"event"'` and wait for `model_load_complete`. On the very first run it also downloads ~570 MB from Hugging Face before loading; subsequent starts use the `hf_cache` volume.
 
 **API stays on "Waiting for Postgres/RabbitMQ"**
 → Give it 30–60 seconds on first run. Databases take time to initialize. The API and worker use a TCP socket poll loop that waits up to 100 s total before failing.
 
 **Worker not processing jobs**
-→ Check `podman compose logs worker`. If it shows import errors, run `podman compose build` again.
+→ Check `docker compose logs worker`. If it shows import errors, run `docker compose build` again.
 
 **Vision extraction fails**
 → Verify `VLM_BASE_URL`, `VLM_API_KEY`, and `VLM_MODEL` in `.env`. Test the endpoint with `curl -H "Authorization: Bearer $VLM_API_KEY" $VLM_BASE_URL/models`.
