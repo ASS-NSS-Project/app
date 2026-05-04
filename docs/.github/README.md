@@ -25,6 +25,7 @@ The `changes` job detects which parts of the codebase changed:
 | `backend` | `backend/**`, `docker-compose.yml`, `ci.yml` | backend-tests, build API image |
 | `frontend` | `frontend/**`, `docker-compose.yml`, `ci.yml` | frontend-build, build frontend image |
 | `tests` | `tests/**`, `backend/**` | backend-tests |
+| `examples` | `example/**/*.sh`, `ci.yml` | shell-syntax |
 
 **Examples:**
 
@@ -34,6 +35,7 @@ The `changes` job detects which parts of the codebase changed:
 | `tests/test_api.py` | conventional-commits + backend-tests | None (tests don't trigger builds) |
 | `backend/services/rag.py` | conventional-commits + backend-tests | webrag-backend |
 | `frontend/src/views/QueryView.vue` | conventional-commits + frontend-build | webrag-frontend |
+| `example/query.sh` | conventional-commits + shell-syntax | None |
 | `backend/**` + `frontend/**` | all jobs | webrag-backend + webrag-frontend |
 
 ---
@@ -48,6 +50,7 @@ Detects which parts of the codebase changed using `dorny/paths-filter@v3`.
 - `backend` — true if backend/** or related files changed
 - `frontend` — true if frontend/** or related files changed
 - `tests` — true if tests/** or backend/** changed
+- `examples` — true if example shell scripts changed
 
 ### Conventional commits
 
@@ -80,6 +83,10 @@ Runs the pytest suite against a real PostgreSQL 16 database (GitHub Actions serv
 - `JWT_SECRET` — CI-specific test secret
 - `FIRST_ADMIN_*` — bootstrap admin credentials
 - `FRONTEND_URL=http://localhost:5173`
+
+### Shell syntax
+
+Runs `bash -n example/*.sh` for example helper scripts. This validates Bash syntax without executing API calls or mutating the environment.
 
 **Note:** BGE-M3 embedding model is NOT loaded in CI (too slow/memory-intensive). RAG query tests with real embeddings are skipped.
 

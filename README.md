@@ -1036,7 +1036,7 @@ poetry run pytest ../tests/ -v
 
 ### CI status
 
-`backend-tests` runs in GitHub Actions against PostgreSQL 16 on every PR/push. The image build job is gated on both backend tests and frontend build, so failed tests block image publishing immediately.
+`backend-tests` runs in GitHub Actions against PostgreSQL 16 on every PR/push. Example helper scripts are checked with `bash -n example/*.sh` whenever they change, which catches shell syntax errors without executing API calls. The image build job is gated on both backend tests and frontend build, so failed tests block image publishing immediately.
 
 ---
 
