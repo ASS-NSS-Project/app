@@ -9,15 +9,15 @@ With RAG:    Ask the LLM a question →
              2. Give those chunks to the LLM as context
              3. LLM answers based on OUR data, with citations
 
-Server defaults use the configured OpenAI-compatible endpoint. User-supplied
-custom providers can be routed through LiteLLM for Anthropic, Gemini, Bedrock,
-Vertex AI, Azure OpenAI, OpenRouter, and other supported providers.
+Uses the configured endpoint by default. User-supplied custom providers are
+intentionally limited to OpenAI and OpenRouter to keep the dependency,
+credential, and network surface small.
 """
 
 import logging
 import re
 import time
-from typing import Any, Optional
+from typing import Optional
 
 import httpx
 from openai import AsyncOpenAI, APITimeoutError, APIStatusError
@@ -64,31 +64,30 @@ def _openrouter_headers() -> dict[str, str]:
     return headers
 
 
-def _provider_is_openai_compatible(provider: Optional[str]) -> bool:
-    return (provider or "openai_compatible") in {"openai_compatible", "openrouter"}
-
-
-def _normalize_litellm_model(provider: Optional[str], model: str) -> str:
+def _custom_provider_base_url(provider: Optional[str], base_url: Optional[str]) -> str:
     provider = (provider or "").strip()
-    if not provider or provider in {"custom_litellm", "openai_compatible"}:
-        return model
-    if provider == "openrouter":
-        return model if model.startswith("openrouter/") else f"openrouter/{model}"
-    prefixes = {
-        "openai": "openai/",
-        "anthropic": "anthropic/",
-        "gemini": "gemini/",
-        "vertex_ai": "vertex_ai/",
-        "bedrock": "bedrock/",
-        "azure": "azure/",
-        "groq": "groq/",
-        "deepseek": "deepseek/",
-        "ollama": "ollama/",
+    allowed = {
+        "openai": ("api.openai.com", "https://api.openai.com/v1"),
+        "openrouter": ("openrouter.ai", "https://openrouter.ai/api/v1"),
     }
-    prefix = prefixes.get(provider)
-    if prefix and not model.startswith(prefix):
-        return f"{prefix}{model}"
-    return model
+    if provider not in allowed:
+        raise RuntimeError(
+            "Unsupported custom provider. For security, this deployment only supports "
+            "Default, OpenAI, and OpenRouter."
+        )
+
+    expected_host, default_base_url = allowed[provider]
+    selected_base_url = (base_url or default_base_url).strip()
+    try:
+        host = httpx.URL(selected_base_url).host or ""
+    except Exception as exc:
+        raise RuntimeError(f"Invalid custom provider base URL: {selected_base_url}") from exc
+
+    if host.lower() != expected_host:
+        raise RuntimeError(
+            f"Invalid base URL for {provider}. Expected host {expected_host}; got {host or 'empty'}."
+        )
+    return selected_base_url
 
 
 class RAGService:
@@ -118,59 +117,48 @@ class RAGService:
         upstream_api_key: Optional[str] = None,
         upstream_model: Optional[str] = None,
         upstream_provider: Optional[str] = None,
-        upstream_config: Optional[dict[str, Any]] = None,
     ) -> dict:
         t0 = time.monotonic()
 
-        provider = upstream_provider or "openai_compatible"
-        upstream_config = upstream_config or {}
-        has_custom_provider = any([upstream_base_url, upstream_api_key, upstream_model, upstream_provider, upstream_config])
+        has_custom_provider = any([upstream_provider, upstream_base_url, upstream_api_key, upstream_model])
+        if has_custom_provider and not upstream_provider:
+            raise RuntimeError("Select OpenAI or OpenRouter when passing custom API values.")
 
-        if upstream_base_url and not upstream_api_key and _provider_is_openai_compatible(provider):
+        if has_custom_provider and not upstream_api_key:
             raise RuntimeError(
-                f"An API key is required for external provider ({upstream_base_url}). "
+                "An API key is required for external providers. "
                 "Enter your key in the API KEY field."
             )
+        if has_custom_provider and not upstream_model:
+            raise RuntimeError("A model name is required for external providers.")
 
-        litellm_config = None
-        if has_custom_provider and not _provider_is_openai_compatible(provider):
-            model = _normalize_litellm_model(provider, upstream_model or settings.query_model)
-            litellm_config = {
-                **upstream_config,
-                "api_key": upstream_api_key or upstream_config.get("api_key"),
-            }
-            if upstream_base_url:
-                litellm_config["api_base"] = upstream_base_url
-            client = None
-            aiaas_extras = False
-            logger.info("Using LiteLLM provider %s model=%s", provider, model,
-                        extra={"event": "litellm_provider", "provider": provider, "model": model})
-        elif upstream_base_url and upstream_api_key:
-            default_headers = _openrouter_headers() if _is_openrouter_url(upstream_base_url) else None
+        if has_custom_provider:
+            base_url = _custom_provider_base_url(upstream_provider, upstream_base_url)
+            default_headers = _openrouter_headers() if _is_openrouter_url(base_url) else None
             client_kwargs = {
-                "base_url": upstream_base_url,
+                "base_url": base_url,
                 "api_key": upstream_api_key,
                 "timeout": httpx.Timeout(connect=10.0, read=180.0, write=10.0, pool=5.0),
             }
             if default_headers:
                 client_kwargs["default_headers"] = default_headers
             client = AsyncOpenAI(**client_kwargs)
-            model = upstream_model or settings.query_model
+            model = upstream_model
             # enable_thinking is an AIaaS-specific extension (suppresses chain-of-thought
-            # output from DeepSeek/Qwen3 reasoning models). Standard OpenAI/Anthropic APIs
-            # reject unknown extra_body fields, so we must not send it to external providers.
+            # output from DeepSeek/Qwen3 reasoning models). Standard external APIs reject
+            # unknown extra_body fields, so we must not send it to custom providers.
             aiaas_extras = False
-            logger.info("Using upstream provider %s model=%s", upstream_base_url, model,
-                        extra={"event": "upstream_provider", "base_url": upstream_base_url, "model": model})
+            logger.info("Using upstream provider %s model=%s", base_url, model,
+                        extra={"event": "upstream_provider", "base_url": base_url, "model": model})
         else:
             client = self.client
             model = upstream_model or settings.query_model
             aiaas_extras = True
 
         if mode == "rag":
-            result = await self._query_rag(question, top_k, source_id, strict_grounding, db, client, model, aiaas_extras, litellm_config)
+            result = await self._query_rag(question, top_k, source_id, strict_grounding, db, client, model, aiaas_extras)
         else:
-            result = await self._query_no_rag(question, client, model, aiaas_extras, litellm_config)
+            result = await self._query_no_rag(question, client, model, aiaas_extras)
         QUERY_REQUESTS_TOTAL.labels(mode=mode).inc()
         QUERY_DURATION.labels(mode=mode).observe(time.monotonic() - t0)
         return result
@@ -281,7 +269,6 @@ class RAGService:
         client: Optional[AsyncOpenAI] = None,
         model: Optional[str] = None,
         aiaas_extras: bool = True,
-        litellm_config: Optional[dict[str, Any]] = None,
     ) -> dict:
         model = model or settings.query_model
 
@@ -297,7 +284,6 @@ class RAGService:
                     client=client,
                     model=model,
                     aiaas_extras=aiaas_extras,
-                    litellm_config=litellm_config,
                 )
 
             chunk_q = db.query(Chunk)
@@ -317,7 +303,6 @@ class RAGService:
                     client=client,
                     model=model,
                     aiaas_extras=aiaas_extras,
-                    litellm_config=litellm_config,
                 )
 
         # Step 1: Retrieve relevant chunks
@@ -361,7 +346,6 @@ class RAGService:
                 client=client,
                 model=model,
                 aiaas_extras=aiaas_extras,
-                litellm_config=litellm_config,
             )
 
         # Step 2: Build context string from retrieved chunks
@@ -388,7 +372,6 @@ class RAGService:
             max_tokens=2048,
             temperature=0.0 if strict_grounding else 0.3,
             aiaas_extras=aiaas_extras,
-            litellm_config=litellm_config,
             mode="rag",
         )
         verification = self._verify_grounding(answer, chunks) if strict_grounding else None
@@ -410,7 +393,6 @@ class RAGService:
                 client=client,
                 model=model,
                 aiaas_extras=aiaas_extras,
-                litellm_config=litellm_config,
             )
             return {
                 "answer": answer,
@@ -446,7 +428,6 @@ class RAGService:
         client: Optional[AsyncOpenAI] = None,
         model: Optional[str] = None,
         aiaas_extras: bool = True,
-        litellm_config: Optional[dict[str, Any]] = None,
     ) -> dict:
         """No-RAG mode: ask the LLM directly, no retrieval."""
         model = model or settings.query_model
@@ -458,7 +439,6 @@ class RAGService:
             max_tokens=2048,
             temperature=None,
             aiaas_extras=aiaas_extras,
-            litellm_config=litellm_config,
             mode="no_rag",
         )
 
@@ -483,7 +463,6 @@ class RAGService:
         client: Optional[AsyncOpenAI],
         model: str,
         aiaas_extras: bool,
-        litellm_config: Optional[dict[str, Any]] = None,
     ) -> dict:
         if strict_grounding:
             answer = await self._localized_strict_refusal(
@@ -492,7 +471,6 @@ class RAGService:
                 client=client,
                 model=model,
                 aiaas_extras=aiaas_extras,
-                litellm_config=litellm_config,
             )
         else:
             answer = await self._localized_relaxed_no_context_answer(
@@ -501,7 +479,6 @@ class RAGService:
                 client=client,
                 model=model,
                 aiaas_extras=aiaas_extras,
-                litellm_config=litellm_config,
             )
 
         return {
@@ -523,7 +500,6 @@ class RAGService:
         client: Optional[AsyncOpenAI],
         model: str,
         aiaas_extras: bool,
-        litellm_config: Optional[dict[str, Any]] = None,
     ) -> str:
         system = (
             "You write short user-facing RAG status messages. "
@@ -536,7 +512,7 @@ class RAGService:
             f"Internal reason:\n{reason}\n\n"
             "Write one concise sentence for the user."
         )
-        return await self._call_notice_llm(system, user, client, model, aiaas_extras, litellm_config)
+        return await self._call_notice_llm(system, user, client, model, aiaas_extras)
 
     async def _localized_relaxed_no_context_answer(
         self,
@@ -545,7 +521,6 @@ class RAGService:
         client: Optional[AsyncOpenAI],
         model: str,
         aiaas_extras: bool,
-        litellm_config: Optional[dict[str, Any]] = None,
     ) -> str:
         system = (
             "You answer in the same language as the user's question. "
@@ -559,7 +534,7 @@ class RAGService:
             f"Internal reason:\n{reason}\n\n"
             "Write the final answer for relaxed RAG mode."
         )
-        return await self._call_notice_llm(system, user, client, model, aiaas_extras, litellm_config)
+        return await self._call_notice_llm(system, user, client, model, aiaas_extras)
 
     async def _call_notice_llm(
         self,
@@ -568,7 +543,6 @@ class RAGService:
         client: Optional[AsyncOpenAI],
         model: str,
         aiaas_extras: bool,
-        litellm_config: Optional[dict[str, Any]] = None,
     ) -> str:
         return await self._complete_chat(
             client=client,
@@ -580,7 +554,6 @@ class RAGService:
             max_tokens=300,
             temperature=0.0,
             aiaas_extras=aiaas_extras,
-            litellm_config=litellm_config,
             mode="rag_notice",
         )
 
@@ -592,38 +565,19 @@ class RAGService:
         max_tokens: int,
         temperature: Optional[float],
         aiaas_extras: bool,
-        litellm_config: Optional[dict[str, Any]],
         mode: str,
     ) -> str:
         try:
-            if litellm_config is not None:
-                try:
-                    from litellm import acompletion
-                except ImportError as e:
-                    raise RuntimeError(
-                        "Custom non-OpenAI providers require LiteLLM in the backend image."
-                    ) from e
-
-                kwargs = {k: v for k, v in litellm_config.items() if v not in (None, "")}
-                if temperature is not None:
-                    kwargs["temperature"] = temperature
-                response = await acompletion(
-                    model=model,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    **kwargs,
-                )
-            else:
-                client = client or self.client
-                extra_kwargs = {"extra_body": {"enable_thinking": False}} if aiaas_extras else {}
-                if temperature is not None:
-                    extra_kwargs["temperature"] = temperature
-                response = await client.chat.completions.create(
-                    model=model,
-                    max_tokens=max_tokens,
-                    **extra_kwargs,
-                    messages=messages,
-                )
+            client = client or self.client
+            extra_kwargs = {"extra_body": {"enable_thinking": False}} if aiaas_extras else {}
+            if temperature is not None:
+                extra_kwargs["temperature"] = temperature
+            response = await client.chat.completions.create(
+                model=model,
+                max_tokens=max_tokens,
+                **extra_kwargs,
+                messages=messages,
+            )
         except APITimeoutError:
             logger.error("LLM request timed out", extra={
                 "event": "llm_timeout",

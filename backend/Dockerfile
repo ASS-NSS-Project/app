@@ -37,10 +37,6 @@ RUN arch=$(uname -m) && \
 # Remaining dependencies
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
-# Optional custom-provider adapter for user-supplied LLMs (Anthropic, Gemini,
-# Bedrock, Vertex AI, Azure OpenAI, OpenRouter, and OpenAI-compatible APIs).
-RUN pip install --no-cache-dir litellm==1.83.8
-
 RUN playwright install chromium
 
 COPY . .

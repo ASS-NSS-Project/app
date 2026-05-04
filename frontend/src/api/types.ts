@@ -96,7 +96,6 @@ export interface QueryRequest {
   upstream_base_url?: string | null
   upstream_api_key?: string | null
   upstream_model?: string | null
-  upstream_config?: Record<string, unknown> | null
 }
 
 export interface Citation {

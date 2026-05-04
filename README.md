@@ -429,16 +429,13 @@ List the 50 most recent ingest jobs for a source.
 ### Query — `/query`
 
 #### `GET /query/models`
-Returns the list of available LLM models. AIaaS models are always present; external provider models are included only when the corresponding API key is configured in the backend environment.
+Returns the server-configured default LLM model. User-supplied custom providers are configured per request through `POST /query/`; their keys are never sent to or stored by the frontend.
 
 | Provider | Env var | Models exposed |
 |----------|---------|----------------|
-| AIaaS — e-INFRA | always on | Qwen3.5 122B, DeepSeek V3.2, GPT-OSS 120B |
-| OpenAI | `OPENAI_API_KEY` | GPT-4.1, GPT-4.1 Mini, GPT-4.1 Nano, GPT-4o, GPT-4o Mini, o4-mini, o3 |
-| Gemini | `GEMINI_API_KEY` | Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.0 Flash, Gemini 3.0 Flash, Gemini 3.1 Pro |
-| Anthropic (direct) | `ANTHROPIC_API_KEY` | Claude Opus 4.7, Claude Sonnet 4.6, Claude Haiku 4.5 |
+| Default server provider | `QUERY_BASE_URL`, `QUERY_MODEL` | The single model configured for this deployment |
 
-Each entry in the response has `id` (e.g. `"anthropic:claude-opus-4-7"`), `label`, `model` (raw model name), and `group`. The frontend uses this list to populate the model selector — no API keys are ever sent to or stored by the frontend.
+Each entry in the response has `id`, `label`, `model` (raw model name), and `group`.
 
 #### `POST /query/`
 Ask a question. Returns an answer with citations from the knowledge base.
@@ -463,15 +460,14 @@ Ask a question. Returns an answer with citations from the knowledge base.
 | `top_k` | `5` | Number of chunks to retrieve |
 | `source_id` | `null` | Restrict retrieval to one source (UUID) |
 | `strict_grounding` | `true` | `true`: fail-closed grounded mode (verifies citation support and refuses if insufficient evidence). `false`: relaxed mode (may use model knowledge beyond retrieved chunks). |
-| `upstream_provider` | `null` | Custom provider adapter. Supported UI presets include `openai_compatible`, `openrouter`, `openai`, `anthropic`, `gemini`, `vertex_ai`, `bedrock`, `azure`, `groq`, `deepseek`, `ollama`, and `custom_litellm`. |
-| `upstream_base_url` | `null` | Optional endpoint/base URL. Required for generic OpenAI-compatible endpoints and usually for Azure/OpenAI-compatible self-hosted APIs. |
-| `upstream_api_key` | `null` | API key or primary secret for the custom upstream endpoint. Some providers also need extra fields in `upstream_config`. |
-| `upstream_model` | `null` | Model or deployment name. Provider prefixes are added automatically for known LiteLLM providers. |
-| `upstream_config` | `null` | Provider-specific JSON object forwarded to LiteLLM, for example `{"aws_region_name":"eu-central-1"}` or `{"api_version":"2024-10-21"}`. |
+| `upstream_provider` | `null` | Optional custom provider. Supported values are `openai` and `openrouter`. Leave empty for the server default. |
+| `upstream_base_url` | `null` | Optional endpoint/base URL. If provided, the host must match the selected provider (`api.openai.com` or `openrouter.ai`). |
+| `upstream_api_key` | `null` | API key for the custom upstream endpoint. Custom secrets are used only for the current request and are not stored. |
+| `upstream_model` | `null` | Model name for the custom upstream endpoint. |
 
 Leave all `upstream_*` fields empty to use the server-configured defaults (`QUERY_BASE_URL` / `QUERY_MODEL`). The Query UI exposes this as the `Default` provider preset. The `enable_thinking` extra body is only sent when using the default endpoint — suppressed for custom upstreams.
 
-Custom non-OpenAI-compatible providers are routed through LiteLLM in the backend image and CI test environment, so the same Query UI can call OpenAI, Anthropic/Claude, Gemini API, Vertex AI, AWS Bedrock, Azure OpenAI, OpenRouter, Groq, DeepSeek, Ollama, and other LiteLLM-supported providers. OpenRouter can also work through the OpenAI-compatible path (`https://openrouter.ai/api/v1`); when that base URL is used, the backend adds OpenRouter attribution headers (`HTTP-Referer`, `X-Title`) automatically.
+Custom provider support is intentionally limited to the server default, OpenAI, and OpenRouter. The project does not bundle LiteLLM because that would broaden the Python dependency and supply-chain surface for user-provided credentials; providers such as Claude, Gemini, Bedrock, Vertex AI, or Azure should be reached through OpenRouter or the operator-managed server default instead of arbitrary user-supplied endpoints. When an OpenRouter base URL is used, the backend adds OpenRouter attribution headers (`HTTP-Referer`, `X-Title`) automatically.
 
 If no sources or chunks have been ingested yet, RAG mode returns a normal `200` response instead of initializing retrieval and failing with a server error. Empty-context and strict-grounding refusal answers are generated in the same language as the user's question. In relaxed grounding mode, the response first says that no retrieved/indexed documents contain the answer, then adds a short general-knowledge answer outside the retrieved context.
 

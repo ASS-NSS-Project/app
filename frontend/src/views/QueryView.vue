@@ -89,7 +89,7 @@
             </div>
             <div class="help-note">
               <i class="pi pi-info-circle"></i>
-              <span>Leave blank to use the server-configured default. Provider options are forwarded to LiteLLM for providers that need more than one key field. Custom secrets are used for this request and are never stored.</span>
+              <span>Leave blank to use the server-configured default. For security, custom providers are limited to OpenAI and OpenRouter. Custom secrets are used for this request and are never stored.</span>
             </div>
           </div>
 
@@ -98,18 +98,8 @@
               <label class="model-label">PROVIDER</label>
               <select v-model="customProvider" class="model-key-input">
                 <option value="">Default</option>
-                <option value="openai_compatible">OpenAI-compatible</option>
-                <option value="openrouter">OpenRouter</option>
                 <option value="openai">OpenAI</option>
-                <option value="anthropic">Claude / Anthropic</option>
-                <option value="gemini">Gemini API</option>
-                <option value="vertex_ai">Vertex AI</option>
-                <option value="bedrock">AWS Bedrock</option>
-                <option value="azure">Azure OpenAI</option>
-                <option value="groq">Groq</option>
-                <option value="deepseek">DeepSeek</option>
-                <option value="ollama">Ollama</option>
-                <option value="custom_litellm">LiteLLM custom</option>
+                <option value="openrouter">OpenRouter</option>
               </select>
             </div>
             <div class="model-key-wrap">
@@ -123,15 +113,6 @@
             <div class="model-key-wrap">
               <label class="model-label">MODEL NAME</label>
               <input v-model="customModel" class="model-key-input mono" placeholder="server default" spellcheck="false" />
-            </div>
-            <div class="model-key-wrap config-wrap">
-              <label class="model-label">PROVIDER OPTIONS JSON</label>
-              <textarea
-                v-model="customConfigJson"
-                class="model-key-input mono config-input"
-                placeholder='{"aws_region_name":"eu-central-1"}'
-                spellcheck="false"
-              />
             </div>
           </div>
         </div>
@@ -361,7 +342,6 @@ const customBaseUrl = ref('')
 const customApiKey = ref('')
 const customModel = ref('')
 const customProvider = ref('')
-const customConfigJson = ref('')
 const showCustomFields = ref(false)
 const showCustomHelp = ref(false)
 const providerPresets = [
@@ -371,7 +351,6 @@ const providerPresets = [
     baseUrl: '',
     endpoint: 'server env: QUERY_BASE_URL',
     model: '',
-    configJson: '',
     models: 'server env: QUERY_MODEL',
   },
   {
@@ -380,8 +359,7 @@ const providerPresets = [
     baseUrl: 'https://openrouter.ai/api/v1',
     endpoint: 'https://openrouter.ai/api/v1',
     model: 'openrouter/auto',
-    configJson: '',
-    models: 'openrouter/auto, anthropic/claude-sonnet-4.5, openai/gpt-5-mini',
+    models: 'openrouter/auto, openai/gpt-5-mini, meta-llama/llama-3.3-70b-instruct',
   },
   {
     name: 'OpenAI',
@@ -389,80 +367,7 @@ const providerPresets = [
     baseUrl: 'https://api.openai.com/v1',
     endpoint: 'https://api.openai.com/v1',
     model: 'gpt-4o',
-    configJson: '',
     models: 'gpt-4o, gpt-4.1, o4-mini',
-  },
-  {
-    name: 'Claude / Anthropic',
-    provider: 'anthropic',
-    baseUrl: '',
-    endpoint: 'https://api.anthropic.com',
-    model: 'claude-sonnet-4-5-20250929',
-    configJson: '',
-    models: 'claude-sonnet-4.5, claude-haiku-4.5',
-  },
-  {
-    name: 'Gemini API',
-    provider: 'gemini',
-    baseUrl: '',
-    endpoint: 'https://generativelanguage.googleapis.com',
-    model: 'gemini-2.5-flash',
-    configJson: '',
-    models: 'gemini-2.5-flash, gemini-2.5-pro',
-  },
-  {
-    name: 'AWS Bedrock',
-    provider: 'bedrock',
-    baseUrl: '',
-    endpoint: 'https://bedrock-runtime.<region>.amazonaws.com',
-    model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    configJson: '{"aws_region_name":"eu-central-1"}',
-    models: 'requires AWS keys + region in options JSON',
-  },
-  {
-    name: 'Vertex AI',
-    provider: 'vertex_ai',
-    baseUrl: '',
-    endpoint: 'https://<location>-aiplatform.googleapis.com',
-    model: 'gemini-2.5-flash',
-    configJson: '{"vertex_project":"your-gcp-project","vertex_location":"europe-west4"}',
-    models: 'requires GCP project/location in options JSON',
-  },
-  {
-    name: 'Azure OpenAI',
-    provider: 'azure',
-    baseUrl: '',
-    endpoint: 'https://<resource>.openai.azure.com',
-    model: 'your-deployment-name',
-    configJson: '{"api_version":"2024-10-21"}',
-    models: 'requires endpoint + api_version in options JSON',
-  },
-  {
-    name: 'Groq',
-    provider: 'groq',
-    baseUrl: 'https://api.groq.com/openai/v1',
-    endpoint: 'https://api.groq.com/openai/v1',
-    model: 'llama-3.3-70b-versatile',
-    configJson: '',
-    models: 'llama-3.3-70b, mixtral-8x7b',
-  },
-  {
-    name: 'DeepSeek',
-    provider: 'deepseek',
-    baseUrl: 'https://api.deepseek.com/v1',
-    endpoint: 'https://api.deepseek.com/v1',
-    model: 'deepseek-chat',
-    configJson: '',
-    models: 'deepseek-chat, deepseek-reasoner',
-  },
-  {
-    name: 'Local Ollama',
-    provider: 'ollama',
-    baseUrl: 'http://localhost:11434/v1',
-    endpoint: 'http://localhost:11434/v1',
-    model: 'llama3.3',
-    configJson: '',
-    models: 'llama3.3, qwen2.5, mistral',
   },
 ]
 
@@ -472,20 +377,19 @@ onMounted(() => {
   if (saved) {
     try {
       const parsed = JSON.parse(saved)
-      customBaseUrl.value = parsed.baseUrl || ''
-      customModel.value = parsed.model || ''
-      customProvider.value = parsed.provider || ''
-      customConfigJson.value = parsed.configJson || ''
+      const provider = ['', 'openai', 'openrouter'].includes(parsed.provider) ? parsed.provider : ''
+      customProvider.value = provider
+      customBaseUrl.value = provider ? parsed.baseUrl || '' : ''
+      customModel.value = provider ? parsed.model || '' : ''
     } catch { /* ignore corrupt storage */ }
   }
 })
 
-watch([customBaseUrl, customModel, customProvider, customConfigJson], () => {
+watch([customBaseUrl, customModel, customProvider], () => {
   localStorage.setItem('custom_endpoint', JSON.stringify({
     baseUrl: customBaseUrl.value,
     model: customModel.value,
     provider: customProvider.value,
-    configJson: customConfigJson.value,
   }))
 })
 
@@ -519,26 +423,10 @@ function timestampFilename(): string {
   return new Date().toISOString().slice(0, 19).replace(/:/g, '-')
 }
 
-function applyProviderPreset(preset: { provider: string; baseUrl: string; model: string; configJson: string }) {
+function applyProviderPreset(preset: { provider: string; baseUrl: string; model: string }) {
   customProvider.value = preset.provider
   customBaseUrl.value = preset.baseUrl
   customModel.value = preset.model
-  customConfigJson.value = preset.configJson
-}
-
-function parseCustomConfig(): Record<string, unknown> | null | undefined {
-  const raw = customConfigJson.value.trim()
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(raw)
-    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-      throw new Error('Provider options must be a JSON object.')
-    }
-    return parsed
-  } catch (e) {
-    queryError.value = `Invalid provider options JSON: ${(e as Error).message}`
-    return undefined
-  }
 }
 
 // ─── Query ────────────────────────────────────────────────────────────────────
@@ -577,13 +465,6 @@ async function doQuery() {
   resetQueryInputHeight()
   loading.value = true
   queryError.value = ''
-  const upstreamConfig = parseCustomConfig()
-  if (upstreamConfig === undefined) {
-    store.question = q
-    resetQueryInputHeight()
-    loading.value = false
-    return
-  }
 
   try {
     const result = await post<QueryResponse>('/query/', {
@@ -596,7 +477,6 @@ async function doQuery() {
       upstream_base_url: customBaseUrl.value || null,
       upstream_api_key: customApiKey.value || null,
       upstream_model: customModel.value || null,
-      upstream_config: upstreamConfig,
     })
     store.addTurn(q, result)
   } catch (e: unknown) {
@@ -892,10 +772,6 @@ onMounted(async () => {
 }
 .model-key-wrap { flex: 1; min-width: 160px; max-width: 280px; }
 .model-key-wrap.compact { max-width: 220px; }
-.model-key-wrap.config-wrap {
-  flex-basis: 100%;
-  max-width: 100%;
-}
 .model-label {
   font-size: 10px;
   color: var(--muted);
@@ -915,10 +791,6 @@ onMounted(async () => {
   width: 100%;
 }
 .model-key-input.mono { font-family: monospace; }
-.config-input {
-  min-height: 74px;
-  resize: vertical;
-}
 .model-key-input:focus { border-color: var(--accent); }
 .model-key-input::placeholder { color: var(--muted); }
 

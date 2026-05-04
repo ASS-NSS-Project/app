@@ -7,7 +7,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from typing import Any, Optional
+from typing import Optional
 
 from config import get_settings
 from database import get_db
@@ -28,11 +28,11 @@ class QueryRequest(BaseModel):
     source_id: Optional[str] = None
     strict_grounding: bool = True
     # Override the server-configured LLM. Leave empty to use QUERY_BASE_URL/QUERY_MODEL.
+    # Custom user-supplied providers are limited to OpenAI and OpenRouter.
     upstream_provider: Optional[str] = None
     upstream_base_url: Optional[str] = None
     upstream_api_key: Optional[str] = None
     upstream_model: Optional[str] = None
-    upstream_config: Optional[dict[str, Any]] = None
 
 
 class ModelInfo(BaseModel):
@@ -99,7 +99,6 @@ async def query(
     api_key  = request.upstream_api_key
     model    = request.upstream_model
     provider = request.upstream_provider
-    config   = request.upstream_config
 
     rag_service = RAGService()
     try:
@@ -114,7 +113,6 @@ async def query(
             upstream_api_key=api_key,
             upstream_model=model,
             upstream_provider=provider,
-            upstream_config=config,
         )
     except RuntimeError as e:
         logger.error("Query failed", extra={

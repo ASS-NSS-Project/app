@@ -9,8 +9,8 @@
 #   ./04_query.sh "What is Terraform?"
 
 #   MODE=no_rag TOP_K=3 STRICT_GROUNDING=false ./04_query.sh "Who is rector at MENDELU?"
-#   UPSTREAM_PROVIDER=anthropic UPSTREAM_API_KEY=sk-ant-... UPSTREAM_MODEL=claude-sonnet-4-5-20250929 ./04_query.sh "Explain Terraform"
-#   UPSTREAM_PROVIDER=bedrock UPSTREAM_MODEL=anthropic.claude-3-5-sonnet-20241022-v2:0 UPSTREAM_CONFIG='{"aws_region_name":"eu-central-1"}' ./04_query.sh "Explain Terraform"
+#   UPSTREAM_PROVIDER=openai UPSTREAM_BASE_URL=https://api.openai.com/v1 UPSTREAM_API_KEY=sk-... UPSTREAM_MODEL=gpt-4o ./04_query.sh "Explain Terraform"
+#   UPSTREAM_PROVIDER=openrouter UPSTREAM_BASE_URL=https://openrouter.ai/api/v1 UPSTREAM_API_KEY=sk-or-... UPSTREAM_MODEL=openrouter/auto ./04_query.sh "Explain Terraform"
 
 set -euo pipefail
 
@@ -31,7 +31,6 @@ UPSTREAM_PROVIDER="${UPSTREAM_PROVIDER:-}"
 UPSTREAM_BASE_URL="${UPSTREAM_BASE_URL:-}"
 UPSTREAM_API_KEY="${UPSTREAM_API_KEY:-}"
 UPSTREAM_MODEL="${UPSTREAM_MODEL:-}"
-UPSTREAM_CONFIG="${UPSTREAM_CONFIG:-}"
 
 if [[ -z "$ADMIN_PASSWORD" ]]; then
   read -rsp "Admin password: " ADMIN_PASSWORD
@@ -58,7 +57,6 @@ BODY=$(jq -n \
   --arg upstream_base_url "$UPSTREAM_BASE_URL" \
   --arg upstream_api_key "$UPSTREAM_API_KEY" \
   --arg upstream_model "$UPSTREAM_MODEL" \
-  --argjson upstream_config "${UPSTREAM_CONFIG:-null}" \
   '{
     question: $question,
     mode: $mode,
@@ -69,8 +67,7 @@ BODY=$(jq -n \
   + (if $upstream_provider == "" then {} else {upstream_provider: $upstream_provider} end)
   + (if $upstream_base_url == "" then {} else {upstream_base_url: $upstream_base_url} end)
   + (if $upstream_api_key == "" then {} else {upstream_api_key: $upstream_api_key} end)
-  + (if $upstream_model == "" then {} else {upstream_model: $upstream_model} end)
-  + (if $upstream_config == null then {} else {upstream_config: $upstream_config} end)')
+  + (if $upstream_model == "" then {} else {upstream_model: $upstream_model} end)')
 
 curl -sf -X POST "${API_URL}/query/" \
   -H "Authorization: Bearer ${TOKEN}" \
