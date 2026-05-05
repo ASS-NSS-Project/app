@@ -25,7 +25,9 @@ COPY pyproject.toml uv.lock ./
 # the system Python so scripts land in /usr/local/bin (always on PATH).
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv export --frozen --no-dev --no-hashes -o /tmp/requirements.txt && \
-    uv pip install --system -r /tmp/requirements.txt
+    uv pip install --system \
+        --extra-index-url https://download.pytorch.org/whl/cpu \
+        -r /tmp/requirements.txt
 
 RUN playwright install chromium
 
