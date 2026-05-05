@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Chromium runtime libs: installed manually because 
+# Chromium runtime libs: installed manually because
 # playwright install-deps fails on Debian Trixie
 # due to missing font packages
 RUN apt-get update && apt-get install -y \
@@ -15,27 +15,16 @@ RUN apt-get update && apt-get install -y \
     fonts-liberation fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir poetry poetry-plugin-export
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-COPY pyproject.toml poetry.lock* ./
+ENV UV_SYSTEM_PYTHON=1 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
 
-# Export a flat requirements.txt from the lock file 
-# so pip handles the actual installation.
-RUN poetry export -f requirements.txt --only main \
-    --without-hashes -o /tmp/requirements.txt
+COPY pyproject.toml uv.lock ./
 
-# Install torch before everything else. `pytorch.org/whl/cpu` only publishes linux_x86_64 wheels 
-# — installing one of those on an arm64 container causes SIGILL at import time. 
-# On arm64 (Apple Silicon Podman, etc.) we fall back to PyPI which has native wheels.
-RUN arch=$(uname -m) && \
-    if [ "$arch" = "x86_64" ]; then \
-        pip install --no-cache-dir torch --extra-index-url https://download.pytorch.org/whl/cpu; \
-    else \
-        pip install --no-cache-dir torch; \
-    fi
-
-# Remaining dependencies
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
 
 RUN playwright install chromium
 
