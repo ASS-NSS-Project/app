@@ -17,15 +17,15 @@ RUN apt-get update && apt-get install -y \
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-ENV VIRTUAL_ENV=/app/.venv \
-    PATH="/app/.venv/bin:$PATH" \
-    UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy
+ENV UV_COMPILE_BYTECODE=1
 
 COPY pyproject.toml uv.lock ./
 
+# Export a flat requirements.txt from the lock file, then install into
+# the system Python so scripts land in /usr/local/bin (always on PATH).
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    uv export --frozen --no-dev --no-hashes -o /tmp/requirements.txt && \
+    uv pip install --system -r /tmp/requirements.txt
 
 RUN playwright install chromium
 
