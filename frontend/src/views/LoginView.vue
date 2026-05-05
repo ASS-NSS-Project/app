@@ -7,14 +7,11 @@
           <span class="brand-mark">◈</span>
           <span class="brand-name">WebRAG</span>
         </div>
-        <p class="brand-tagline">Multimodal Web Data Collection<br>&amp; AI Analysis System</p>
         <ul class="brand-features">
-          <li>Multimodal ingest pipeline with fallback chain</li>
-          <li>Screenshot AI extraction &amp; OCR</li>
-          <li>RAG with source citations and evidence</li>
-          <li>CAPTCHA incident management &amp; alerts</li>
-          <li>Embedding A/B experiments &amp; evaluation</li>
-          <li>Role-based access control (RBAC)</li>
+          <li>Multimodal ingest pipeline</li>
+          <li>RAG with source citations</li>
+          <li>CAPTCHA incident management</li>
+          <li>Embedding A/B experiments &amp; evaluation (TBD)</li>
         </ul>
       </div>
     </div>
@@ -28,7 +25,6 @@
           <p class="signin-subtitle">Access your WebRAG workspace</p>
         </div>
 
-        <Message v-if="error" severity="error" class="mb-4">{{ error }}</Message>
 
         <Button
           v-if="keycloakEnabled"
@@ -49,6 +45,8 @@
           <span class="divider-line" />
         </div>
 
+        <Message v-if="error" severity="error" class="mb-4 error-message">{{ error }}</Message>
+        
         <div class="field">
           <label class="field-label" for="password">ADMIN PASSWORD</label>
           <div class="input-icon-wrap">
@@ -186,8 +184,13 @@
   color: var(--muted);
 }
 
+.error-message{
+  margin-bottom: revert-layer;
+}
+
 .oidc-btn {
   justify-content: center;
+  margin-bottom: revert-layer;
 }
 
 /* Input icon wrapper */
