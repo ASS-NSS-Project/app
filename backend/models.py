@@ -29,10 +29,10 @@ def new_uuid() -> str:
 # ─────────────────────────────────────────────────────
 
 class UserRole(str, enum.Enum):
-    rag_admin   = "rag_admin"    # RAG app admin + Keycloak RAG groups management + Grafana
-    rag_curator = "rag_curator"  # Source/pipeline/incident management
-    rag_analyst = "rag_analyst"  # Experiments and queries
-    rag_user    = "rag_user"     # Query only
+    webrag_admin   = "webrag_admin"    # RAG app admin + Keycloak RAG groups management + Grafana
+    webrag_curator = "webrag_curator"  # Source/pipeline/incident management
+    webrag_analyst = "webrag_analyst"  # Experiments and queries
+    webrag_user    = "webrag_user"     # Query only
 
 
 class IngestStrategy(str, enum.Enum):
@@ -101,7 +101,7 @@ class User(Base):
     full_name       = Column(String, 
                              nullable=True)
     role            = Column(Enum(UserRole), 
-                             default=UserRole.rag_user, 
+                             default=UserRole.webrag_user,
                              nullable=False)
     is_active       = Column(Boolean, 
                              default=True)
