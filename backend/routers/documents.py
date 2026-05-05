@@ -59,6 +59,12 @@ class EvidenceUrlResponse(BaseModel):
     expires_in: int = 3600
 
 
+class MarkdownUrlResponse(BaseModel):
+    document_id: str
+    url: str
+    expires_in: int = 3600
+
+
 class DocumentStatsResponse(BaseModel):
     documents: int
     chunks: int
@@ -187,6 +193,30 @@ def get_evidence_url(
                      exc_info=True)
         raise HTTPException(status_code=500, detail="Could not generate evidence URL")
     return EvidenceUrlResponse(evidence_id=evidence_id, url=presigned)
+
+
+@router.get("/{doc_id}/markdown-url", response_model=MarkdownUrlResponse)
+def get_markdown_url(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_authenticated_user),
+):
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if not doc.markdown_uri:
+        raise HTTPException(status_code=404, detail="No markdown file stored for this document")
+    parts = doc.markdown_uri[5:].split("/", 1)
+    bucket, key = parts[0], parts[1]
+    storage = StorageService()
+    try:
+        presigned = storage.get_presigned_url(bucket=bucket, key=key, expires_seconds=3600)
+    except Exception as e:
+        logger.error("Failed to generate presigned URL for document %s: %s", doc_id, e,
+                     extra={"event": "presigned_url_failed", "document_id": doc_id, "error": str(e)},
+                     exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not generate document URL")
+    return MarkdownUrlResponse(document_id=doc_id, url=presigned)
 
 
 @router.delete("/{doc_id}", status_code=204)
