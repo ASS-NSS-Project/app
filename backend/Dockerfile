@@ -15,19 +15,27 @@ RUN apt-get update && apt-get install -y \
     fonts-liberation fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+RUN pip install --no-cache-dir poetry poetry-plugin-export
 
-ENV UV_COMPILE_BYTECODE=1
+COPY pyproject.toml poetry.lock* ./
 
-COPY pyproject.toml uv.lock ./
+# Export a flat requirements.txt from the lock file
+# so pip handles the actual installation.
+RUN poetry export -f requirements.txt --only main \
+    --without-hashes -o /tmp/requirements.txt
 
-# Export a flat requirements.txt from the lock file, then install into
-# the system Python so scripts land in /usr/local/bin (always on PATH).
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv export --frozen --no-dev --no-hashes -o /tmp/requirements.txt && \
-    uv pip install --system \
-        --extra-index-url https://download.pytorch.org/whl/cpu \
-        -r /tmp/requirements.txt
+# Install torch before everything else. `pytorch.org/whl/cpu` only publishes linux_x86_64 wheels
+# — installing one of those on an arm64 container causes SIGILL at import time.
+# On arm64 (Apple Silicon Podman, etc.) we fall back to PyPI which has native wheels.
+RUN arch=$(uname -m) && \
+    if [ "$arch" = "x86_64" ]; then \
+        pip install --no-cache-dir torch --extra-index-url https://download.pytorch.org/whl/cpu; \
+    else \
+        pip install --no-cache-dir torch; \
+    fi
+
+# Remaining dependencies
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 RUN playwright install chromium
 

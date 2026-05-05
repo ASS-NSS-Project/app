@@ -84,13 +84,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: astral-sh/setup-uv@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
         with:
-          enable-caching: true
+          python-version: "3.11"
 
-      - name: Install dependencies
-        run: uv sync --frozen
-        working-directory: backend
+      - name: Install tooling
+        run: pip install poetry poetry-plugin-export
+
+      - name: Install lightweight test dependencies
+        run: |
+          cd backend
+          poetry export -f requirements.txt --only main --without-hashes -o /tmp/requirements.txt
+          cd ..
+          pip install -r /tmp/requirements.txt pytest pytest-asyncio httpx
 
       - name: Run tests
         env:
@@ -103,7 +110,7 @@ jobs:
           FIRST_ADMIN_EMAIL: admin@test.local
           FIRST_ADMIN_PASSWORD: testpassword123
           FRONTEND_URL: http://localhost:5173
-        run: uv run --directory backend pytest tests/test_api.py tests/test_config.py -q
+        run: pytest tests/test_api.py tests/test_config.py -q
 
   shell-syntax:
     name: Shell syntax
@@ -191,8 +198,8 @@ jobs:
           push: true
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}
-          cache-from: type=registry,ref=ghcr.io/${{ env.ORG }}/webrag-backend:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ env.ORG }}/webrag-backend:buildcache,mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Docker metadata — frontend
         id: meta-frontend
@@ -214,5 +221,5 @@ jobs:
           push: true
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}
-          cache-from: type=registry,ref=ghcr.io/${{ env.ORG }}/webrag-frontend:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ env.ORG }}/webrag-frontend:buildcache,mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
