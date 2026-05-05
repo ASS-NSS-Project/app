@@ -7,7 +7,7 @@
 
     <div class="nav-links">
       <div v-if="canSeeDashboard" class="nav-section">Overview</div>
-      <a v-if="canSeeDashboard" href="https://grafana.nss.jkzl.eu/d/webrag-overview" target="_blank" class="nav-item nav-external">Dashboard ↗</a>
+      <a v-if="canSeeDashboard" href="https://grafana.nss.jkzl.eu/d/webrag-overview" target="_blank" class="nav-item">Dashboard</a>
 
       <div v-if="canManageSources" class="nav-section">Ingest</div>
       <router-link v-if="canManageSources" to="/sources" class="nav-item" active-class="active">Sources</router-link>
@@ -37,14 +37,14 @@
         v-if="isRagAdmin"
         href="https://grafana.nss.jkzl.eu/d/webrag-audit"
         target="_blank"
-        class="nav-item nav-external"
-      >Audit Logs ↗</a>
+        class="nav-item"
+      >Audit Logs</a>
       <a
         v-if="isRagAdmin"
         href="https://keycloak.nss.jkzl.eu/admin/ass-nss-project/console/#/ass-nss-project/groups"
         target="_blank"
-        class="nav-item nav-external"
-      >User Configuration ↗</a>
+        class="nav-item"
+      >Access Control</a>
     </div>
 
     <div class="sidebar-footer">
