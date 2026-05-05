@@ -916,7 +916,7 @@ Event catalogue:
 | `ingest_strategy_attempt` | worker | Trying a scraping strategy |
 | `ingest_strategy_fallback` | worker | Falling back to next strategy |
 | `ingest_strategy_error` | worker | A strategy raised an error |
-| `captcha_detected` | worker | CAPTCHA found during ingest — also fires `rag_app=incident` Loki label |
+| `captcha_detected` | worker | CAPTCHA found during ingest — also fires `webrag=incident` Loki label |
 | `document_created` | worker | Document + chunks saved to DB |
 | `embedding_completed` | worker | Chunks upserted into Qdrant |
 | `embedding_failed` | worker | Qdrant upsert failed |

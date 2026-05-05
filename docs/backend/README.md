@@ -268,7 +268,7 @@ All backend services emit **structured JSON** via `python-json-logger` (configur
 | `presigned_url_failed` | storage.py | S3 presigned URL generation failed |
 | `ingest_started` / `ingest_completed` / `ingest_failed` | worker_ingest.py | Job lifecycle |
 | `ingest_strategy_attempt` / `ingest_strategy_fallback` / `ingest_strategy_error` | ingest.py | Strategy execution |
-| `captcha_detected` | captcha.py | CAPTCHA found — also fires `rag_app=incident` Loki label |
+| `captcha_detected` | captcha.py | CAPTCHA found — also fires `webrag=incident` Loki label |
 | `document_created` | worker_ingest.py | Document + chunks saved to DB |
 | `worker_job_started` / `worker_job_completed` / `worker_job_incomplete` / `worker_job_crashed` / `worker_invalid_message` | worker_ingest.py | Worker message handling |
 | `chunking_prose` / `chunking_tables` / `chunking_vlm` | chunking.py | Chunking complete (DEBUG level) |
