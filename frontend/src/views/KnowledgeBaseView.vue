@@ -45,15 +45,6 @@
             @keydown.enter="applyFilter"
           />
         </div>
-        <Select
-          v-model="sourceFilter"
-          :options="sourceOptions"
-          optionLabel="label"
-          optionValue="value"
-          placeholder="Source ID"
-          size="small"
-          style="width:300px"
-        />
         <Button label="Search" size="small" @click="applyFilter" :loading="loading" />
         <Button label="Clear" size="small" severity="secondary" text @click="clearFilter" v-if="titleFilter || sourceFilter" />
       </div>
@@ -75,8 +66,8 @@
         >
           <template #empty>
             <div class="empty-state">
-              <div class="empty-icon">◫</div>
-              <p>No documents found.<br>Add sources and trigger an ingest to populate the knowledge base.</p>
+              <span class="icon">📚</span>
+              <p>No documents found. Add sources and trigger an ingest to populate the knowledge base.</p>
             </div>
           </template>
 
@@ -183,11 +174,12 @@
               </span>
             </template>
           </Column>
-          <Column style="width:56px">
+          <Column style="width:72px">
             <template #body="{ data }">
-              <button v-if="data.citation_evidence_id" class="view-btn" @click="openEvidence(data.citation_evidence_id)">
-                Src
-              </button>
+              <div class="chunk-actions">
+                <button v-if="data.citation_evidence_id" class="view-btn" @click="openEvidence(data.citation_evidence_id)">Evidence</button>
+                <button class="view-btn" @click="openMarkdown(data.document_id)">Document</button>
+              </div>
             </template>
           </Column>
         </DataTable>
@@ -206,7 +198,7 @@ import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import { get, del } from '@/api/client'
-import type { DocumentResponse, ChunkResponse, SourceResponse, DocumentStatsResponse } from '@/api/types'
+import type { DocumentResponse, ChunkResponse, SourceResponse, DocumentStatsResponse, MarkdownUrlResponse } from '@/api/types'
 import { relTime } from '@/utils/time'
 import { useAuthStore } from '@/stores/auth'
 
@@ -334,6 +326,15 @@ async function openEvidence(evidenceId: string) {
     window.open(resp.url, '_blank')
   } catch (e: any) {
     error.value = e.message ?? 'Failed to get evidence URL'
+  }
+}
+
+async function openMarkdown(docId: string) {
+  try {
+    const resp = await get<MarkdownUrlResponse>(`/documents/${docId}/markdown-url`)
+    window.open(resp.url, '_blank')
+  } catch (e: any) {
+    error.value = e.message ?? 'Failed to get document URL'
   }
 }
 
@@ -575,6 +576,12 @@ onMounted(async () => {
   color: var(--text2);
   white-space: pre-wrap;
   line-height: 1.5;
+}
+
+.chunk-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 </style>

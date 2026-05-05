@@ -176,6 +176,12 @@ export interface EvidenceUrlResponse {
   expires_in: number
 }
 
+export interface MarkdownUrlResponse {
+  document_id: string
+  url: string
+  expires_in: number
+}
+
 export interface ExperimentQueryIn {
   query_text: string
   expected_keywords: string[]
