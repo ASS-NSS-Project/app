@@ -44,7 +44,7 @@
         href="https://keycloak.nss.jkzl.eu/admin/ass-nss-project/console/#/ass-nss-project/groups"
         target="_blank"
         class="nav-item nav-external"
-      >RBAC ↗</a>
+      >User Configuration ↗</a>
     </div>
 
     <div class="sidebar-footer">
