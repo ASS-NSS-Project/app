@@ -14,13 +14,13 @@ const router = createRouter({
   routes: [
     { path: '/', redirect: '/query' },
     { path: '/login', component: LoginView, meta: { public: true } },
-    { path: '/sources', component: SourcesView, meta: { roles: ['rag_admin', 'rag_curator'] } },
+    { path: '/sources', component: SourcesView, meta: { roles: ['webrag_admin', 'webrag_curator'] } },
     { path: '/query', component: QueryView },
-    { path: '/pipeline', component: PipelineView, meta: { roles: ['rag_admin', 'rag_curator'] } },
+    { path: '/pipeline', component: PipelineView, meta: { roles: ['webrag_admin', 'webrag_curator'] } },
     { path: '/jobs', redirect: '/pipeline' },
-    { path: '/incidents', component: IncidentsView, meta: { roles: ['rag_admin', 'rag_curator'] } },
-    { path: '/knowledge-base', component: KnowledgeBaseView, meta: { roles: ['rag_admin', 'rag_curator', 'rag_analyst'] } },
-    { path: '/experiments', component: ExperimentsView, meta: { roles: ['rag_admin', 'rag_analyst'] } },
+    { path: '/incidents', component: IncidentsView, meta: { roles: ['webrag_admin', 'webrag_curator'] } },
+    { path: '/knowledge-base', component: KnowledgeBaseView, meta: { roles: ['webrag_admin', 'webrag_curator', 'webrag_analyst'] } },
+    { path: '/experiments', component: ExperimentsView, meta: { roles: ['webrag_admin', 'webrag_analyst'] } },
   ],
 })
 

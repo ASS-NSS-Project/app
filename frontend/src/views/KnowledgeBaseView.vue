@@ -226,7 +226,7 @@ const selectedDoc = ref<DocumentResponse | null>(null)
 const stats = ref({ documents: 0, chunks: 0, embeddedPct: 0, sources: 0 })
 const auth = useAuthStore()
 const canDelete = computed(() =>
-  auth.user?.role === 'rag_admin' || auth.user?.role === 'rag_curator'
+  auth.user?.role === 'webrag_admin' || auth.user?.role === 'webrag_curator'
 )
 
 const chunksHeader = computed(() =>

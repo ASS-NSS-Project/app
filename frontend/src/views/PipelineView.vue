@@ -248,7 +248,7 @@ import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 
 const auth = useAuthStore()
-const canDelete = computed(() => auth.user?.role === 'rag_admin')
+const canDelete = computed(() => auth.user?.role === 'webrag_admin')
 
 interface JobRow {
   id: string

@@ -68,15 +68,15 @@ const auth = useAuthStore()
 const router = useRouter()
 
 const canSeeDashboard = computed(() =>
-  auth.user?.role === 'rag_admin' || auth.user?.role === 'rag_curator' || auth.user?.role === 'rag_analyst'
+  auth.user?.role === 'webrag_admin' || auth.user?.role === 'webrag_curator' || auth.user?.role === 'webrag_analyst'
 )
 const canSeeExperiments = computed(() =>
-  auth.user?.role === 'rag_admin' || auth.user?.role === 'rag_analyst'
+  auth.user?.role === 'webrag_admin' || auth.user?.role === 'webrag_analyst'
 )
 const canManageSources = computed(() =>
-  auth.user?.role === 'rag_admin' || auth.user?.role === 'rag_curator'
+  auth.user?.role === 'webrag_admin' || auth.user?.role === 'webrag_curator'
 )
-const isRagAdmin = computed(() => auth.user?.role === 'rag_admin')
+const isRagAdmin = computed(() => auth.user?.role === 'webrag_admin')
 
 const systemOnline = ref(false)
 const incidentCount = ref(0)
