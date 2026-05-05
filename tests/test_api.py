@@ -74,7 +74,7 @@ async def test_me_authenticated(client: AsyncClient, auth_headers: dict):
     assert "email" in me
     assert "role" in me
     assert "id" in me
-    assert me["role"] == "rag_admin"
+    assert me["role"] == "webrag_admin"
 
 async def test_stats_requires_auth(client: AsyncClient):
     resp = await client.get("/auth/stats")
