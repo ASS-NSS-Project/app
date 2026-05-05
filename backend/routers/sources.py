@@ -159,7 +159,7 @@ def list_sources(
 def create_source(
     request: SourceCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.rag_admin, UserRole.rag_curator)),
+    current_user: User = Depends(require_role(UserRole.webrag_admin, UserRole.webrag_curator)),
 ):
     _validate_url(str(request.base_url))
     source = Source(
@@ -199,7 +199,7 @@ def update_source(
     source_id: str,
     request: SourceUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.rag_admin, UserRole.rag_curator)),
+    current_user: User = Depends(require_role(UserRole.webrag_admin, UserRole.webrag_curator)),
 ):
     # Look up the source by ID, return 404 if not found
     source = db.query(Source).filter(Source.id == source_id).first()
@@ -229,7 +229,7 @@ def trigger_ingest(
     source_id: str,
     request: IngestTriggerRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.rag_admin, UserRole.rag_curator)),
+    current_user: User = Depends(require_role(UserRole.webrag_admin, UserRole.webrag_curator)),
 ):
     source = db.query(Source).filter(Source.id == source_id).first()
     if not source:
@@ -303,7 +303,7 @@ def list_all_jobs(
 def cancel_job(
     job_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.rag_admin, UserRole.rag_curator)),
+    current_user: User = Depends(require_role(UserRole.webrag_admin, UserRole.webrag_curator)),
 ):
     job = db.query(IngestJob).filter(IngestJob.id == job_id).first()
     if not job:
@@ -322,7 +322,7 @@ def cancel_job(
 def delete_job(
     job_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.rag_admin)),
+    current_user: User = Depends(require_role(UserRole.webrag_admin)),
 ):
     job = db.query(IngestJob).filter(IngestJob.id == job_id).first()
     if not job:
@@ -355,7 +355,7 @@ def list_jobs(
 def delete_source(
     source_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.rag_admin)),
+    current_user: User = Depends(require_role(UserRole.webrag_admin)),
 ):
     source = db.query(Source).filter(Source.id == source_id).first()
     if not source:

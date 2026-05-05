@@ -134,14 +134,14 @@ def ensure_admin_exists(db: Session):
     Create the first admin user on system startup if none exists.
     This ensures there's always at least one admin to log in with.
     """
-    existing = db.query(User).filter(User.role == UserRole.rag_admin).first()
+    existing = db.query(User).filter(User.role == UserRole.webrag_admin).first()
     if not existing:
         admin = User(
             username=settings.first_admin_username,
             email=settings.first_admin_email,
             hashed_password=hash_password(settings.first_admin_password),
             full_name="System Administrator",
-            role=UserRole.rag_admin,
+            role=UserRole.webrag_admin,
         )
         db.add(admin)
         db.commit()

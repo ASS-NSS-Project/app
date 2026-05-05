@@ -193,7 +193,7 @@ def get_evidence_url(
 def delete_document(
     doc_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.rag_admin, UserRole.rag_curator)),
+    current_user: User = Depends(require_role(UserRole.webrag_admin, UserRole.webrag_curator)),
 ):
     """Delete a document and all of its chunks (including embedded vectors in Qdrant)."""
     doc = db.query(Document).filter(Document.id == doc_id).first()
