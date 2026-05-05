@@ -7,7 +7,7 @@
 
     <div class="nav-links">
       <div v-if="canSeeDashboard" class="nav-section">Overview</div>
-      <a v-if="canSeeDashboard" href="https://grafana.nss.jkzl.eu/d/rag-overview" target="_blank" class="nav-item nav-external">Dashboard ↗</a>
+      <a v-if="canSeeDashboard" href="https://grafana.nss.jkzl.eu/d/webrag-overview" target="_blank" class="nav-item nav-external">Dashboard ↗</a>
 
       <div v-if="canManageSources" class="nav-section">Ingest</div>
       <router-link v-if="canManageSources" to="/sources" class="nav-item" active-class="active">Sources</router-link>
@@ -18,7 +18,7 @@
       </router-link>
 
       <div class="nav-section">Query</div>
-      <router-link to="/query" class="nav-item" active-class="active">Query (RAG)</router-link>
+      <router-link to="/query" class="nav-item" active-class="active">Query</router-link>
       <router-link v-if="canSeeDashboard" to="/knowledge-base" class="nav-item" active-class="active">Knowledge Base</router-link>
 
       <div v-if="canSeeExperiments" class="nav-section">Analytics</div>
@@ -35,7 +35,7 @@
       <div v-if="isRagAdmin" class="nav-section">Admin</div>
       <a
         v-if="isRagAdmin"
-        href="https://grafana.nss.jkzl.eu/d/rag-audit"
+        href="https://grafana.nss.jkzl.eu/d/webrag-audit"
         target="_blank"
         class="nav-item nav-external"
       >Audit Logs ↗</a>
@@ -52,10 +52,6 @@
         <span class="footer-name">{{ auth.user?.username ?? auth.user?.email }}</span>
       </div>
       <div class="footer-bottom">
-        <div class="status-row">
-          <span class="status-dot" :class="systemOnline ? 'online' : 'offline'" />
-          <span class="status-text">{{ systemOnline ? 'System online' : 'Offline' }}</span>
-        </div>
         <button class="signout-btn" @click="doLogout">Sign out</button>
       </div>
     </div>
@@ -236,12 +232,6 @@ onUnmounted(() => clearInterval(pingInterval))
 .footer-bottom {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-}
-.status-row {
-  display: flex;
-  align-items: center;
-  gap: 5px;
 }
 .status-dot {
   width: 6px; height: 6px;
