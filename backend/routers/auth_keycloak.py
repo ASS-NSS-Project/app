@@ -65,17 +65,17 @@ def _verify_state(state: str) -> bool:
 
 # Keycloak group name → app UserRole.
 _GROUP_TO_ROLE: dict[str, UserRole] = {
-    "admin":       UserRole.rag_admin,   # realm admin → full RAG access
-    "rag_admin":   UserRole.rag_admin,
-    "rag_curator": UserRole.rag_curator,
-    "rag_analyst": UserRole.rag_analyst,
-    "rag_user":    UserRole.rag_user,
+    "admin":          UserRole.webrag_admin,   # realm admin → full RAG access
+    "webrag_admin":   UserRole.webrag_admin,
+    "webrag_curator": UserRole.webrag_curator,
+    "webrag_analyst": UserRole.webrag_analyst,
+    "webrag_user":    UserRole.webrag_user,
 }
 
 
 def _map_role(groups: list[str]) -> UserRole | None:
     """Highest-privilege matching group wins. Returns None if user has no recognized group."""
-    for group in ("admin", "rag_admin", "rag_curator", "rag_analyst", "rag_user"):
+    for group in ("admin", "webrag_admin", "webrag_curator", "webrag_analyst", "webrag_user"):
         if group in groups:
             return _GROUP_TO_ROLE[group]
     return None
