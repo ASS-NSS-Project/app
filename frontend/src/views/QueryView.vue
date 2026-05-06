@@ -923,13 +923,11 @@ onMounted(async () => {
   padding: 2px 6px;
   border-radius: 3px;
 }
-
 .help-models {
   font-size: 10px;
   color: var(--muted);
   font-style: italic;
 }
-
 .help-note {
   display: flex;
   align-items: flex-start;
@@ -941,14 +939,12 @@ onMounted(async () => {
   font-size: 11px;
   color: var(--text2);
 }
-
 .help-note i {
   color: var(--accent);
   font-size: 14px;
   margin-top: 1px;
   flex-shrink: 0;
 }
-
 .custom-fields {
   display: flex;
   flex-wrap: wrap;
