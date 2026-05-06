@@ -80,6 +80,9 @@ VLM_MODEL=qwen3.5-122b
 # Generate: python -c "import secrets; print(secrets.token_hex(32))"
 JWT_SECRET=change_me_to_a_random_hex_string
 
+# API token lifetime in hours (default 2160 = 90 days; set to 12 for short-lived tokens)
+# API_TOKEN_EXPIRE_HOURS=2160
+
 # First admin account (created automatically on first startup)
 FIRST_ADMIN_USERNAME=admin
 FIRST_ADMIN_EMAIL=admin@example.com
@@ -141,11 +144,11 @@ All endpoints (except `GET /health`) require a JWT token in the `Authorization` 
 Authorization: Bearer <token>
 ```
 
-Obtain a token via `POST /auth/login`. Roles control access: **rag_admin** > **rag_curator** > **rag_analyst** > **rag_user**.
+Obtain a token via `POST /auth/login`. Roles control access: **webrag_admin** > **webrag_curator** > **webrag_analyst** > **webrag_user**.
 
 **Frontend navigation visibility by role:**
 
-| Section | rag_admin | rag_curator | rag_analyst | rag_user |
+| Section | webrag_admin | webrag_curator | webrag_analyst | webrag_user |
 |---------|-----------|-------------|-------------|----------|
 | Query (RAG) | ✓ | ✓ | ✓ | ✓ |
 | Knowledge Base | ✓ | ✓ | ✓ | — |
@@ -188,7 +191,7 @@ OAuth2 form login. For API and script access where form encoding is preferred.
   "access_token": "eyJ...",
   "token_type": "bearer",
   "user_id": "uuid",
-  "role": "rag_admin",
+  "role": "webrag_admin",
   "email": "admin@example.com",
   "username": "admin"
 }
@@ -218,7 +221,7 @@ Returns the currently authenticated user's profile.
   "username": "admin",
   "email": "admin@example.com",
   "full_name": null,
-  "role": "rag_admin",
+  "role": "webrag_admin",
   "is_active": true
 }
 ```
@@ -265,7 +268,43 @@ Redirects to the Keycloak OIDC authorization endpoint. Shown as the **"Sign in w
 #### `GET /auth/keycloak/callback`
 OIDC callback — handled automatically by Keycloak. Redirects to the frontend with the JWT as a `?token=` query parameter.
 
-User management (create, edit roles, deactivate) is done directly in Keycloak. Keycloak group membership maps to RAG roles: `admin`/`rag_admin` → `rag_admin`, `rag_curator` → `rag_curator`, `rag_analyst` → `rag_analyst`, `rag_user` → `rag_user`.
+User management (create, edit roles, deactivate) is done directly in Keycloak. Keycloak group membership maps to RAG roles: `admin`/`webrag_admin` → `webrag_admin`, `webrag_curator` → `webrag_curator`, `webrag_analyst` → `webrag_analyst`, `webrag_user` → `webrag_user`.
+
+---
+
+#### `GET /auth/api-token/status`
+Returns whether the current user has an API token and its expiry. Does not reveal the token value.
+
+**Response `200`**:
+```json
+{
+  "has_token": true,
+  "expires_at": "2026-08-04T10:00:00",
+  "is_expired": false
+}
+```
+
+---
+
+#### `POST /auth/api-token`
+Generate or regenerate the current user's opaque API token. The plaintext token is returned **once** — it cannot be retrieved again. Store it securely.
+
+**Response `200`**:
+```json
+{
+  "token": "abc123...",
+  "expires_at": "2026-08-04T10:00:00"
+}
+```
+
+Use the token for API requests:
+```
+Authorization: Bearer <token>
+```
+
+If the token is expired, any request returns `401` with `{"detail": "API token expired"}`.
+
+Token lifetime is controlled by `API_TOKEN_EXPIRE_HOURS` (default `2160` = 90 days).
 
 ---
 
@@ -296,7 +335,7 @@ List all active sources.
 
 ---
 
-#### `POST /sources/` *(rag_admin, rag_curator)*
+#### `POST /sources/` *(webrag_admin, webrag_curator)*
 Create a new source.
 
 **Request** (`application/json`):
@@ -322,7 +361,7 @@ URLs pointing to private/loopback addresses are rejected (SSRF protection).
 
 ---
 
-#### `PATCH /sources/{source_id}` *(rag_admin, rag_curator)*
+#### `PATCH /sources/{source_id}` *(webrag_admin, webrag_curator)*
 Update a source's settings. All fields are optional.
 
 **Request** (`application/json`):
@@ -339,7 +378,7 @@ Update a source's settings. All fields are optional.
 
 ---
 
-#### `DELETE /sources/{source_id}` *(rag_admin only)*
+#### `DELETE /sources/{source_id}` *(webrag_admin only)*
 Deactivates a source (soft delete — sets `is_active = false`).
 
 **Response `200`**:
@@ -349,7 +388,7 @@ Deactivates a source (soft delete — sets `is_active = false`).
 
 ---
 
-#### `POST /sources/{source_id}/ingest` *(rag_admin, rag_curator)*
+#### `POST /sources/{source_id}/ingest` *(webrag_admin, webrag_curator)*
 Trigger an immediate ingest job for a source.
 
 **Request** (`application/json`, optional):
@@ -409,12 +448,12 @@ List all ingest jobs across all sources. Supports `source_id`, `status`, `limit`
 
 ---
 
-#### `POST /sources/jobs/{job_id}/cancel` *(rag_admin, rag_curator)*
+#### `POST /sources/jobs/{job_id}/cancel` *(webrag_admin, webrag_curator)*
 Cancel a `pending` or `running` job.
 
 ---
 
-#### `DELETE /sources/jobs/{job_id}` *(rag_admin only)*
+#### `DELETE /sources/jobs/{job_id}` *(webrag_admin only)*
 Delete a completed/failed job record.
 
 ---
@@ -540,7 +579,7 @@ In the Knowledge Base UI, chunks are opened explicitly via the **Chunks** action
 
 ---
 
-#### `DELETE /documents/{doc_id}` *(rag_admin, rag_curator)*
+#### `DELETE /documents/{doc_id}` *(webrag_admin, webrag_curator)*
 Delete a document and all of its chunks from the knowledge base. Embedded vectors for that document's chunks are removed from Qdrant as part of the same operation.
 
 **Response `204`**: deleted.
@@ -610,7 +649,7 @@ List incidents, newest first (max 100).
 
 ---
 
-#### `POST /incidents/{incident_id}/resolve` *(rag_admin, rag_curator)*
+#### `POST /incidents/{incident_id}/resolve` *(webrag_admin, webrag_curator)*
 Mark an incident as resolved.
 
 **Request** (`application/json`):
@@ -624,7 +663,7 @@ Mark an incident as resolved.
 
 ---
 
-#### `POST /incidents/simulate` *(rag_admin only)*
+#### `POST /incidents/simulate` *(webrag_admin only)*
 Create a synthetic CAPTCHA incident for testing. Useful for verifying the UI and resolve workflow without waiting for a real scrape to be blocked.
 
 **Request** (`application/json`, all fields optional):

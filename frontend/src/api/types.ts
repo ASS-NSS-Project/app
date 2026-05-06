@@ -182,6 +182,17 @@ export interface MarkdownUrlResponse {
   expires_in: number
 }
 
+export interface ApiTokenStatusResponse {
+  has_token: boolean
+  expires_at: string | null
+  is_expired: boolean
+}
+
+export interface ApiTokenResponse {
+  token: string
+  expires_at: string
+}
+
 export interface ExperimentQueryIn {
   query_text: string
   expected_keywords: string[]

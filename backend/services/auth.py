@@ -13,6 +13,8 @@ How login works:
 This is stateless - no session storage needed on the server.
 """
 
+import hashlib
+import secrets
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -86,18 +88,51 @@ def decode_token(token: str) -> Optional[dict]:
         return None
 
 
+class ApiTokenExpiredError(Exception):
+    """Raised when an opaque API token is valid but past its expiry date."""
+
+
+def _hash_api_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def generate_api_token(user: User, db: Session) -> str:
+    """Generate (or replace) a user's opaque API token. Returns plaintext — store it; it cannot be recovered."""
+    token = secrets.token_urlsafe(32)
+    user.api_token_hash       = _hash_api_token(token)
+    user.api_token_created_at = datetime.utcnow()
+    user.api_token_expires_at = datetime.utcnow() + timedelta(hours=settings.api_token_expire_hours)
+    db.commit()
+    db.refresh(user)
+    return token
+
+
 def get_current_user(token: str, db: Session) -> Optional[User]:
     """
-    Get the User object for a given JWT token.
-    Returns None if token is invalid or user doesn't exist.
+    Resolve a bearer token to a User.
+    Accepts both JWTs (start with 'eyJ') and opaque API tokens.
+    Raises ApiTokenExpiredError if an API token is recognised but past expiry.
     """
-    payload = decode_token(token)
-    if not payload:
+    if token.startswith("eyJ"):
+        payload = decode_token(token)
+        if not payload:
+            return None
+        user_id = payload.get("sub")
+        if not user_id:
+            return None
+        return db.query(User).filter(User.id == user_id, User.is_active == True).first()
+
+    # Opaque API token path
+    token_hash = _hash_api_token(token)
+    user = db.query(User).filter(
+        User.api_token_hash == token_hash,
+        User.is_active == True,
+    ).first()
+    if not user:
         return None
-    user_id = payload.get("sub")
-    if not user_id:
-        return None
-    return db.query(User).filter(User.id == user_id, User.is_active == True).first()
+    if user.api_token_expires_at and user.api_token_expires_at < datetime.utcnow():
+        raise ApiTokenExpiredError()
+    return user
 
 
 def log_action(

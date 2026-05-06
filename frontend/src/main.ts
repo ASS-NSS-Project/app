@@ -13,7 +13,7 @@ import './assets/main.css'
 const searchParams = new URLSearchParams(window.location.search)
 const oauthToken = searchParams.get('token')
 if (oauthToken) {
-  localStorage.setItem('rag_token', oauthToken)
+  localStorage.setItem('webrag_token', oauthToken)
   // Remove the token from the URL bar before the app mounts
   window.history.replaceState(null, '', window.location.pathname)
 }

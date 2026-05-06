@@ -11,7 +11,7 @@ export interface CurrentUser {
   full_name: string | null
 }
 
-const _K = { token: 'rag_token', user: 'rag_user' }
+const _K = { token: 'webrag_token', user: 'webrag_user' }
 
 function _activeStorage(): Storage {
   return sessionStorage.getItem(_K.token) ? sessionStorage : localStorage

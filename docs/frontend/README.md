@@ -40,23 +40,24 @@ frontend/
 
 ## Views (Pages)
 
-The application has **7 views**. All routes except `/login` require authentication.
+The application has **8 views**. All routes except `/login` require authentication.
 
 | View | Route | Description | Accessible by roles |
 |------|-------|-------------|---------------------|
 | **LoginView** | `/login` | Login page (password-only for admin, "Sign in with OIDC" button if Keycloak configured) | Public |
 | **QueryView** | `/query` | RAG query interface — ask questions, select model, view answers with citations | All authenticated users |
-| **SourcesView** | `/sources` | Manage sources (add, edit, delete, trigger ingest) | rag_admin, rag_curator |
-| **PipelineView** | `/pipeline` | View ingest job history across all sources, see fallback chain status per job | rag_admin, rag_curator |
-| **IncidentsView** | `/incidents` | CAPTCHA incident management (view, resolve, simulate) | rag_admin, rag_curator |
-| **KnowledgeBaseView** | `/knowledge-base` | Browse indexed documents, filter by source, view chunks, download markdown | rag_admin, rag_curator, rag_analyst |
-| **ExperimentsView** | `/experiments` | Run batch query experiments, view metrics (recall@k, MRR, nDCG) | rag_admin, rag_analyst |
+| **ApiTokenView** | `/api-token` | Generate or regenerate a personal opaque API token for programmatic access | All authenticated users |
+| **SourcesView** | `/sources` | Manage sources (add, edit, delete, trigger ingest) | webrag_admin, webrag_curator |
+| **PipelineView** | `/pipeline` | View ingest job history across all sources, see fallback chain status per job | webrag_admin, webrag_curator |
+| **IncidentsView** | `/incidents` | CAPTCHA incident management (view, resolve, simulate) | webrag_admin, webrag_curator |
+| **KnowledgeBaseView** | `/knowledge-base` | Browse indexed documents, filter by source, view chunks, download markdown | webrag_admin, webrag_curator, webrag_analyst |
+| **ExperimentsView** | `/experiments` | Run batch query experiments, view metrics (recall@k, MRR, nDCG) | webrag_admin, webrag_analyst |
 
 **External links** (opened in new tab, not SPA routes):
 
 - **Dashboard** → `https://grafana.nss.jkzl.eu/d/rag-overview` (Grafana dashboard)
 - **Audit Logs** → `https://grafana.nss.jkzl.eu/d/rag-audit` (Grafana logs panel)
-- **Users** → `https://keycloak.nss.jkzl.eu` (Keycloak admin console, rag_admin only)
+- **Users** → `https://keycloak.nss.jkzl.eu` (Keycloak admin console, webrag_admin only)
 
 The router enforces roles client-side and redirects to `/query` if the role is insufficient. `/query` is the default landing page for all authenticated users.
 
@@ -114,7 +115,7 @@ The `App.vue` root component listens for JWT expiry. When the token expires, the
 
 ### Role refresh
 
-If the user's Keycloak role changes (e.g. promoted from `rag_user` to `rag_curator`), the frontend can call `POST /auth/refresh` to get a new JWT with the updated role without requiring a full re-login.
+If the user's Keycloak role changes (e.g. promoted from `webrag_user` to `webrag_curator`), the frontend can call `POST /auth/refresh` to get a new JWT with the updated role without requiring a full re-login.
 
 ---
 
@@ -230,7 +231,7 @@ These types are derived from the FastAPI Pydantic schemas and should be kept in 
 
 Navigation items in the sidebar are shown/hidden based on the user's role:
 
-| Section | rag_admin | rag_curator | rag_analyst | rag_user |
+| Section | webrag_admin | webrag_curator | webrag_analyst | webrag_user |
 |---------|-----------|-------------|-------------|----------|
 | Query (RAG) | ✓ | ✓ | ✓ | ✓ |
 | Knowledge Base | ✓ | ✓ | ✓ | — |

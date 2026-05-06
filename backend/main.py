@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from sqlalchemy import text
 
 from config import get_settings
 from database import Base, engine, SessionLocal
@@ -53,6 +54,13 @@ async def lifespan(app: FastAPI):
             Base.metadata.create_all(bind=engine)
 
             logger.info("Database schema was created")
+
+            # Add API token columns to existing databases that predate this feature
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS api_token_hash VARCHAR"))
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS api_token_created_at TIMESTAMP"))
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS api_token_expires_at TIMESTAMP"))
+                conn.commit()
 
             break
 

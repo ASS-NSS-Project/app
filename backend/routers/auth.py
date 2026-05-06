@@ -23,7 +23,8 @@ from database import get_db
 logger = logging.getLogger(__name__)
 from models import User, UserRole, Source, IngestJob, Document, Incident, IncidentStatus
 from services.auth import (
-    verify_password, create_access_token, get_current_user, log_action
+    verify_password, create_access_token, get_current_user, log_action,
+    generate_api_token, ApiTokenExpiredError,
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -58,13 +59,31 @@ class LocalLoginRequest(BaseModel):
     password: str
 
 
+class ApiTokenResponse(BaseModel):
+    token: str
+    expires_at: str
+
+
+class ApiTokenStatusResponse(BaseModel):
+    has_token: bool
+    expires_at: str | None
+    is_expired: bool
+
+
 # ── Dependencies ──────────────────────────────────────────────────
 
 def get_authenticated_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
-    user = get_current_user(token, db)
+    try:
+        user = get_current_user(token, db)
+    except ApiTokenExpiredError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API token expired",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -185,3 +204,36 @@ def get_stats(
         "strategy_distribution":  strategy_distribution,
         "activity_24h":           activity_24h,
     }
+
+
+# ── API token management ──────────────────────────────────────────
+
+@router.get("/api-token/status", response_model=ApiTokenStatusResponse)
+def get_api_token_status(current_user: User = Depends(get_authenticated_user)):
+    """Return whether the current user has an API token and its expiry. Does not reveal the token value."""
+    if not current_user.api_token_hash:
+        return ApiTokenStatusResponse(has_token=False, expires_at=None, is_expired=False)
+    is_expired = (
+        current_user.api_token_expires_at is not None
+        and current_user.api_token_expires_at < datetime.utcnow()
+    )
+    return ApiTokenStatusResponse(
+        has_token=True,
+        expires_at=current_user.api_token_expires_at.isoformat() if current_user.api_token_expires_at else None,
+        is_expired=is_expired,
+    )
+
+
+@router.post("/api-token", response_model=ApiTokenResponse)
+def create_api_token(
+    current_user: User = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    """Generate or regenerate the current user's opaque API token. Returned plaintext is shown once — it cannot be recovered."""
+    token = generate_api_token(current_user, db)
+    log_action(db, current_user.id, "API_TOKEN_GENERATED")
+    logger.info("API token generated", extra={"event": "api_token_generated", "user_id": current_user.id})
+    return ApiTokenResponse(
+        token=token,
+        expires_at=current_user.api_token_expires_at.isoformat(),
+    )

@@ -94,6 +94,7 @@ class Settings(BaseSettings):
     jwt_secret: str = "changeme"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480  # 8 hours
+    api_token_expire_hours: int = 2160  # 90 days; set to e.g. 12 for short-lived tokens
 
     # ── Keycloak OIDC ──────────────────────────────
     keycloak_url: str = ""              # e.g. https://keycloak.nss.jkzl.eu

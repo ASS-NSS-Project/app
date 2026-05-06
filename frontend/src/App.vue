@@ -26,8 +26,8 @@ let rolePoller: ReturnType<typeof setInterval>
 onMounted(async () => {
   window.addEventListener('auth:expired', onAuthExpired)
 
-  const storedToken = sessionStorage.getItem('rag_token') ?? localStorage.getItem('rag_token')
-  const storedUser  = sessionStorage.getItem('rag_user')  ?? localStorage.getItem('rag_user')
+  const storedToken = sessionStorage.getItem('webrag_token') ?? localStorage.getItem('webrag_token')
+  const storedUser  = sessionStorage.getItem('webrag_user')  ?? localStorage.getItem('webrag_user')
 
   if (storedToken && !storedUser) {
     try {

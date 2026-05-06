@@ -9,7 +9,7 @@ export interface ChatTurn {
   timestamp: string
 }
 
-const STORAGE_KEY = 'rag_query_history'
+const STORAGE_KEY = 'webrag_query_history'
 
 function loadHistory(): ChatTurn[] {
   try {

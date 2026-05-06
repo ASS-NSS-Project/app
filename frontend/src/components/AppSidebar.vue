@@ -19,6 +19,7 @@
 
       <div class="nav-section">Query</div>
       <router-link to="/query" class="nav-item" active-class="active">Query</router-link>
+      <router-link to="/api-token" class="nav-item" active-class="active">API Access</router-link>
       <router-link v-if="canSeeDashboard" to="/knowledge-base" class="nav-item" active-class="active">Knowledge Base</router-link>
 
       <div v-if="canSeeExperiments" class="nav-section">Analytics</div>

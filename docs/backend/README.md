@@ -223,12 +223,15 @@ if drift_pct > 10%:
 - **JWT local** — `POST /auth/login` (username + password), 8-hour tokens (`JWT_EXPIRE_MINUTES=480`)
 - **JWT password-only** — `POST /auth/local-login` (password only, used by UI login form for admin account)
 - **Keycloak OIDC** — `GET /auth/keycloak` → Keycloak → `/auth/keycloak/callback` → JWT; realm roles map to `UserRole`
+- **Opaque API token** — `POST /auth/api-token` generates a `secrets.token_urlsafe(32)` token, stores its SHA-256 hash on the `users` row, and returns the plaintext once. Any endpoint accepts `Authorization: Bearer <token>` with the opaque value. Expired tokens return `401 "API token expired"`. Lifetime is `API_TOKEN_EXPIRE_HOURS` (default `2160` = 90 days).
 - **CORS** — only `FRONTEND_URL` is whitelisted
 - **API docs** — `/docs` and `/redoc` disabled by default; set `API_DOCS=true` in `.env` to enable
 
-User management (create, edit roles, deactivate) is done directly in Keycloak. Keycloak group membership maps to RAG roles: `admin`/`rag_admin` → `rag_admin`, `rag_curator` → `rag_curator`, `rag_analyst` → `rag_analyst`, `rag_user` → `rag_user`.
+User management (create, edit roles, deactivate) is done directly in Keycloak. Keycloak group membership maps to RAG roles: `admin`/`webrag_admin` → `webrag_admin`, `webrag_curator` → `webrag_curator`, `webrag_analyst` → `webrag_analyst`, `webrag_user` → `webrag_user`.
 
 The `POST /auth/refresh` endpoint re-issues a JWT with the current DB role. Called by the frontend when a role mismatch is detected (e.g. after a Keycloak group change).
+
+`GET /auth/api-token/status` returns `{has_token, expires_at, is_expired}` without revealing the token value. `POST /auth/api-token` generates or replaces the token (audit-logged as `API_TOKEN_GENERATED`). New columns on `users`: `api_token_hash` (SHA-256 hex, indexed), `api_token_created_at`, `api_token_expires_at`.
 
 ---
 

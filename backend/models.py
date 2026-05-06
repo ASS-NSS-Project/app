@@ -113,6 +113,11 @@ class User(Base):
     oauth_id       = Column(String, nullable=True, index=True)  # unique user ID
     avatar_url     = Column(String, nullable=True) # Profile picture URL from Google
 
+    # Opaque API token (for programmatic access — shown only once on generation)
+    api_token_hash       = Column(String, nullable=True, index=True)
+    api_token_created_at = Column(DateTime, nullable=True)
+    api_token_expires_at = Column(DateTime, nullable=True)
+
     audit_logs     = relationship("AuditLog", back_populates="user")
 
 

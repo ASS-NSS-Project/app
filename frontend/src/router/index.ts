@@ -8,6 +8,7 @@ import IncidentsView from '@/views/IncidentsView.vue'
 import KnowledgeBaseView from '@/views/KnowledgeBaseView.vue'
 import ExperimentsView from '@/views/ExperimentsView.vue'
 import PipelineView from '@/views/PipelineView.vue'
+import ApiTokenView from '@/views/ApiTokenView.vue'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -21,6 +22,7 @@ const router = createRouter({
     { path: '/incidents', component: IncidentsView, meta: { roles: ['webrag_admin', 'webrag_curator'] } },
     { path: '/knowledge-base', component: KnowledgeBaseView, meta: { roles: ['webrag_admin', 'webrag_curator', 'webrag_analyst'] } },
     { path: '/experiments', component: ExperimentsView, meta: { roles: ['webrag_admin', 'webrag_analyst'] } },
+    { path: '/api-token', component: ApiTokenView },
   ],
 })
 
