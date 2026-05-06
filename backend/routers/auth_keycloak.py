@@ -11,7 +11,6 @@ Flow (standard Authorization Code):
   7. Backend creates / updates the user in DB with the Keycloak-assigned role
   8. Backend issues its own JWT, redirects to the frontend with ?token=
 """
-
 import base64
 import hashlib
 import hmac

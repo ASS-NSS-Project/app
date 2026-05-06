@@ -20,7 +20,6 @@ settings = get_settings()
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
-
 class DocumentResponse(BaseModel):
     id: str
     source_id: str
@@ -34,7 +33,6 @@ class DocumentResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
 
 class ChunkResponse(BaseModel):
     id: str
@@ -52,25 +50,21 @@ class ChunkResponse(BaseModel):
     class Config:
         from_attributes = True
 
-
 class EvidenceUrlResponse(BaseModel):
     evidence_id: str
     url: str
     expires_in: int = 3600
-
 
 class MarkdownUrlResponse(BaseModel):
     document_id: str
     url: str
     expires_in: int = 3600
 
-
 class DocumentStatsResponse(BaseModel):
     documents: int
     chunks: int
     embedded_pct: int
     sources: int
-
 
 @router.get("/", response_model=list[DocumentResponse])
 def list_documents(
@@ -84,7 +78,6 @@ def list_documents(
     if source_id:
         q = q.filter(Document.source_id == source_id)
     return q.order_by(Document.created_at.desc()).offset(offset).limit(limit).all()
-
 
 @router.get("/stats", response_model=DocumentStatsResponse)
 def get_document_stats(
@@ -114,7 +107,6 @@ def get_document_stats(
         sources=sources,
     )
 
-
 @router.get("/{doc_id}", response_model=DocumentResponse)
 def get_document(
     doc_id: str,
@@ -126,7 +118,6 @@ def get_document(
         raise HTTPException(status_code=404, detail="Document not found")
     return doc
 
-
 @router.get("/{doc_id}/chunks", response_model=list[ChunkResponse])
 def list_chunks(
     doc_id: str,
@@ -137,7 +128,6 @@ def list_chunks(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     return db.query(Chunk).filter(Chunk.document_id == doc_id).order_by(Chunk.chunk_index).all()
-
 
 @router.get("/{doc_id}/markdown")
 def get_document_markdown(
@@ -170,7 +160,6 @@ def get_document_markdown(
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
-
 @router.get("/evidence/{evidence_id}/url", response_model=EvidenceUrlResponse)
 def get_evidence_url(
     evidence_id: str,
@@ -194,7 +183,6 @@ def get_evidence_url(
         raise HTTPException(status_code=500, detail="Could not generate evidence URL")
     return EvidenceUrlResponse(evidence_id=evidence_id, url=presigned)
 
-
 @router.get("/{doc_id}/markdown-url", response_model=MarkdownUrlResponse)
 def get_markdown_url(
     doc_id: str,
@@ -217,7 +205,6 @@ def get_markdown_url(
                      exc_info=True)
         raise HTTPException(status_code=500, detail="Could not generate document URL")
     return MarkdownUrlResponse(document_id=doc_id, url=presigned)
-
 
 @router.delete("/{doc_id}", status_code=204)
 def delete_document(

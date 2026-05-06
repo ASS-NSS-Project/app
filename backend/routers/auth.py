@@ -8,7 +8,6 @@ POST /auth/refresh     → re-issue JWT with current DB role
 GET  /auth/providers   → which SSO providers are configured
 GET  /auth/stats       → system statistics for the dashboard
 """
-
 import logging
 from datetime import datetime, timedelta
 
