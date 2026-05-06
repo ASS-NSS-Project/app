@@ -42,7 +42,7 @@
       >Audit Logs</a>
       <a
         v-if="isRagAdmin"
-        href="https://keycloak.nss.jkzl.eu/admin/ass-nss-project/console/#/ass-nss-project/groups"
+        href="https://keycloak.nss.jkzl.eu/admin/ass-nss-project/console/#/ass-nss-project"
         target="_blank"
         class="nav-item"
       >Access Control</a>
