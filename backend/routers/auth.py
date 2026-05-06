@@ -1,5 +1,5 @@
 """
-routers/auth.py - Authentication Endpoints
+routers/auth.py - Authentication Endpoints 
 
 POST /auth/local-login → password-only login for the local admin account
 POST /auth/login       → OAuth2 form login (username + password, for API/script access)
