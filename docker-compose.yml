@@ -19,6 +19,7 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
+      TZ: Europe/Prague
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     ports:
@@ -50,6 +51,7 @@ services:
     container_name: rag_postgres
     restart: unless-stopped
     environment:
+      TZ: Europe/Prague
       POSTGRES_USER: ${POSTGRES_USER:-raguser}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-ragdb}
@@ -71,6 +73,7 @@ services:
     security_opt:
       - label=disable   # Podman rootless: allow volume chown for erlang cookie (SELinux); Docker ignores this
     environment:
+      TZ: Europe/Prague
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-rabbit}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
       RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:-changeme_erlang_cookie}
@@ -116,6 +119,7 @@ services:
     container_name: rag_api
     restart: unless-stopped
     environment:
+      - TZ=Europe/Prague
       # Must provide!
       - POSTGRES_USER=${POSTGRES_USER:-raguser}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -191,6 +195,7 @@ services:
     container_name: rag_worker_ingest
     restart: unless-stopped
     environment:
+      - TZ=Europe/Prague
       - POSTGRES_USER=${POSTGRES_USER:-raguser}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB:-ragdb}
@@ -242,6 +247,7 @@ services:
     container_name: rag_worker_embed
     restart: unless-stopped
     environment:
+      - TZ=Europe/Prague
       - POSTGRES_USER=${POSTGRES_USER:-raguser}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB:-ragdb}
