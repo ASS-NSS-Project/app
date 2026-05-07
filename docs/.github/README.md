@@ -112,7 +112,7 @@ Verifies that the frontend builds successfully and TypeScript types are valid.
 
 ### Build and push
 
-Builds Docker images for `webrag-backend` and `webwebrag-frontend` and pushes them to GitHub Container Registry (`ghcr.io/ass-nss-project/`).
+Builds Docker images for `webrag-backend` and `webrag-frontend` and pushes them to GitHub Container Registry (`ghcr.io/ass-nss-project/`).
 
 **Conditions:**
 - **Only runs on push events** (not PRs)
@@ -121,7 +121,7 @@ Builds Docker images for `webrag-backend` and `webwebrag-frontend` and pushes th
 
 **Images:**
 - `ghcr.io/ass-nss-project/webrag-backend` — FastAPI backend (also used for workers with different command)
-- `ghcr.io/ass-nss-project/webwebrag-frontend` — Vue 3 + nginx SPA
+- `ghcr.io/ass-nss-project/webrag-frontend` — Vue 3 + nginx SPA
 
 **Tag strategy:**
 
@@ -175,7 +175,7 @@ npm run build
 docker build -t webrag-backend:local ./backend
 
 # Frontend image
-docker build -t webwebrag-frontend:local ./frontend
+docker build -t webrag-frontend:local ./frontend
 ```
 
 ---

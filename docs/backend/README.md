@@ -12,7 +12,8 @@ backend/
 ├── config.py               # All settings via env vars (pydantic-settings, lru_cache)
 ├── database.py             # SQLAlchemy engine + SessionLocal + Base
 ├── models.py               # ORM table definitions (see Data Model below)
-├── worker_ingest.py               # RabbitMQ consumer: pulls job_id → runs ingest pipeline → embeds chunks
+├── worker_ingest.py               # RabbitMQ consumer: pulls job_id → runs ingest pipeline → publishes to "embeddings" queue
+├── worker_embed.py                # RabbitMQ consumer: pulls document_id → embeds chunks with BGE-M3 → upserts to Qdrant
 ├── Dockerfile              # Multi-stage build: Poetry deps → FastAPI/worker container
 ├── pyproject.toml          # Poetry dependency manifest (uses pytorch-cpu supplemental source)
 ├── poetry.lock             # Locked dependency tree
@@ -260,11 +261,11 @@ All backend services emit **structured JSON** via `python-json-logger` (configur
 | `http_request` | HTTP middleware | Every HTTP request — method, path, status, duration_ms, client |
 | `http_error` | main.py middleware | Unhandled exception before response was sent |
 | `query_received` / `query_completed` / `query_failed` | routers/query.py | RAG query lifecycle |
-| `search_start` / `search_complete` / `search_failed` | embedding_service.py | Qdrant search |
-| `model_load_start` / `model_load_complete` | embedding_service.py | BGE-M3 model loading |
-| `embedding_completed` / `embedding_failed` | embedding_service.py | Chunk embedding |
+| `search_start` / `search_complete` / `search_failed` | embedding.py | Qdrant search |
+| `model_load_start` / `model_load_complete` | embedding.py | BGE-M3 model loading |
+| `embedding_completed` / `embedding_failed` | embedding.py | Chunk embedding |
 | `jwt_invalid` | auth_service.py | JWT decode failed |
-| `chunks_delete` | embedding_service.py | Chunks deleted from Qdrant |
+| `chunks_delete` | embedding.py | Chunks deleted from Qdrant |
 | `admin_created` | auth_service.py | Bootstrap admin created on first startup |
 | `scheduler_job_triggered` / `scheduler_crawl_failed` / `scheduler_run_complete` | scheduler.py | Scheduler activity |
 | `experiment_started` / `experiment_executing` / `experiment_query_done` / `experiment_completed` / `experiment_failed` / `experiment_background_crashed` | experiment.py | Experiment lifecycle |

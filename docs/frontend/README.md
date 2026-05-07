@@ -55,8 +55,8 @@ The application has **8 views**. All routes except `/login` require authenticati
 
 **External links** (opened in new tab, not SPA routes):
 
-- **Dashboard** → `https://grafana.nss.jkzl.eu/d/rag-overview` (Grafana dashboard)
-- **Audit Logs** → `https://grafana.nss.jkzl.eu/d/rag-audit` (Grafana logs panel)
+- **Dashboard** → `https://grafana.nss.jkzl.eu/d/webrag-overview` (Grafana dashboard)
+- **Audit Logs** → `https://grafana.nss.jkzl.eu/d/webrag-audit` (Grafana logs panel)
 - **Users** → `https://keycloak.nss.jkzl.eu` (Keycloak admin console, webrag_admin only)
 
 The router enforces roles client-side and redirects to `/query` if the role is insufficient. `/query` is the default landing page for all authenticated users.

@@ -107,8 +107,9 @@ docker compose up --build
 
 You'll know it's ready when you see:
 ```
-rag_api    | INFO: Startup complete. API ready.
+rag_api          | INFO: Startup complete. API ready.
 rag_worker_ingest | INFO: Worker ready. Listening on queue: ingest
+rag_worker_embed  | INFO: Worker ready. Listening on queue: embeddings
 ```
 
 ### 4. Open the UI
@@ -901,9 +902,10 @@ Frontend errors (`api_error`, `network_error`, `vue_error`, `unhandled_promise_r
 The frontend HTML document title is `WebRAG` (browser tab title).
 
 ```bash
-docker compose logs -f api      # API logs
-docker compose logs -f worker   # Worker/ingest logs
-docker compose logs -f frontend # Nginx logs
+docker compose logs -f api             # API logs
+docker compose logs -f worker_ingest   # Ingest worker logs
+docker compose logs -f worker_embed    # Embedding worker logs
+docker compose logs -f frontend        # Nginx logs
 ```
 
 Filter by event type:
@@ -916,7 +918,7 @@ Every log line is JSON. Key fields: `timestamp`, `level`, `logger`, `service`, `
 
 ```bash
 # Follow all logs
-docker compose logs -f api worker
+docker compose logs -f api worker_ingest worker_embed
 
 # Filter to a specific event slug
 docker compose logs api | grep '"event": "query_failed"'
@@ -997,7 +999,7 @@ docker compose down -v       # Stop and delete all data (fresh start)
 → Give it 30–60 seconds on first run. Databases take time to initialize. The API and worker use a TCP socket poll loop that waits up to 100 s total before failing.
 
 **Worker not processing jobs**
-→ Check `docker compose logs worker`. If it shows import errors, run `docker compose build` again.
+→ Check `docker compose logs worker_ingest` and `docker compose logs worker_embed`. If they show import errors, run `docker compose build` again.
 
 **Vision extraction fails**
 → Verify `VLM_BASE_URL`, `VLM_API_KEY`, and `VLM_MODEL` in `.env`. Test the endpoint with `curl -H "Authorization: Bearer $VLM_API_KEY" $VLM_BASE_URL/models`.
@@ -1129,11 +1131,11 @@ curl -s https://webrag.nss.jkzl.eu/api/query/models \
   -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 ```
 
-ArgoCD sync waves:
+ArgoCD sync waves (from `infra/argocd/`):
 
-- Wave 19 — `rabbitmq-operator` (RabbitMQ Cluster Operator)
-- Wave 20 — `qdrant` (Qdrant via Helm)
-- Wave 19 — `webrag` (API, workers, frontend, CNPG Postgres, secrets via ESO/Vault)
+- Wave 17 — `rabbitmq-helm` (RabbitMQ Cluster Operator)
+- Wave 18 — `qdrant-helm`, `rabbitmq-config` (Qdrant Helm + RabbitMQ cluster CR)
+- Wave 19 — `webrag-config` (API, workers, frontend, CNPG Postgres, secrets via ESO/Vault)
 
 Secrets are provisioned via `terraform/vault` in `infra/`. DNS records are managed via `terraform/cloudflare`.
 
