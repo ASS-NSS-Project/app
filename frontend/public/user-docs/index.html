@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebRAG — User Documentation</title>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --border: #222222;
+      --text: #e5e7eb;
+      --text2: #9ca3af;
+      --muted: #6b7280;
+      --accent: #00e676;
+      --warning: #fbbf24;
+      --danger: #f87171;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .logo-mark { font-size: 20px; color: var(--accent); }
+    .logo-name { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
+    .header-sub { font-size: 13px; color: var(--muted); margin-left: 8px; }
+
+    .layout { display: flex; flex: 1; }
+
+    nav {
+      width: 200px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 12px 0;
+      position: sticky;
+      top: 45px;
+      height: calc(100vh - 45px);
+      overflow-y: auto;
+    }
+
+    .nav-section {
+      padding: 10px 16px 3px;
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.9px;
+      color: var(--muted);
+      opacity: 0.55;
+    }
+
+    nav a {
+      display: block;
+      padding: 7px 16px;
+      color: var(--text2);
+      font-size: 13px;
+      text-decoration: none;
+      border-left: 2px solid transparent;
+      transition: color 0.15s, background 0.15s;
+    }
+    nav a:hover {
+      color: var(--text);
+      background: rgba(255,255,255,.03);
+    }
+
+    main {
+      flex: 1;
+      padding: 40px 48px;
+      max-width: 860px;
+    }
+
+    section {
+      margin-bottom: 56px;
+      scroll-margin-top: 60px;
+    }
+
+    section h2 {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    section h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      margin: 20px 0 8px;
+    }
+
+    section p { color: var(--text2); margin-bottom: 12px; }
+
+    ul, ol { color: var(--text2); padding-left: 20px; margin-bottom: 12px; }
+    li { margin-bottom: 4px; }
+
+    .role-badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 7px;
+      border-radius: 99px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .role-all  { background: rgba(0,230,118,.12); color: var(--accent); border: 1px solid rgba(0,230,118,.25); }
+    .role-mid  { background: rgba(251,191,36,.12); color: var(--warning); border: 1px solid rgba(251,191,36,.25); }
+    .role-admin{ background: rgba(248,113,113,.12); color: var(--danger);  border: 1px solid rgba(248,113,113,.25); }
+
+    table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 13px; }
+    th { text-align: left; padding: 8px 12px; background: var(--surface); color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+    td { padding: 8px 12px; color: var(--text2); border-bottom: 1px solid var(--border); }
+    td:first-child { color: var(--text); font-family: ui-monospace, monospace; font-size: 12px; }
+    tr:last-child td { border-bottom: none; }
+
+    code {
+      font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+      font-size: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      color: var(--accent);
+    }
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px 16px;
+      overflow-x: auto;
+      margin: 10px 0 16px;
+    }
+    pre code { background: none; border: none; padding: 0; color: var(--text); }
+
+    .note {
+      background: rgba(0,230,118,.06);
+      border: 1px solid rgba(0,230,118,.2);
+      border-radius: 6px;
+      padding: 10px 14px;
+      color: var(--text2);
+      font-size: 13px;
+      margin: 12px 0;
+    }
+    .note strong { color: var(--accent); }
+
+    @media (max-width: 720px) {
+      .layout { flex-direction: column; }
+      nav { position: static; width: 100%; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+      main { padding: 24px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="logo-mark">&#9672;</span>
+  <span class="logo-name">WebRAG</span>
+  <span class="header-sub">User Documentation</span>
+</header>
+
+<div class="layout">
+  <nav>
+    <div class="nav-section">Query</div>
+    <a href="#query">Query</a>
+    <a href="#knowledge-base">Knowledge Base</a>
+
+    <div class="nav-section">Ingest</div>
+    <a href="#sources">Sources</a>
+    <a href="#pipeline">Pipeline</a>
+    <a href="#incidents">Incidents</a>
+
+    <div class="nav-section">Analytics</div>
+    <a href="#experiments">Experiments</a>
+
+    <div class="nav-section">API</div>
+    <a href="#api-access">REST API Access</a>
+
+    <div class="nav-section">Overview</div>
+    <a href="#dashboard">Dashboard</a>
+
+    <div class="nav-section">Admin</div>
+    <a href="#admin">Audit &amp; Access</a>
+  </nav>
+
+  <main>
+
+    <section id="query">
+      <h2>Query <span class="role-badge role-all">all users</span></h2>
+      <p>The Query page is the default landing page for every authenticated user. It lets you ask natural-language questions against the indexed knowledge base and receive answers with citations.</p>
+      <h3>How it works</h3>
+      <p>Your question is embedded with the local BGE-M3 model, run against Qdrant using hybrid vector search (dense + sparse with RRF fusion), and the retrieved chunks are passed together with your question to the configured LLM. The answer is returned alongside citations — each one links to the source URL and shows the relevance score of the retrieved chunk.</p>
+      <h3>Query modes</h3>
+      <table>
+        <tr><th>Mode</th><th>When it is used</th><th>UI indicator</th></tr>
+        <tr><td>rag</td><td>Normal operation — retrieves indexed chunks first, then generates the answer</td><td>Blue "RAG" tag</td></tr>
+        <tr><td>no_rag</td><td>Calls the LLM directly without any indexed context</td><td>Gray "NO_RAG" tag</td></tr>
+        <tr><td>keyword_fallback</td><td>Automatic fallback when Qdrant is unavailable — uses Postgres full-text search instead</td><td>Orange "KEYWORD SEARCH" tag and a warning banner</td></tr>
+      </table>
+      <h3>Options</h3>
+      <ul>
+        <li><strong>Model</strong> — choose from the LLM providers configured on the server.</li>
+        <li><strong>Strict grounding</strong> — when on, the LLM is instructed to answer only from the retrieved chunks, not from its training data.</li>
+        <li><strong>Source filter</strong> — restrict retrieval to a single indexed source.</li>
+        <li><strong>top_k</strong> — number of chunks to retrieve (default 5).</li>
+      </ul>
+      <div class="note"><strong>Note:</strong> Documents are keyword-searchable immediately after ingest. Vector search (better relevance) becomes available 1–5 minutes later, once the embedding worker finishes processing.</div>
+    </section>
+
+    <section id="knowledge-base">
+      <h2>Knowledge Base <span class="role-badge role-mid">admin &middot; curator &middot; analyst</span></h2>
+      <p>Browse, search, and inspect all documents that have been ingested into the system.</p>
+      <h3>What you can do</h3>
+      <ul>
+        <li>Search documents by title or URL.</li>
+        <li>Filter by source to see only documents from one monitored URL.</li>
+        <li>Open a document to read its extracted markdown.</li>
+        <li>Expand the <strong>Chunks</strong> panel to see the individual text segments indexed in Qdrant.</li>
+        <li>Download the raw markdown via a pre-signed S3 link.</li>
+        <li>Delete a document — also removes its chunks and Qdrant vectors.</li>
+      </ul>
+      <h3>Chunk types</h3>
+      <table>
+        <tr><th>Type</th><th>Description</th></tr>
+        <tr><td>text</td><td>Prose paragraphs split at token boundaries</td></tr>
+        <tr><td>table</td><td>Table content extracted from the page</td></tr>
+        <tr><td>block</td><td>Structured blocks extracted by the VLM (screenshot) strategy</td></tr>
+      </table>
+    </section>
+
+    <section id="sources">
+      <h2>Sources <span class="role-badge role-mid">admin &middot; curator</span></h2>
+      <p>Sources are the URLs WebRAG monitors and periodically scrapes. Each source is ingested on a configurable schedule and its content is stored in the knowledge base.</p>
+      <h3>Scraping strategies</h3>
+      <table>
+        <tr><th>Strategy</th><th>How it works</th><th>Best for</th></tr>
+        <tr><td>api</td><td>Jina.ai reader API + RSS/Atom feed fallback → markdown</td><td>News feeds, clean article pages</td></tr>
+        <tr><td>html</td><td>Raw HTTP fetch + BeautifulSoup + markdownify</td><td>Simple static pages</td></tr>
+        <tr><td>rendered</td><td>Playwright headless browser, full DOM + markdownify</td><td>JavaScript-heavy pages</td></tr>
+        <tr><td>screenshot</td><td>Playwright screenshot + VLM text extraction</td><td>Pages where the HTML is unparseable</td></tr>
+      </table>
+      <p>The system tries the preferred strategy first. If the extracted text is below the quality threshold (200 characters), it falls back to the next strategy in the chain. A CAPTCHA or block page detected at any step automatically creates an <a href="#incidents">Incident</a>.</p>
+      <h3>Crawl frequency</h3>
+      <p>Each source has a <strong>crawl frequency in hours</strong>. The scheduler checks every 5 minutes for sources that are due and queues an ingest job automatically.</p>
+      <div class="note"><strong>SSRF protection:</strong> URLs pointing to private, loopback, or link-local addresses are rejected by the backend.</div>
+    </section>
+
+    <section id="pipeline">
+      <h2>Pipeline <span class="role-badge role-mid">admin &middot; curator</span></h2>
+      <p>The Pipeline page shows the history of all ingest jobs across all sources. Each row represents one scrape attempt and its outcome.</p>
+      <h3>Job statuses</h3>
+      <table>
+        <tr><th>Status</th><th>Meaning</th></tr>
+        <tr><td>pending</td><td>Queued in RabbitMQ, not yet picked up by a worker</td></tr>
+        <tr><td>running</td><td>Worker is actively processing the job</td></tr>
+        <tr><td>done</td><td>Scrape succeeded; content stored to S3 and Postgres</td></tr>
+        <tr><td>failed</td><td>All strategies exhausted without extracting usable content</td></tr>
+        <tr><td>captcha_blocked</td><td>CAPTCHA or block page detected; an Incident was created</td></tr>
+      </table>
+      <h3>Strategy fallback chain</h3>
+      <p>For each job the page shows four steps in order: <strong>API/Feed &rarr; HTML &rarr; Rendered &rarr; Screenshot+VLM</strong>. Steps are marked as the one that succeeded, skipped (if a later strategy was selected directly), or failed.</p>
+      <h3>Ingest timing</h3>
+      <ul>
+        <li><strong>Ingest phase (~30 s)</strong> — scrapes the page, splits into chunks, stores to S3 and Postgres. Content is keyword-searchable immediately.</li>
+        <li><strong>Embedding phase (1–5 min, background)</strong> — the embedding worker runs BGE-M3 and upserts dense + sparse vectors to Qdrant. Vector search activates after this phase.</li>
+      </ul>
+    </section>
+
+    <section id="incidents">
+      <h2>Incidents <span class="role-badge role-mid">admin &middot; curator</span></h2>
+      <p>An incident is created automatically when the ingest worker detects a CAPTCHA, rate-limit page, or access block during scraping. This page lets you review and resolve them.</p>
+      <h3>Incident statuses</h3>
+      <table>
+        <tr><th>Status</th><th>Meaning</th></tr>
+        <tr><td>open</td><td>Detected, not yet reviewed — shown as a red badge in the sidebar</td></tr>
+        <tr><td>in_progress</td><td>Under investigation</td></tr>
+        <tr><td>resolved</td><td>Closed manually or by a successful subsequent ingest</td></tr>
+      </table>
+      <p>Resolving an incident clears the badge count in the sidebar. Admins can also create a synthetic test incident to verify that CAPTCHA detection is working correctly.</p>
+    </section>
+
+    <section id="experiments">
+      <h2>Experiments <span class="role-badge role-admin">admin</span> <span class="role-badge role-mid">analyst</span></h2>
+      <p>Experiments run batch query benchmarks against the knowledge base to measure retrieval quality. Each experiment defines a set of test queries with expected keywords and computes standard information-retrieval metrics.</p>
+      <h3>Metrics</h3>
+      <table>
+        <tr><th>Metric</th><th>Description</th></tr>
+        <tr><td>Recall@k</td><td>Fraction of relevant chunks found in the top-k results</td></tr>
+        <tr><td>MRR</td><td>Mean Reciprocal Rank — how highly the first relevant result is ranked</td></tr>
+        <tr><td>nDCG</td><td>Normalized Discounted Cumulative Gain — ranking quality weighted by position</td></tr>
+        <tr><td>Avg latency (ms)</td><td>Mean end-to-end query time across all test queries</td></tr>
+      </table>
+      <div class="note"><strong>Note:</strong> The Experiments feature is currently scaffolded. The models and services are in place; the full UI workflow will be exposed in a future release.</div>
+    </section>
+
+    <section id="api-access">
+      <h2>REST API Access <span class="role-badge role-all">all users</span></h2>
+      <p>Every authenticated user can generate a personal long-lived API token for programmatic access to WebRAG from scripts and terminals.</p>
+      <h3>Generating a token</h3>
+      <ol>
+        <li>Open <strong>REST API Access</strong> in the sidebar.</li>
+        <li>Click <strong>Obtain API Token</strong>.</li>
+        <li>Copy the token immediately — it is shown exactly once. The server stores only its SHA-256 hash and cannot retrieve the plaintext again.</li>
+        <li>If the token is lost, click <strong>Regenerate</strong> to issue a new one (the previous token is immediately invalidated).</li>
+      </ol>
+      <p>Tokens expire after 90 days. Authenticate requests with a Bearer header:</p>
+      <pre><code>Authorization: Bearer &lt;your-token&gt;</code></pre>
+      <h3>Key endpoints</h3>
+      <table>
+        <tr><th>Method</th><th>Path</th><th>Purpose</th></tr>
+        <tr><td>GET</td><td>/health</td><td>Liveness check (no auth required)</td></tr>
+        <tr><td>GET</td><td>/auth/me</td><td>Validate token and return your profile</td></tr>
+        <tr><td>GET</td><td>/sources/</td><td>List monitored sources</td></tr>
+        <tr><td>POST</td><td>/query/</td><td>Ask a RAG question</td></tr>
+        <tr><td>GET</td><td>/documents/</td><td>Browse indexed documents</td></tr>
+        <tr><td>POST</td><td>/sources/{id}/ingest</td><td>Trigger an immediate ingest (curator and above)</td></tr>
+      </table>
+      <h3>Example</h3>
+      <pre><code>curl -s -X POST https://webrag.nss.jkzl.eu/api/query/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"question":"What sources are indexed?","mode":"rag","top_k":5,"strict_grounding":true}'</code></pre>
+      <p>In production, prefix all paths with <code>/api</code> (e.g. <code>/api/query/</code>). Traefik strips the prefix before forwarding to the backend. In local development use paths directly against <code>http://localhost:8000</code>.</p>
+    </section>
+
+    <section id="dashboard">
+      <h2>Dashboard <span class="role-badge role-mid">admin &middot; curator &middot; analyst</span></h2>
+      <p>The Dashboard link opens the <strong>WebRAG Overview</strong> Grafana dashboard in a new tab. It shows live system metrics: active sources, Qdrant collection size, open incidents, total ingest jobs, a 24-hour activity bar chart, and a strategy distribution breakdown.</p>
+      <div class="note"><strong>Production only.</strong> The Grafana dashboards are part of the Kubernetes monitoring stack and are not available in local Docker Compose development.</div>
+    </section>
+
+    <section id="admin">
+      <h2>Audit Logs &amp; Access Control <span class="role-badge role-admin">admin only</span></h2>
+      <h3>Audit Logs</h3>
+      <p>Opens the <strong>WebRAG Audit Logs</strong> Grafana dashboard in a new tab. Every significant action — logins, source changes, ingest triggers, API token generation — is immutably recorded in the <code>audit_logs</code> table and surfaced here through Loki log panels.</p>
+      <h3>Access Control</h3>
+      <p>Opens the Keycloak Admin Console in a new tab. User accounts, group membership, and role assignments are managed there. Roles map as follows:</p>
+      <table>
+        <tr><th>Keycloak group</th><th>Role</th><th>Access</th></tr>
+        <tr><td>webrag_admin</td><td>Admin</td><td>All pages and admin actions</td></tr>
+        <tr><td>webrag_curator</td><td>Curator</td><td>Sources, Pipeline, Incidents, Query, Knowledge Base, REST API</td></tr>
+        <tr><td>webrag_analyst</td><td>Analyst</td><td>Query, Knowledge Base, Experiments, REST API</td></tr>
+        <tr><td>webrag_user</td><td>User</td><td>Query and REST API only</td></tr>
+      </table>
+      <p>Role changes take effect on the user's next login, or automatically if the frontend detects a mismatch and refreshes the JWT (checked every 30 seconds while logged in).</p>
+    </section>
+
+  </main>
+</div>
+
+</body>
+</html>

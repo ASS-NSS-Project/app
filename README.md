@@ -69,6 +69,7 @@ Useful local URLs:
 | Service | URL |
 |---------|-----|
 | Frontend | <http://localhost:8080> |
+| User documentation | <http://localhost:8080/user-docs/> (public, no login required) |
 | API | <http://localhost:8000> |
 | Swagger UI | <http://localhost:8000/docs> when `API_DOCS=true` |
 | Qdrant dashboard | <http://localhost:6333/dashboard> |
