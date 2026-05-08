@@ -8,9 +8,15 @@
 #   export ADMIN_PASSWORD=secret 
 #   ./04_query.sh "What is Terraform?"
 
-#   MODE=no_rag TOP_K=3 STRICT_GROUNDING=false ./04_query.sh "Who is rector at MENDELU?"
-#   UPSTREAM_PROVIDER=openai UPSTREAM_BASE_URL=https://api.openai.com/v1 UPSTREAM_API_KEY=sk-... UPSTREAM_MODEL=gpt-4o ./04_query.sh "Explain Terraform"
-#   UPSTREAM_PROVIDER=openrouter UPSTREAM_BASE_URL=https://openrouter.ai/api/v1 UPSTREAM_API_KEY=sk-or-... UPSTREAM_MODEL=openrouter/auto ./04_query.sh "Explain Terraform"
+#   MODE=no_rag TOP_K=3 STRICT_GROUNDING=false 
+#   ./04_query.sh "Who is rector at MENDELU?"
+
+#   UPSTREAM_PROVIDER=openai UPSTREAM_BASE_URL=https://api.openai.com/v1 
+#   UPSTREAM_API_KEY=sk-... UPSTREAM_MODEL=gpt-4o ./04_query.sh "What is Terraform?"
+
+#   UPSTREAM_PROVIDER=openrouter UPSTREAM_BASE_URL=https://openrouter.ai/api/v1 
+#   UPSTREAM_API_KEY=sk-or-... UPSTREAM_MODEL=openrouter/auto ./04_query.sh 
+#   "In which field specializes FarmAI?"
 
 set -euo pipefail
 
