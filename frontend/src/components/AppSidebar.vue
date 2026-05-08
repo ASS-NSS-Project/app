@@ -36,7 +36,6 @@
       <!-- Query section — visible to all authenticated users -->
       <div class="nav-section">Query</div>
       <router-link to="/query" class="nav-item" active-class="active">Query</router-link>
-      <router-link to="/api-token" class="nav-item" active-class="active">API Access</router-link>
       <router-link v-if="canSeeDashboard" to="/knowledge-base" class="nav-item" active-class="active">Knowledge Base</router-link>
 
       <!-- Analytics section — visible to admin and analyst -->
@@ -51,6 +50,10 @@
         <!-- Amber badge shows number of experiments (pending/running) -->
         <span v-if="experimentCount > 0" class="nav-badge badge-amber">{{ experimentCount }}</span>
       </router-link>
+
+      <!-- API section — visible to all authenticated users -->
+      <div class="nav-section">API</div>
+      <router-link to="/api-token" class="nav-item" active-class="active">REST API Access</router-link>
 
       <!-- Admin section — visible to webrag_admin only -->
       <div v-if="isRagAdmin" class="nav-section">Admin</div>

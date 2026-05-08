@@ -152,6 +152,7 @@ Obtain a token via `POST /auth/login`. Roles control access: **webrag_admin** > 
 | Section | webrag_admin | webrag_curator | webrag_analyst | webrag_user |
 |---------|-----------|-------------|-------------|----------|
 | Query (RAG) | ✓ | ✓ | ✓ | ✓ |
+| REST API Access | ✓ | ✓ | ✓ | ✓ |
 | Knowledge Base | ✓ | ✓ | ✓ | — |
 | Sources, Pipeline, Incidents | ✓ | ✓ | — | — |
 | Experiments | ✓ | — | ✓ | — |
@@ -159,7 +160,7 @@ Obtain a token via `POST /auth/login`. Roles control access: **webrag_admin** > 
 | Audit Logs ↗ (Grafana) | ✓ | ✓ | ✓ | — |
 | Users ↗ (Keycloak) | ✓ | — | — | — |
 
-The router enforces roles client-side and redirects to `/query` if the role is insufficient. Dashboard, Audit Logs, and Users management all open as external links — there are no in-app pages for these. `/query` is the default landing page for all authenticated roles.
+The router enforces roles client-side and redirects to `/query` if the role is insufficient. REST API Access is available under the API navigation section and provides token generation plus copyable curl examples. Dashboard, Audit Logs, and Users management all open as external links — there are no in-app pages for these. `/query` is the default landing page for all authenticated roles.
 
 Enable Swagger UI by setting `API_DOCS=true` in `.env`, then visit `/docs`.
 
@@ -302,6 +303,8 @@ Use the token for API requests:
 ```
 Authorization: Bearer <token>
 ```
+
+The frontend **REST API Access** page shows the token status, generates/regenerates the token, and provides copyable curl examples for health checks, profile validation, sources, documents, queries, and ingest triggers.
 
 If the token is expired, any request returns `401` with `{"detail": "API token expired"}`.
 
