@@ -1,6 +1,11 @@
 <template>
+  <!--
+    Login page — split-panel layout.
+    Left panel: brand/marketing content (hidden on mobile).
+    Right panel: sign-in form with optional Keycloak SSO button and password field.
+  -->
   <div class="login-shell">
-    <!-- Left brand panel -->
+    <!-- Left brand panel — product description and feature list -->
     <div class="brand-panel">
       <div class="brand-content">
         <div class="brand-logo">
@@ -19,13 +24,18 @@
     <!-- Right sign-in panel -->
     <div class="signin-panel">
       <div class="signin-box">
+        <!-- Green accent bar at the top of the card -->
         <div class="signin-accent-bar" />
         <div class="signin-header">
           <h2 class="signin-title">Sign in</h2>
           <p class="signin-subtitle">Access your WebRAG workspace</p>
         </div>
 
-
+        <!--
+          Keycloak SSO button — only shown when keycloakEnabled is true.
+          Clicking it does a full-page redirect to /auth/keycloak which
+          bounces through Keycloak and returns with ?token= in the URL.
+        -->
         <Button
           v-if="keycloakEnabled"
           severity="secondary"
@@ -39,25 +49,31 @@
           </template>
         </Button>
 
+        <!-- Divider between SSO and password login — only shown when both are available -->
         <div v-if="keycloakEnabled" class="divider-row">
           <span class="divider-line" />
           <span class="divider-text">or</span>
           <span class="divider-line" />
         </div>
 
+        <!-- Error message — shown when the API returns a non-2xx response -->
         <Message v-if="error" severity="error" class="mb-4 error-message">{{ error }}</Message>
-        
+
+        <!-- Password field with lock icon overlay -->
         <div class="field">
           <label class="field-label" for="password">ADMIN PASSWORD</label>
           <div class="input-icon-wrap">
+            <!-- Lock icon SVG positioned absolutely inside the input wrapper -->
             <svg class="input-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
               <rect x="3" y="11" width="18" height="11" rx="2"/>
               <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
+            <!-- PrimeVue Password input — feedback=false hides the strength meter -->
             <Password id="password" v-model="password" placeholder="············" :feedback="false" fluid toggleMask @keydown.enter="doLogin" class="has-icon" />
           </div>
         </div>
 
+        <!-- "Remember me" checkbox — controls localStorage vs sessionStorage -->
         <div class="remember-row">
           <label class="remember-label">
             <input type="checkbox" v-model="rememberMe" class="remember-check" />
@@ -65,6 +81,7 @@
           </label>
         </div>
 
+        <!-- Primary action button — shows a spinner while the request is in flight -->
         <Button label="Sign In" class="w-full signin-btn" :loading="loading" @click="doLogin" />
       </div>
     </div>
@@ -91,6 +108,7 @@
   position: relative;
   overflow: hidden;
 }
+/* Radial green glow behind the brand content */
 .brand-panel::before {
   content: '';
   position: absolute;
@@ -215,6 +233,7 @@
   pointer-events: none;
   z-index: 1;
 }
+/* Push the PrimeVue input text right to make room for the icon */
 .input-icon-wrap :deep(.p-inputtext.has-icon),
 .input-icon-wrap :deep(.p-password-input) {
   padding-left: 34px !important;
@@ -277,6 +296,19 @@
 </style>
 
 <script setup lang="ts">
+/**
+ * LoginView.vue — Password login form with optional Keycloak SSO
+ *
+ * On mount: fetch /auth/providers to check if Keycloak is configured.
+ * If keycloakEnabled is true, show the "Sign in with OIDC" button above
+ * the password form.
+ *
+ * Password login calls auth.localLogin() which POSTs to /auth/local-login.
+ * The "remember me" checkbox controls whether the JWT lands in localStorage
+ * (persistent) or sessionStorage (session-only).
+ *
+ * After a successful login, the router navigates to /query.
+ */
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -294,19 +326,23 @@ const password = ref('')
 const error = ref('')
 const loading = ref(false)
 const rememberMe = ref(false)
-const keycloakEnabled = ref(false)
+const keycloakEnabled = ref(false)  // true if Keycloak env vars are set on the server
 
+/** Redirect to the Keycloak OIDC flow (full-page navigation, not a fetch). */
 function loginWithOIDC() {
   window.location.href = '/auth/keycloak'
 }
 
 onMounted(async () => {
   try {
+    // Check which SSO providers are configured — hide the Keycloak button
+    // if the server has not been configured with KEYCLOAK_* env vars.
     const providers = await get<ProvidersResponse>('/auth/providers')
     keycloakEnabled.value = providers.keycloak
   } catch { /* if endpoint unreachable, hide SSO button */ }
 })
 
+/** Submit the password form and navigate to /query on success. */
 async function doLogin() {
   if (!password.value) {
     error.value = 'Password is required.'
@@ -318,6 +354,7 @@ async function doLogin() {
     await auth.localLogin(password.value, rememberMe.value)
     await router.push('/query')
   } catch (e: unknown) {
+    // Extract the FastAPI { detail: "..." } error message if available.
     const err = e as { response?: { data?: { detail?: string } } }
     error.value = err.response?.data?.detail ?? 'Login failed'
   } finally {

@@ -1,12 +1,21 @@
 <template>
+  <!--
+    Sources view — two sub-views in one component:
+    1. Jobs panel: shows ingest jobs for a specific source (activated by "Jobs" button)
+    2. Sources list: paginated table of all registered sources with CRUD actions
+
+    The jobs panel replaces the sources list when jobsPanel is non-null.
+    "← Back to Sources" in the jobs panel sets jobsPanel back to null.
+  -->
   <AppLayout>
     <div class="page">
 
-      <!-- Jobs panel view -->
+      <!-- Jobs panel — shown when user clicks "Jobs" on a source row -->
       <template v-if="jobsPanel">
         <div class="page-header">
           <div class="page-actions">
             <Button label="← Back to Sources" severity="secondary" size="small" @click="closeJobs" />
+            <!-- Re-ingest button triggers a new ingest job for this source -->
             <Button label="▶ Re-ingest" size="small" @click="triggerIngest(jobsPanel.sourceId, jobsPanel.baseUrl)" />
             <span class="panel-title">Ingest Jobs</span>
           </div>
@@ -34,6 +43,7 @@
           </Column>
           <Column field="created_at" header="Time">
             <template #body="{ data }">
+              <!-- Trim seconds from the timestamp for compact display -->
               <span style="color: var(--muted); font-size:11px">{{ data.created_at.slice(0, 16).replace('T', ' ') }}</span>
             </template>
           </Column>
@@ -52,6 +62,7 @@
 
         <div v-if="error" class="alert alert-error">{{ error }}</div>
 
+        <!-- Empty filter bar placeholder — filters may be added in future -->
         <div class="filter-bar">
         </div>
 
@@ -95,9 +106,12 @@
           <Column header="Actions">
             <template #body="{ data }">
               <div class="flex gap-1 flex-wrap">
+                <!-- Trigger a manual ingest job for this source now -->
                 <Button label="▶ Ingest" size="small" @click="triggerIngest(data.id, data.base_url)" />
+                <!-- Show the jobs panel for this source -->
                 <Button label="Jobs" severity="secondary" size="small" @click="viewJobs(data)" />
                 <Button label="Edit" severity="secondary" size="small" @click="openEdit(data)" />
+                <!-- Delete performs a soft-delete (is_active=false) on the backend -->
                 <Button label="Delete" severity="danger" size="small" @click="deleteSource(data)" />
               </div>
             </template>
@@ -113,7 +127,7 @@
       </template>
     </div>
 
-    <!-- Add Source Dialog -->
+    <!-- Add Source dialog -->
     <Dialog v-model:visible="showAdd" header="Add New Source" modal style="width: 460px">
       <Message v-if="addError" severity="error" class="mb-4">{{ addError }}</Message>
       <div class="field"><label>Name</label>
@@ -141,7 +155,7 @@
       </template>
     </Dialog>
 
-    <!-- Edit Source Dialog -->
+    <!-- Edit Source dialog — only strategy and crawl frequency are editable -->
     <Dialog v-model:visible="editVisible" header="Edit Source" modal style="width: 460px">
       <div class="field">
         <label>Preferred Ingest Strategy</label>
@@ -160,6 +174,21 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * SourcesView.vue — Source CRUD and job inspection
+ *
+ * Sources are the URLs/feeds that the ingest pipeline monitors and crawls.
+ * This view lets admins and curators:
+ * - List sources with pagination.
+ * - Add new sources via dialog.
+ * - Edit preferred strategy and crawl frequency.
+ * - Delete sources (soft-delete: is_active=false on the backend).
+ * - Trigger a manual ingest job immediately.
+ * - View the job history for a specific source in the jobs panel.
+ *
+ * The jobs panel is a simple "sub-view" rendered by toggling jobsPanel.
+ * It does not use a nested route to keep navigation simple.
+ */
 import { ref, computed, onMounted, reactive, watch } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
@@ -175,17 +204,21 @@ import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 
+/** Local type for the jobs panel state. */
 interface JobsPanel {
   sourceId: string
   baseUrl: string
   jobs: JobResponse[]
 }
 
+/** Permission type options for the Add Source dialog dropdown. */
 const permissionOptions = [
   { label: 'Public', value: 'public' },
   { label: 'Licensed', value: 'licensed' },
   { label: 'API (contractual access)', value: 'api' },
 ]
+
+/** Strategy options shown in the Add/Edit dialogs. */
 const strategyOptions = [
   { label: 'API / Feed (default — Jina.ai reader + RSS fallback)', value: 'api' },
   { label: 'HTML (fast, static sites)', value: 'html' },
@@ -196,6 +229,7 @@ const strategyOptions = [
 const sources = ref<SourceResponse[]>([])
 const loading = ref(true)
 const error = ref('')
+// Non-null when the jobs panel is active; null when the sources list is shown.
 const jobsPanel = ref<JobsPanel | null>(null)
 const limit = ref(10)
 const offset = ref(0)
@@ -208,6 +242,7 @@ const pageSizeOptions = [
   { label: '100 / page', value: 100 },
 ]
 
+// Add source form state
 const showAdd = ref(false)
 const addError = ref('')
 const addLoading = ref(false)
@@ -219,7 +254,9 @@ const addForm = reactive({
   crawl_frequency_hours: 24,
 })
 
+// Edit source form state
 const editSource = ref<SourceResponse | null>(null)
+// editVisible is a writable computed so closing the dialog also clears editSource.
 const editVisible = computed({
   get: () => editSource.value !== null,
   set: (v) => { if (!v) editSource.value = null },
@@ -227,6 +264,11 @@ const editVisible = computed({
 const editLoading = ref(false)
 const editForm = reactive({ preferred_strategy: 'api', crawl_frequency_hours: 24 })
 
+/**
+ * Human-readable relative time (e.g. "5m ago") for the last crawl column.
+ * Duplicate of utils/time.ts relTime — kept local to avoid import overhead
+ * since this component has additional time display needs in the jobs panel.
+ */
 function relTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
   const s = Math.floor(diff / 1000)
@@ -236,6 +278,7 @@ function relTime(iso: string): string {
   return `${Math.floor(s / 86400)}d ago`
 }
 
+/** Fetch the current page of sources from the API. */
 async function loadSources() {
   loading.value = true
   error.value = ''
@@ -248,21 +291,26 @@ async function loadSources() {
   }
 }
 
+/** Reset pagination and reload when page size changes. */
 function reloadSources() { offset.value = 0; page.value = 0; loadSources() }
 function prevPage() { offset.value = Math.max(0, offset.value - limit.value); page.value = Math.max(0, page.value - 1); loadSources() }
 function nextPage() { offset.value += limit.value; page.value += 1; loadSources() }
 
+/** Load jobs for a source and open the jobs panel. */
 async function viewJobs(s: SourceResponse) {
   const jobs = await get<JobResponse[]>(`/sources/${s.id}/jobs`)
   jobsPanel.value = { sourceId: s.id, baseUrl: s.base_url, jobs }
 }
 
+/** Close the jobs panel and return to the sources list. */
 function closeJobs() { jobsPanel.value = null }
 
+/** Trigger a manual ingest job via POST /sources/{id}/ingest. */
 async function triggerIngest(sourceId: string, url: string) {
   try {
     const job = await post<JobResponse>(`/sources/${sourceId}/ingest`, { url })
     alert(`Ingest job queued!\nJob ID: ${job.id}\nStatus: ${job.status}`)
+    // Refresh the jobs panel if it is open for this source.
     if (jobsPanel.value?.sourceId === sourceId) {
       jobsPanel.value.jobs = await get<JobResponse[]>(`/sources/${sourceId}/jobs`)
     }
@@ -271,12 +319,14 @@ async function triggerIngest(sourceId: string, url: string) {
   }
 }
 
+/** Populate the edit form and open the edit dialog. */
 function openEdit(s: SourceResponse) {
   editSource.value = s
   editForm.preferred_strategy = s.preferred_strategy
   editForm.crawl_frequency_hours = s.crawl_frequency_hours
 }
 
+/** Submit the edit form via PATCH /sources/{id}. */
 async function doEdit() {
   if (!editSource.value) return
   editLoading.value = true
@@ -294,12 +344,14 @@ async function doEdit() {
   }
 }
 
+/** Submit the add form via POST /sources/. Resets form on success. */
 async function doAdd() {
   addError.value = ''
   addLoading.value = true
   try {
     await post('/sources/', { ...addForm })
     showAdd.value = false
+    // Reset form to defaults for the next add.
     addForm.name = ''
     addForm.base_url = ''
     addForm.permission_type = 'public'
@@ -307,6 +359,7 @@ async function doAdd() {
     addForm.crawl_frequency_hours = 24
     await loadSources()
   } catch (e: unknown) {
+    // Extract FastAPI detail message if present.
     const err = e as { response?: { data?: { detail?: string } } }
     addError.value = err.response?.data?.detail ?? (e as Error).message
   } finally {
@@ -314,6 +367,11 @@ async function doAdd() {
   }
 }
 
+/**
+ * Soft-delete a source via DELETE /sources/{id}.
+ * The backend sets is_active=false rather than removing the row so job history
+ * and documents remain linked to the source.
+ */
 async function deleteSource(s: SourceResponse) {
   if (!confirm(`Delete source "${s.name}"? This will deactivate it.`)) return
   try {

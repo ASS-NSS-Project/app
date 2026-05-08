@@ -1,3 +1,28 @@
+"""
+routers/sources.py - Source and ingest job management endpoints
+
+A "source" is a web URL that the system monitors and periodically scrapes.
+This router handles the full lifecycle of sources and their associated ingest jobs.
+
+SSRF protection:
+All URLs submitted by users pass through _validate_url() before being stored
+or scraped. This blocks attempts to make the server fetch internal/private
+addresses (e.g. http://169.254.169.254/ — AWS metadata endpoint, or
+http://postgres:5432/ — the database). We check both literal IP addresses
+and resolved hostnames.
+
+Endpoints:
+  GET  /sources/pipeline/stats    — queue depth and error rate for the pipeline monitor
+  GET  /sources/                  — list active sources with document counts
+  POST /sources/                  — create a new source (admin/curator only)
+  PATCH /sources/{id}             — update source name, strategy, or frequency
+  POST /sources/{id}/ingest       — manually trigger an ingest job
+  GET  /sources/jobs/all          — list all ingest jobs (with source name)
+  POST /sources/jobs/{id}/cancel  — cancel a pending or running job
+  DELETE /sources/jobs/{id}       — permanently delete a finished job record
+  GET  /sources/{id}/jobs         — list jobs for a specific source
+  DELETE /sources/{id}            — soft-delete (deactivate) a source
+"""
 import ipaddress
 import logging
 import socket
@@ -17,19 +42,38 @@ from services.queue import publish_job
 
 logger = logging.getLogger(__name__)
 
+# These CIDR ranges are private/internal addresses that the scraper must never fetch.
+# Allowing them would let an attacker use the server as a proxy to reach internal services.
 _PRIVATE_NETS = [
-    ipaddress.ip_network("10.0.0.0/8"),
-    ipaddress.ip_network("172.16.0.0/12"),
-    ipaddress.ip_network("192.168.0.0/16"),
-    ipaddress.ip_network("127.0.0.0/8"),
-    ipaddress.ip_network("169.254.0.0/16"),  # link-local / AWS metadata
-    ipaddress.ip_network("::1/128"),
-    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("10.0.0.0/8"),         # RFC 1918 private range
+    ipaddress.ip_network("172.16.0.0/12"),       # RFC 1918 private range
+    ipaddress.ip_network("192.168.0.0/16"),      # RFC 1918 private range
+    ipaddress.ip_network("127.0.0.0/8"),         # loopback
+    ipaddress.ip_network("169.254.0.0/16"),      # link-local / AWS EC2 metadata endpoint
+    ipaddress.ip_network("::1/128"),             # IPv6 loopback
+    ipaddress.ip_network("fc00::/7"),            # IPv6 unique local
 ]
 
 
 def _validate_url(url: str) -> str:
-    """Reject non-HTTP(S) schemes and private/loopback IP addresses (SSRF guard)."""
+    """
+    SSRF guard: reject non-HTTP(S) schemes and private/internal IP addresses.
+
+    Two-stage check:
+    1. If the URL host is a literal IP address: check it directly against _PRIVATE_NETS.
+    2. If the URL host is a hostname: resolve it with DNS and check every resolved address.
+       This prevents attacks like "localhost.attacker.com" pointing to 127.0.0.1.
+
+    Args:
+        url: The URL string to validate.
+
+    Returns:
+        The original url if valid.
+
+    Raises:
+        HTTPException 400: If the scheme is not http/https, the host is missing,
+                           the host resolves to a private address, or DNS fails.
+    """
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         raise HTTPException(status_code=400, detail="URL must use http or https")
@@ -37,11 +81,12 @@ def _validate_url(url: str) -> str:
     if not host:
         raise HTTPException(status_code=400, detail="Invalid URL: missing host")
     try:
+        # Try to parse as a literal IP address first
         addr = ipaddress.ip_address(host)
         if any(addr in net for net in _PRIVATE_NETS):
             raise HTTPException(status_code=400, detail="URL points to a private/internal address")
     except ValueError:
-        # hostname — resolve and check
+        # Host is a domain name — resolve it and check every resulting IP
         try:
             resolved = socket.getaddrinfo(host, None)
             for *_, sockaddr in resolved:
@@ -51,22 +96,28 @@ def _validate_url(url: str) -> str:
         except socket.gaierror:
             raise HTTPException(status_code=400, detail="URL host could not be resolved")
     return url
+
+
 router = APIRouter(prefix="/sources", tags=["Sources"])
 
 
+# --- Pydantic Schemas ---
+
 class SourceCreate(BaseModel):
+    """Fields required to create a new source."""
     name: str
     base_url: str
     permission_type: str = "public"
-    permission_ref: Optional[str] = None
+    permission_ref: Optional[str] = None              # e.g. URL to the robots.txt or permission doc
     preferred_strategy: IngestStrategy = IngestStrategy.html
-    crawl_frequency_hours: int = 24
+    crawl_frequency_hours: int = 24                   # how often the scheduler re-crawls this source
     crawl_depth: int = 1
-    rate_limit_rps: float = 1.0
-    retention_days_evidence: int = 90
+    rate_limit_rps: float = 1.0                       # requests per second (polite crawling)
+    retention_days_evidence: int = 90                 # how long to keep screenshots/HTML in S3
 
 
 class SourceResponse(BaseModel):
+    """Public representation of a source, including a computed document count."""
     id: str
     name: str
     base_url: str
@@ -76,17 +127,19 @@ class SourceResponse(BaseModel):
     is_active: bool
     created_at: datetime
     last_crawled_at: Optional[datetime] = None
-    doc_count: int = 0
+    doc_count: int = 0   # computed from a JOIN, not a DB column
 
     class Config:
         from_attributes = True
 
 
 class IngestTriggerRequest(BaseModel):
+    """Optional URL override for a manual ingest trigger (defaults to source.base_url)."""
     url: Optional[str] = None
 
 
 class JobResponse(BaseModel):
+    """Public representation of one ingest job."""
     id: str
     url: str
     status: str
@@ -101,11 +154,20 @@ class JobResponse(BaseModel):
         from_attributes = True
 
 
+# --- Routes ---
+
 @router.get("/pipeline/stats")
 def get_pipeline_stats(
     db: Session = Depends(get_db),
     _: User = Depends(get_authenticated_user),
 ):
+    """
+    Return live pipeline queue stats for the pipeline monitor widget.
+
+    - pending: jobs waiting in the RabbitMQ queue to be picked up
+    - running: jobs actively being processed by a worker
+    - error_rate_24h: percentage of jobs in the last 24h that failed or were CAPTCHA-blocked
+    """
     pending = db.query(IngestJob).filter(IngestJob.status == JobStatus.pending).count()
     running = db.query(IngestJob).filter(IngestJob.status == JobStatus.running).count()
     since = datetime.utcnow() - timedelta(hours=24)
@@ -125,6 +187,12 @@ def list_sources(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_authenticated_user),
 ):
+    """
+    List all active sources, newest first, with their document counts.
+
+    The document count is computed with a single GROUP BY query rather than N+1
+    queries (one per source), then merged into the result list.
+    """
     sources = (
         db.query(Source)
         .filter(Source.is_active == True)
@@ -134,6 +202,7 @@ def list_sources(
         .all()
     )
     source_ids = [s.id for s in sources]
+    # One query to get all document counts at once
     doc_counts = (
         dict(
             db.query(Document.source_id, func.count(Document.id))
@@ -146,9 +215,9 @@ def list_sources(
     )
     result = []
     for s in sources:
-        # Build a plain dict because Pydantic cannot serialize extra attributes
-        # (like doc_count) set on a SQLAlchemy ORM instance — they are not columns
-        # and are ignored by model_validate / from_attributes.
+        # Build a plain dict because Pydantic's from_attributes cannot read extra
+        # computed attributes (like doc_count) set on a SQLAlchemy ORM instance —
+        # they are not mapped columns and are silently ignored.
         d = {c.name: getattr(s, c.name) for c in s.__table__.columns}
         d["doc_count"] = doc_counts.get(s.id, 0)
         result.append(d)
@@ -161,6 +230,12 @@ def create_source(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.webrag_admin, UserRole.webrag_curator)),
 ):
+    """
+    Create a new monitored source.
+
+    Only admins and curators can add sources — analysts and plain users
+    are read-only. The URL is SSRF-validated before saving.
+    """
     _validate_url(str(request.base_url))
     source = Source(
         name=request.name,
@@ -188,6 +263,7 @@ def create_source(
 
 
 class SourceUpdate(BaseModel):
+    """Fields that can be changed on an existing source (all optional)."""
     name: Optional[str] = None
     preferred_strategy: Optional[IngestStrategy] = None
     crawl_frequency_hours: Optional[int] = None
@@ -201,7 +277,11 @@ def update_source(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.webrag_admin, UserRole.webrag_curator)),
 ):
-    # Look up the source by ID, return 404 if not found
+    """
+    Update one or more fields on an existing source.
+
+    Only provided (non-None) fields are changed — this is a PATCH, not a PUT.
+    """
     source = db.query(Source).filter(Source.id == source_id).first()
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
@@ -231,10 +311,20 @@ def trigger_ingest(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.webrag_admin, UserRole.webrag_curator)),
 ):
+    """
+    Manually trigger an immediate ingest job for a source.
+
+    Creates an IngestJob row with status "pending" and publishes its ID to the
+    "ingest" RabbitMQ queue. The ingest worker picks it up asynchronously.
+
+    The optional url field overrides the source's base_url — useful for testing
+    a specific sub-page without changing the source permanently.
+    """
     source = db.query(Source).filter(Source.id == source_id).first()
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
 
+    # SSRF-validate the URL (either the override or the source's own URL)
     url = _validate_url(request.url or source.base_url)
 
     job = IngestJob(
@@ -264,6 +354,7 @@ def trigger_ingest(
 
 
 class JobResponseWithSource(JobResponse):
+    """Extended job response that also includes the source name and base URL."""
     source_name: Optional[str] = None
     source_base_url: Optional[str] = None
 
@@ -280,6 +371,12 @@ def list_all_jobs(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_authenticated_user),
 ):
+    """
+    List all ingest jobs across all sources, with their source names.
+
+    Used by the pipeline monitor to show a full job history table.
+    Can be filtered by source_id or status.
+    """
     q = db.query(IngestJob, Source.name, Source.base_url).join(
         Source, IngestJob.source_id == Source.id
     )
@@ -290,8 +387,8 @@ def list_all_jobs(
     rows = q.order_by(IngestJob.created_at.desc()).offset(offset).limit(limit).all()
     result = []
     for job, src_name, src_url in rows:
-        # Same plain-dict workaround as list_sources: extra JOIN columns can't be
-        # attached to the ORM object and read back by Pydantic's from_attributes.
+        # Same plain-dict workaround as list_sources: JOIN columns can't be set as
+        # ORM attributes and read back by Pydantic's from_attributes.
         d = {c.name: getattr(job, c.name) for c in job.__table__.columns}
         d["source_name"] = src_name
         d["source_base_url"] = src_url
@@ -305,6 +402,14 @@ def cancel_job(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.webrag_admin, UserRole.webrag_curator)),
 ):
+    """
+    Cancel a pending or running ingest job.
+
+    Sets status to "failed" with error_message "Cancelled by user".
+    The worker may have already picked up the job — if so it will still run
+    to completion but the result won't be used (the job is marked failed).
+    There is no mechanism to interrupt a running worker mid-scrape.
+    """
     job = db.query(IngestJob).filter(IngestJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -324,6 +429,13 @@ def delete_job(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.webrag_admin)),
 ):
+    """
+    Permanently delete a finished ingest job record.
+
+    Only terminal jobs (failed, done, captcha_blocked) can be deleted.
+    Pending or running jobs must be cancelled first to avoid leaving orphaned
+    workers with no associated job record to update.
+    """
     job = db.query(IngestJob).filter(IngestJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -342,6 +454,7 @@ def list_jobs(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_authenticated_user),
 ):
+    """Return the 50 most recent ingest jobs for a specific source."""
     return (
         db.query(IngestJob)
         .filter(IngestJob.source_id == source_id)
@@ -357,6 +470,13 @@ def delete_source(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.webrag_admin)),
 ):
+    """
+    Soft-delete (deactivate) a source.
+
+    Sets is_active=False instead of deleting the row. This preserves the
+    source's history (documents, chunks, audit logs) while stopping the
+    scheduler from creating new crawl jobs for it.
+    """
     source = db.query(Source).filter(Source.id == source_id).first()
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")

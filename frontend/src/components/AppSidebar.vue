@@ -1,27 +1,45 @@
 <template>
+  <!--
+    Left navigation sidebar — fixed 160px wide, rendered by AppLayout.vue.
+    Sections and links are conditionally shown based on the user's role:
+      - canManageSources (admin, curator):  Ingest section
+      - canSeeDashboard (admin, curator, analyst):  Dashboard link + Knowledge Base
+      - canSeeExperiments (admin, analyst):  Analytics section
+      - isRagAdmin (admin only):  Admin section
+    The Incidents link shows a red badge when there are open incidents.
+    The Experiments link shows an amber badge when experiments exist.
+    Both counts are refreshed every 30 seconds via loadCounts().
+  -->
   <nav class="sidebar">
+    <!-- Logo area at the top of the sidebar -->
     <div class="sidebar-logo">
       <span class="logo-mark">◈</span>
       <span class="logo-name">WebRAG</span>
     </div>
 
     <div class="nav-links">
+      <!-- Overview section — visible to admin, curator, analyst -->
       <div v-if="canSeeDashboard" class="nav-section">Overview</div>
+      <!-- External link to Grafana dashboard — opens in a new tab -->
       <a v-if="canSeeDashboard" href="https://grafana.nss.jkzl.eu/d/webrag-overview" target="_blank" class="nav-item">Dashboard</a>
 
+      <!-- Ingest section — visible to admin and curator only -->
       <div v-if="canManageSources" class="nav-section">Ingest</div>
       <router-link v-if="canManageSources" to="/sources" class="nav-item" active-class="active">Sources</router-link>
       <router-link v-if="canManageSources" to="/pipeline" class="nav-item" active-class="active">Pipeline</router-link>
+      <!-- Red badge on Incidents link shows count of open incidents -->
       <router-link v-if="canManageSources" to="/incidents" class="nav-item" active-class="active">
         Incidents
         <span v-if="incidentCount > 0" class="nav-badge badge-danger">{{ incidentCount }}</span>
       </router-link>
 
+      <!-- Query section — visible to all authenticated users -->
       <div class="nav-section">Query</div>
       <router-link to="/query" class="nav-item" active-class="active">Query</router-link>
       <router-link to="/api-token" class="nav-item" active-class="active">API Access</router-link>
       <router-link v-if="canSeeDashboard" to="/knowledge-base" class="nav-item" active-class="active">Knowledge Base</router-link>
 
+      <!-- Analytics section — visible to admin and analyst -->
       <div v-if="canSeeExperiments" class="nav-section">Analytics</div>
       <router-link
         v-if="canSeeExperiments"
@@ -30,10 +48,13 @@
         active-class="active"
       >
         Experiments
+        <!-- Amber badge shows number of experiments (pending/running) -->
         <span v-if="experimentCount > 0" class="nav-badge badge-amber">{{ experimentCount }}</span>
       </router-link>
 
+      <!-- Admin section — visible to webrag_admin only -->
       <div v-if="isRagAdmin" class="nav-section">Admin</div>
+      <!-- External links to Grafana audit log dashboard and Keycloak admin console -->
       <a
         v-if="isRagAdmin"
         href="https://grafana.nss.jkzl.eu/d/webrag-audit"
@@ -48,8 +69,10 @@
       >Access Control</a>
     </div>
 
+    <!-- Footer: username and sign-out button -->
     <div class="sidebar-footer">
       <div class="footer-user">
+        <!-- Prefer username over email for display — email is always set -->
         <span class="footer-name">{{ auth.user?.username ?? auth.user?.email }}</span>
       </div>
       <div class="footer-bottom">
@@ -60,6 +83,12 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * AppSidebar.vue — Application navigation sidebar
+ *
+ * Polls /health and /auth/stats every 30 seconds to keep the incident
+ * count badge fresh and detect if the API goes offline.
+ */
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -68,6 +97,7 @@ import { get } from '@/api/client'
 const auth = useAuthStore()
 const router = useRouter()
 
+// Role-based computed flags — control which nav sections are visible.
 const canSeeDashboard = computed(() =>
   auth.user?.role === 'webrag_admin' || auth.user?.role === 'webrag_curator' || auth.user?.role === 'webrag_analyst'
 )
@@ -82,8 +112,11 @@ const isRagAdmin = computed(() => auth.user?.role === 'webrag_admin')
 const systemOnline = ref(false)
 const incidentCount = ref(0)
 const experimentCount = ref(0)
+
+// Interval ID saved so we can cancel the poll when the component is destroyed.
 let pingInterval: ReturnType<typeof setInterval>
 
+/** Check if the API backend is reachable by hitting the /health endpoint. */
 async function ping() {
   try {
     await get('/health')
@@ -93,14 +126,16 @@ async function ping() {
   }
 }
 
+/** Fetch open incident count and experiment count from /auth/stats. */
 async function loadCounts() {
   try {
     const stats = await get<{ incidents: number; experiments?: number }>('/auth/stats')
     incidentCount.value = stats.incidents ?? 0
     experimentCount.value = stats.experiments ?? 0
-  } catch { /* ignore */ }
+  } catch { /* ignore — sidebar badges are non-critical */ }
 }
 
+/** Clear auth state and navigate to /login. */
 function doLogout() {
   auth.logout()
   router.push('/login')
@@ -109,8 +144,11 @@ function doLogout() {
 onMounted(() => {
   ping()
   loadCounts()
+  // Refresh health status and counts every 30 seconds.
   pingInterval = setInterval(() => { ping(); loadCounts() }, 30_000)
 })
+
+// Clear the interval when the component is unmounted to prevent memory leaks.
 onUnmounted(() => clearInterval(pingInterval))
 </script>
 

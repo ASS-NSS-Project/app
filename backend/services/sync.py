@@ -1,14 +1,21 @@
 """
-services/sync.py - Sync & Heal Background Service
+services/sync.py - Consistency healing between Postgres and Qdrant
 
-Detects and automatically fixes drift between Postgres and Qdrant.
-Runs as scheduled jobs via APScheduler.
+Postgres and Qdrant can drift out of sync when:
+- The embedding worker crashes mid-batch (chunks stuck in "pending")
+- The embedding step fails permanently after 3 retries (status "failed")
+- A Qdrant node is temporarily unreachable (chunks marked "done" in Postgres
+  but the Qdrant upsert never completed — qdrant_sync_status stays "missing")
+- The Postgres DB/PVC is restored from a backup but Qdrant is not
+  (Qdrant has vectors from before the restore — orphaned points)
 
-Jobs:
-- heal_pending_embeddings: Requeue chunks stuck in 'pending' for >10 minutes
-- heal_failed_embeddings: Retry failed embeddings (if retry_count < 3)
-- detect_qdrant_drift: Compare Postgres and Qdrant counts, alert if >10% difference
-- heal_qdrant_sync: Re-sync chunks marked as done but not in Qdrant
+This service runs as scheduled background jobs (registered in scheduler.py).
+It does NOT run continuously — it fires every 5–30 minutes and
+corrects whatever drift it finds.
+
+Note: drift detection and healing are best-effort. A large undetected drift
+(e.g. Qdrant was wiped and rebuilt from an older snapshot) would require a
+manual full re-embedding triggered by an admin.
 """
 
 import logging
@@ -23,34 +30,61 @@ settings = get_settings()
 
 
 class SyncService:
-    """Background service to maintain consistency between Postgres and Qdrant"""
+    """
+    Detects and repairs inconsistencies between Postgres chunk records and
+    Qdrant vector points.
+
+    Injected dependencies:
+    - embedding_service: Used to access the Qdrant client (for count queries and
+      delete operations).
+    - queue_service: Used to publish re-embedding jobs to RabbitMQ when chunks
+      need to be re-embedded.
+    """
 
     def __init__(self, embedding_service, queue_service):
         """
         Args:
-            embedding_service: EmbeddingService instance (for Qdrant access)
-            queue_service: QueueService instance (for publishing jobs)
+            embedding_service: An EmbeddingService instance (provides Qdrant access).
+            queue_service: An object with a publish_embedding_job(doc_id, priority) method.
         """
         self.embedding_service = embedding_service
         self.queue_service = queue_service
 
     def heal_pending_embeddings(self, db: Session) -> int:
         """
-        Find chunks stuck in 'pending' for >10 minutes and requeue.
+        Find chunks stuck in "pending" for more than 10 minutes and requeue them.
+
+        A chunk stays "pending" when:
+        - The embedding worker received the RabbitMQ message but crashed before
+          it could update the status (the message was re-queued by RabbitMQ after
+          the worker's heartbeat expired, but Postgres still shows "pending").
+        - The RabbitMQ message was published but never consumed (worker was down).
+
+        The 10-minute threshold is generous — a normal embedding job for a full
+        document takes less than 30 seconds. Anything older than 10 minutes is
+        almost certainly stuck.
+
+        Re-queuing sends a fresh RabbitMQ message with priority "high" (logged
+        as a healing job, not a normal ingest-triggered embedding).
+
+        Args:
+            db: Active database session.
 
         Returns:
-            Number of documents requeued
+            Number of documents for which a re-embedding job was published.
         """
         from models import Chunk
 
+        # Cutoff: 10 minutes ago — anything older is considered stuck
         cutoff = datetime.utcnow() - timedelta(minutes=10)
 
-        # Find documents with stuck chunks
+        # Find document IDs that have at least one stuck chunk
+        # (DISTINCT so we publish one job per document, not one per chunk)
         stuck_doc_ids = (
             db.query(Chunk.document_id)
             .filter(
                 Chunk.embedding_status == 'pending',
-                Chunk.created_at < cutoff
+                Chunk.created_at < cutoff  # chunk was created more than 10 min ago
             )
             .distinct()
             .all()
@@ -58,41 +92,50 @@ class SyncService:
 
         requeued = 0
         for (doc_id,) in stuck_doc_ids:
+            # Publish a high-priority re-embedding job for this document
             self.queue_service.publish_embedding_job(doc_id, priority='high')
             requeued += 1
             logger.info(
                 "Requeued embedding job for stuck document",
-                extra={
-                    "event": "heal_pending_requeued",
-                    "document_id": doc_id
-                }
+                extra={"event": "heal_pending_requeued", "document_id": doc_id}
             )
 
         if requeued > 0:
             logger.warning(
                 f"Healed {requeued} stuck pending embeddings",
-                extra={
-                    "event": "heal_pending_complete",
-                    "requeued": requeued
-                }
+                extra={"event": "heal_pending_complete", "requeued": requeued}
             )
 
         return requeued
 
     def heal_failed_embeddings(self, db: Session) -> int:
         """
-        Retry failed embeddings (if retry_count < 3).
+        Retry chunks that failed embedding, up to a maximum of 3 attempts.
+
+        A chunk enters "failed" status when the embedding worker catches an
+        exception (e.g. BGE-M3 OOM crash, Qdrant unavailable) during the
+        embedding batch.
+
+        Retry strategy:
+        - Reset the failed chunks to "pending" so the worker will re-try them.
+        - Publish a new embedding job to RabbitMQ.
+        - Only retry if retry_count < 3 — after 3 failures, the chunk stays
+          "failed" so an admin can investigate rather than spinning forever.
+
+        Args:
+            db: Active database session.
 
         Returns:
-            Number of documents requeued
+            Number of documents for which a retry job was published.
         """
         from models import Chunk
 
+        # Find documents that have failed chunks with fewer than 3 attempts
         failed_doc_ids = (
             db.query(Chunk.document_id)
             .filter(
                 Chunk.embedding_status == 'failed',
-                Chunk.retry_count < 3
+                Chunk.retry_count < 3  # give up after 3 failures
             )
             .distinct()
             .all()
@@ -100,7 +143,7 @@ class SyncService:
 
         requeued = 0
         for (doc_id,) in failed_doc_ids:
-            # Reset status to pending
+            # Reset status so the worker will pick them up again
             db.query(Chunk).filter(
                 Chunk.document_id == doc_id,
                 Chunk.embedding_status == 'failed'
@@ -111,40 +154,49 @@ class SyncService:
             requeued += 1
             logger.info(
                 "Retrying failed embedding",
-                extra={
-                    "event": "heal_failed_retry",
-                    "document_id": doc_id
-                }
+                extra={"event": "heal_failed_retry", "document_id": doc_id}
             )
 
         if requeued > 0:
             logger.warning(
                 f"Retrying {requeued} failed embeddings",
-                extra={
-                    "event": "heal_failed_complete",
-                    "requeued": requeued
-                }
+                extra={"event": "heal_failed_complete", "requeued": requeued}
             )
 
         return requeued
 
     def detect_qdrant_drift(self, db: Session) -> dict:
         """
-        Compare Postgres and Qdrant counts.
+        Compare the number of embedded chunks in Postgres with the number of
+        points in Qdrant and alert if they differ by more than the threshold.
+
+        Why counts might differ:
+        - Qdrant was reset but Postgres was not (Qdrant count < Postgres count)
+        - Postgres was restored from a backup but Qdrant was not
+          (orphaned vectors: Qdrant count > Postgres count)
+        - Transient embedding failures caused some chunks to be skipped
+
+        The drift threshold is set by settings.drift_alert_threshold_pct (e.g. 10%).
+        If drift exceeds the threshold AND settings.auto_resync_on_drift is True,
+        this method also triggers heal_qdrant_sync() to start fixing it.
+
+        Args:
+            db: Active database session.
 
         Returns:
-            Dict with {"postgres_count", "qdrant_count", "drift_pct"}
+            Dict with "postgres_count", "qdrant_count", and "drift_pct" keys.
+            Includes "error" key if the Qdrant count query failed.
         """
         from models import Chunk
 
-        # Count chunks marked as done in Postgres
+        # Count chunks that are fully embedded according to Postgres
         pg_count = (
             db.query(func.count(Chunk.id))
             .filter(Chunk.embedding_status == 'done')
             .scalar() or 0
         )
 
-        # Count points in Qdrant
+        # Count all points currently stored in the Qdrant collection
         try:
             qdrant_count = self.embedding_service.qdrant.count(
                 collection_name=settings.qdrant_collection
@@ -152,10 +204,7 @@ class SyncService:
         except Exception as e:
             logger.error(
                 f"Failed to count Qdrant points: {e}",
-                extra={
-                    "event": "qdrant_count_failed",
-                    "error": str(e)
-                }
+                extra={"event": "qdrant_count_failed", "error": str(e)}
             )
             return {
                 "postgres_count": pg_count,
@@ -164,8 +213,9 @@ class SyncService:
                 "error": str(e)
             }
 
-        # Calculate drift percentage
+        # Calculate percentage difference between the two counts
         if pg_count == 0:
+            # Both empty = no drift; Qdrant non-empty with empty Postgres = full drift
             drift_pct = 0.0 if qdrant_count == 0 else 100.0
         else:
             drift_pct = abs(pg_count - qdrant_count) / pg_count * 100
@@ -176,18 +226,14 @@ class SyncService:
             "drift_pct": drift_pct
         }
 
-        # Alert if drift exceeds threshold
         if drift_pct > settings.drift_alert_threshold_pct:
             logger.warning(
                 f"Qdrant drift detected: {drift_pct:.1f}% difference",
-                extra={
-                    "event": "qdrant_drift_detected",
-                    **result
-                }
+                extra={"event": "qdrant_drift_detected", **result}
             )
 
-            # Auto-trigger resync if enabled
             if settings.auto_resync_on_drift:
+                # Automatically begin resyncing the out-of-sync chunks
                 logger.info(
                     "Auto-triggering Qdrant resync due to drift",
                     extra={"event": "auto_resync_triggered"}
@@ -196,28 +242,38 @@ class SyncService:
         else:
             logger.debug(
                 f"Qdrant drift check: {drift_pct:.1f}% difference (OK)",
-                extra={
-                    "event": "qdrant_drift_check",
-                    **result
-                }
+                extra={"event": "qdrant_drift_check", **result}
             )
 
         return result
 
     def heal_qdrant_sync(self, db: Session, max_chunks: int = 100) -> int:
         """
-        Find chunks marked as done but not synced to Qdrant, and re-sync.
+        Re-embed chunks that are "done" in Postgres but not synced to Qdrant.
+
+        A chunk can be in this state when:
+        - The EmbeddingService.embed_chunks() completed the Postgres update but
+          the Qdrant upsert timed out.
+        - The Qdrant node was temporarily unavailable during the batch upsert.
+
+        The qdrant_sync_status field tracks this: "synced" means the vector is in
+        Qdrant; anything else (e.g. "missing", "pending") means it needs re-syncing.
+
+        We process chunks in batches grouped by document_id, then publish one
+        low-priority RabbitMQ job per document to re-embed that document's chunks.
 
         Args:
-            max_chunks: Maximum number of chunks to re-sync in one run
+            db: Active database session.
+            max_chunks: Maximum chunks to process in one scheduler run
+                        (limits the blast radius if many chunks are out of sync).
 
         Returns:
-            Number of chunks re-synced
+            Total number of chunks for which re-embedding was triggered.
         """
         from models import Chunk
         from collections import defaultdict
 
-        # Find out-of-sync chunks
+        # Find chunks that are "done" in Postgres but flagged as not synced to Qdrant
         out_of_sync = (
             db.query(Chunk)
             .filter(
@@ -229,16 +285,16 @@ class SyncService:
         )
 
         if not out_of_sync:
-            return 0
+            return 0  # nothing to do
 
-        # Group by document for batch processing
-        by_doc = defaultdict(list)
+        # Group by document_id so we publish one job per document
+        by_doc: dict[str, list] = defaultdict(list)
         for chunk in out_of_sync:
             by_doc[chunk.document_id].append(chunk)
 
         resynced = 0
         for doc_id, chunks in by_doc.items():
-            # Requeue embedding job with low priority
+            # Low priority: healing jobs are less urgent than new ingest-triggered ones
             self.queue_service.publish_embedding_job(doc_id, priority='low')
             resynced += len(chunks)
             logger.info(
@@ -252,10 +308,7 @@ class SyncService:
 
         logger.warning(
             f"Healed {resynced} out-of-sync chunks",
-            extra={
-                "event": "heal_qdrant_sync_complete",
-                "resynced": resynced
-            }
+            extra={"event": "heal_qdrant_sync_complete", "resynced": resynced}
         )
 
         return resynced

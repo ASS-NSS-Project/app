@@ -1,4 +1,11 @@
 <template>
+  <!--
+    Knowledge Base browser — view indexed documents and their text chunks.
+    Top: four stat cards (documents, chunks, embedded %, sources).
+    Middle: search toolbar + documents table with pagination.
+    Clicking "Chunks" on a row opens a modal with all chunks for that document.
+    Clicking "Evidence" or "Document" in the chunks modal opens a pre-signed S3 URL.
+  -->
   <AppLayout>
     <div class="page">
 
@@ -8,7 +15,7 @@
         <p>Browse indexed documents and their text chunks</p>
       </div>
 
-      <!-- Stat strip -->
+      <!-- Stat strip — four cards showing aggregate counts -->
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-label">Documents</div>
@@ -22,6 +29,7 @@
         </div>
         <div class="stat-card">
           <div class="stat-label">Embedded</div>
+          <!-- Green accent colour for the percentage value -->
           <div class="stat-value accent">{{ stats.embeddedPct }}%</div>
           <div class="stat-sub">ready for RAG</div>
         </div>
@@ -32,9 +40,10 @@
         </div>
       </div>
 
-      <!-- Filter toolbar -->
+      <!-- Filter toolbar — search input + buttons -->
       <div class="toolbar">
         <div class="search-wrap">
+          <!-- Magnifying glass icon positioned inside the input -->
           <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
           </svg>
@@ -53,7 +62,8 @@
       <div class="table-card">
         <div class="card-header">
           <span class="card-title">ALL DOCUMENTS</span>
-          <span class="card-count">({{ documents.length }}{{ documents.length === limit.value ? '+' : '' }})</span>
+          <!-- Show "100+" if we hit the page limit (more may exist) -->
+          <span class="card-count">({{ documents.length }}{{ documents.length === limit ? '+' : '' }})</span>
         </div>
 
         <div v-if="error" class="error-bar">{{ error }}</div>
@@ -74,6 +84,7 @@
           <Column field="title" header="Document">
             <template #body="{ data }">
               <div class="doc-cell">
+                <!-- Prefer title over URL for display; fallback to truncated URL -->
                 <span class="doc-title">{{ data.title ?? urlShort(data.url) }}</span>
                 <a :href="data.url" target="_blank" class="doc-url" @click.stop>{{ urlShort(data.url) }}</a>
               </div>
@@ -88,6 +99,7 @@
 
           <Column field="ingest_strategy" header="Strategy" style="width:110px">
             <template #body="{ data }">
+              <!-- Coloured badge for the strategy (api/html/rendered/screenshot) -->
               <span class="strategy-badge" :class="`strat-${data.ingest_strategy}`">
                 {{ data.ingest_strategy ?? '?' }}
               </span>
@@ -118,7 +130,9 @@
           <Column style="width:80px">
             <template #body="{ data }">
               <div class="row-actions">
+                <!-- Opens the chunks modal for this document -->
                 <button class="view-btn" @click.stop="openChunks(data)">Chunks</button>
+                <!-- Delete is only visible to admin and curator roles -->
                 <button v-if="canDelete" class="view-btn danger" @click.stop="deleteDocument(data)">Delete</button>
               </div>
             </template>
@@ -135,7 +149,7 @@
 
     </div>
 
-    <!-- Chunks side panel -->
+    <!-- Chunks modal — shows all chunks for a selected document -->
     <Dialog
       v-model:visible="chunksVisible"
       :header="chunksHeader"
@@ -164,11 +178,13 @@
           </Column>
           <Column field="text" header="Text">
             <template #body="{ data }">
+              <!-- Truncate chunk text to 320 characters for display -->
               <span class="chunk-text">{{ data.text.slice(0, 320) }}{{ data.text.length > 320 ? '…' : '' }}</span>
             </template>
           </Column>
           <Column field="is_embedded" header="Emb." style="width:50px">
             <template #body="{ data }">
+              <!-- Green checkmark if embedded, grey dash otherwise -->
               <span :style="`color:${data.is_embedded ? 'var(--success)' : 'var(--muted)'}`">
                 {{ data.is_embedded ? '✓' : '—' }}
               </span>
@@ -177,7 +193,9 @@
           <Column style="width:72px">
             <template #body="{ data }">
               <div class="chunk-actions">
+                <!-- Evidence button opens a pre-signed S3 URL for the screenshot -->
                 <button v-if="data.citation_evidence_id" class="view-btn" @click="openEvidence(data.citation_evidence_id)">Evidence</button>
+                <!-- Document button opens a pre-signed S3 URL for the full .md file -->
                 <button class="view-btn" @click="openMarkdown(data.document_id)">Document</button>
               </div>
             </template>
@@ -189,6 +207,18 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * KnowledgeBaseView.vue — Browse indexed documents and their chunks
+ *
+ * Displays documents in a paginated table. The title filter is applied
+ * client-side (filters the loaded page, does not re-fetch from the API).
+ * The chunks modal is a PrimeVue Dialog that fetches chunks via
+ * GET /documents/{id}/chunks when opened. Evidence and document buttons
+ * use pre-signed S3 URLs (valid for 1 hour) so the browser downloads
+ * directly from S3 without proxying through the API server.
+ *
+ * Delete is only visible to admin and curator roles (checked via computed).
+ */
 import { ref, computed, onMounted } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
 import DataTable from 'primevue/datatable'
@@ -229,11 +259,14 @@ const canDelete = computed(() =>
   auth.user?.role === 'webrag_admin' || auth.user?.role === 'webrag_curator'
 )
 
+/** Header text for the chunks modal — shows document title or URL. */
 const chunksHeader = computed(() =>
   selectedDoc.value
     ? (selectedDoc.value.title ?? urlShort(selectedDoc.value.url))
     : 'Chunks'
 )
+
+/** Client-side filter on the loaded documents page — searches title and URL. */
 const filteredDocuments = computed(() => {
   const q = titleFilter.value.trim().toLowerCase()
   if (!q) return documents.value
@@ -244,17 +277,20 @@ const filteredDocuments = computed(() => {
   })
 })
 
+/** Shorten a URL for display: hostname + truncated pathname. */
 function urlShort(url: string) {
   try { return new URL(url).hostname + new URL(url).pathname.replace(/\/$/, '').slice(0, 30) }
   catch { return url.slice(0, 45) }
 }
 
+/** Return a CSS class name based on the quality score (0–1). */
 function qualityClass(score: number) {
   if (score >= 0.75) return 'quality-hi'
   if (score >= 0.45) return 'quality-mid'
   return 'quality-lo'
 }
 
+/** Fetch documents from GET /documents/ with current pagination parameters. */
 async function loadDocuments() {
   loading.value = true
   error.value = null
@@ -269,6 +305,7 @@ async function loadDocuments() {
   }
 }
 
+/** Fetch aggregate stats from GET /documents/stats. */
 async function loadStats() {
   try {
     const params = new URLSearchParams()
@@ -279,16 +316,18 @@ async function loadStats() {
     stats.value.embeddedPct = s.embedded_pct
     stats.value.sources = s.sources
   } catch {
-    // keep previous stats if stats endpoint fails
+    // keep previous stats if the stats endpoint fails
   }
 }
 
+/** Reset pagination and reload both documents and stats. */
 function applyFilter() {
   offset.value = 0
   page.value = 0
   Promise.all([loadDocuments(), loadStats()])
 }
 
+/** Clear all filters and reload. */
 function clearFilter() {
   titleFilter.value = ''
   sourceFilter.value = ''
@@ -307,6 +346,7 @@ function nextPage() {
   loadDocuments()
 }
 
+/** Open the chunks modal and fetch chunks via GET /documents/{id}/chunks. */
 async function openChunks(doc: DocumentResponse) {
   selectedDoc.value = doc
   chunksVisible.value = true
@@ -320,6 +360,7 @@ async function openChunks(doc: DocumentResponse) {
   }
 }
 
+/** Fetch a pre-signed S3 URL for an evidence file and open it in a new tab. */
 async function openEvidence(evidenceId: string) {
   try {
     const resp = await get<{ url: string }>(`/documents/evidence/${evidenceId}/url`)
@@ -329,6 +370,7 @@ async function openEvidence(evidenceId: string) {
   }
 }
 
+/** Fetch a pre-signed S3 URL for a document's .md file and open it in a new tab. */
 async function openMarkdown(docId: string) {
   try {
     const resp = await get<MarkdownUrlResponse>(`/documents/${docId}/markdown-url`)
@@ -338,11 +380,13 @@ async function openMarkdown(docId: string) {
   }
 }
 
+/** Delete a document + all chunks + Qdrant vectors via DELETE /documents/{id}. */
 async function deleteDocument(doc: DocumentResponse) {
   try {
     await del<void>(`/documents/${doc.id}`)
     documents.value = documents.value.filter((d) => d.id !== doc.id)
     await loadStats()
+    // Close the chunks modal if the deleted document was open.
     if (selectedDoc.value?.id === doc.id) {
       selectedDoc.value = null
       chunksVisible.value = false
@@ -356,6 +400,7 @@ async function deleteDocument(doc: DocumentResponse) {
 onMounted(async () => {
   await Promise.all([loadDocuments(), loadStats()])
   try {
+    // Load source options for the (currently unused) sourceFilter dropdown.
     const sources = await get<SourceResponse[]>('/sources/?limit=200')
     sourceOptions.value = [
       { label: 'All sources', value: '' },

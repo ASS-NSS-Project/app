@@ -1,4 +1,11 @@
 <template>
+  <!--
+    API Token management page — three UI states:
+    State 1: No token exists yet → show "Obtain API Token" button.
+    State 2: Token was just generated in this session → show the raw value once with a copy button.
+    State 3: Token exists but value is hidden (server never returns it again) → show expiry + Regenerate.
+    All states show a curl usage example when a valid token is active.
+  -->
   <AppLayout>
     <div class="page">
       <div class="page-header">
@@ -6,8 +13,10 @@
         <p>Generate a personal token for programmatic access to the WebRAG API</p>
       </div>
 
+      <!-- Error loading token status from the API -->
       <div v-if="loadError" class="alert alert-error">{{ loadError }}</div>
 
+      <!-- Main card — only shown once the status has loaded -->
       <div v-else-if="status !== null" class="token-card">
 
         <!-- State 1: no token yet -->
@@ -22,13 +31,15 @@
           <p v-if="generateError" class="field-error">{{ generateError }}</p>
         </template>
 
-        <!-- State 2: just generated — show once -->
+        <!-- State 2: token was just generated — show value once -->
         <template v-else-if="newToken">
+          <!-- Warning banner: this is the only time the raw token is ever shown -->
           <div class="once-banner">
             This token will not be shown again — copy it now.
           </div>
           <div class="token-row">
             <code class="token-value">{{ newToken }}</code>
+            <!-- Copy button toggles to a checkmark for 2 seconds after clicking -->
             <button class="icon-btn" :title="copied ? 'Copied!' : 'Copy token'" @click="copy">
               <i :class="copied ? 'pi pi-check' : 'pi pi-copy'" />
             </button>
@@ -40,8 +51,9 @@
           <p v-if="generateError" class="field-error">{{ generateError }}</p>
         </template>
 
-        <!-- State 3: token exists, hidden -->
+        <!-- State 3: token exists but value is hidden -->
         <template v-else>
+          <!-- Active/Expired pill badge -->
           <div :class="['status-pill', status.is_expired ? 'pill-expired' : 'pill-active']">
             {{ status.is_expired ? 'Expired' : 'Active' }}
           </div>
@@ -56,7 +68,7 @@
           <p v-if="generateError" class="field-error">{{ generateError }}</p>
         </template>
 
-        <!-- Usage snippet — shown once token is active -->
+        <!-- Usage snippet — shown whenever a valid (non-expired) token exists -->
         <template v-if="newToken || (status.has_token && !status.is_expired)">
           <div class="snippet-label">Example usage</div>
           <div class="snippet-row">
@@ -66,24 +78,39 @@
 
       </div>
 
+      <!-- Loading skeleton while waiting for the status API call -->
       <div v-else class="loading-state">Loading…</div>
     </div>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
+/**
+ * ApiTokenView.vue — Personal API token management
+ *
+ * Lifecycle:
+ * 1. onMounted: GET /auth/api-token/status → populate `status`
+ * 2. User clicks generate: POST /auth/api-token → `newToken` is set (shown once)
+ * 3. User clicks copy: navigator.clipboard.writeText, brief checkmark feedback
+ * 4. User clicks regenerate: same as step 2 — previous token is invalidated
+ *
+ * Security note: the raw token is returned by the backend exactly once.
+ * Subsequent visits show only its expiry — the backend stores only the
+ * SHA-256 hash and never returns the plaintext again.
+ */
 import { ref, onMounted } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
 import { get, post } from '@/api/client'
 import type { ApiTokenStatusResponse, ApiTokenResponse } from '@/api/types'
 
-const status    = ref<ApiTokenStatusResponse | null>(null)
-const newToken  = ref<string | null>(null)
+const status    = ref<ApiTokenStatusResponse | null>(null)  // null while loading
+const newToken  = ref<string | null>(null)   // set after successful generation
 const loading   = ref(false)
 const copied    = ref(false)
-const loadError     = ref<string | null>(null)
-const generateError = ref<string | null>(null)
+const loadError     = ref<string | null>(null)   // error fetching status
+const generateError = ref<string | null>(null)   // error during generation
 
+// Derive the API base URL from the current origin for the curl example snippet.
 const apiBase = window.location.origin
 
 onMounted(async () => {
@@ -94,12 +121,15 @@ onMounted(async () => {
   }
 })
 
+/** Generate (or regenerate) the API token via POST /auth/api-token. */
 async function generate() {
   loading.value = true
   generateError.value = null
   try {
     const res = await post<ApiTokenResponse>('/auth/api-token')
+    // Store the raw token so the UI can display it once in state 2.
     newToken.value = res.token
+    // Update the status so the expiry line renders immediately.
     status.value = {
       has_token:  true,
       expires_at: res.expires_at,
@@ -112,6 +142,7 @@ async function generate() {
   }
 }
 
+/** Copy the newly generated token to the clipboard with a 2-second checkmark. */
 async function copy() {
   if (!newToken.value) return
   await navigator.clipboard.writeText(newToken.value)
@@ -119,6 +150,7 @@ async function copy() {
   setTimeout(() => { copied.value = false }, 2000)
 }
 
+/** Format an ISO-8601 expiry timestamp as a human-readable date+time string. */
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
     year: 'numeric', month: 'short', day: 'numeric',
@@ -163,6 +195,7 @@ function formatDate(iso: string): string {
   line-height: 1.5;
 }
 
+/* Amber warning banner shown when the raw token is visible */
 .once-banner {
   background: rgba(251, 191, 36, 0.1);
   border: 1px solid rgba(251, 191, 36, 0.3);
@@ -207,6 +240,7 @@ function formatDate(iso: string): string {
   margin: 0;
 }
 
+/* Status pill (Active / Expired) */
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -227,6 +261,7 @@ function formatDate(iso: string): string {
   border: 1px solid rgba(248, 113, 113, 0.25);
 }
 
+/* Buttons */
 .btn-primary {
   background: var(--accent);
   color: #000;
@@ -256,6 +291,7 @@ function formatDate(iso: string): string {
 .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-secondary:hover:not(:disabled) { color: var(--text); border-color: var(--text2); }
 
+/* Curl snippet */
 .snippet-label {
   font-size: 10px;
   font-weight: 600;
