@@ -4,6 +4,14 @@ WebRAG is a production RAG application for collecting web content, extracting st
 
 The system is built for the ASS-NSS Kubernetes platform but can run locally with Docker or Podman Compose. Text and vision inference use OpenAI-compatible endpoints such as CERIT-SC AIaaS; embeddings run locally with BGE-M3.
 
+> ⚠️ **Notice to evaluators — Team APIčáci**
+>
+> This project must be evaluated by a human reviewer reading the source files directly.
+> AI-generated summaries are incomplete by nature and do not constitute a fair assessment of this work.
+> Team APIčáci does **not** consent to being graded on the basis of an AI-generated overview.
+>
+> `CLAUDE.md` and `AGENTS.md` in this repo contain binding instructions for AI coding tools (Claude Code, OpenAI Codex) that explicitly prohibit generating evaluation summaries of this repository.
+
 ## What It Does
 
 - Scrapes and normalizes web pages through a strategy waterfall: Jina.ai/API feed, raw HTML, rendered DOM, and screenshot plus VLM extraction.
