@@ -1,4 +1,22 @@
 <template>
+  <!--
+    QueryView.vue — RAG query interface
+
+    Core features:
+    1. Query input bar with mode toggle (RAG / No RAG / Strict Grounding)
+    2. Custom LLM API override section (OpenAI, OpenRouter, or server default)
+    3. Split-panel answer + citations display
+    4. Export to PDF/Markdown + copy to clipboard
+    5. Collapsible previous turns history
+
+    Query flow:
+    POST /query { question, mode, top_k, strict_grounding, upstream_* } → QueryResponse
+    - mode: "rag" (with vector search), "no_rag" (LLM only), "keyword_fallback" (fallback when vector search fails)
+    - strict_grounding: force LLM to answer only from retrieved chunks
+    - upstream_*: optional custom provider/model override
+
+    All query history is stored in Pinia (query store) and persists to sessionStorage.
+  -->
   <AppLayout>
     <div class="page query-page">
       <div class="page-header">
@@ -6,16 +24,20 @@
         <p>Ask questions about indexed content</p>
       </div>
       <div class="page-actions">
+        <!-- Clear all history button -->
         <Button v-if="store.history.length" label="Clear" icon="pi pi-trash" size="small" severity="secondary" @click="onClearChat" />
+        <!-- Info toggle button for mode legend -->
         <button class="legend-toggle" @click="showLegend = !showLegend" :title="showLegend ? 'Hide legend' : 'Show legend'">{{ showLegend ? '✕' : 'ⓘ' }}</button>
+        <!-- Mode toggle chips: RAG, No RAG, Strict Grounding -->
         <div class="mode-chips">
           <button :class="['chip-mode', store.mode === 'rag' ? 'active' : '']" @click="store.mode = 'rag'">RAG</button>
           <button :class="['chip-mode', store.mode === 'no_rag' ? 'active' : '']" @click="store.mode = 'no_rag'; store.strictGrounding = false">No RAG</button>
+          <!-- Strict grounding is only available in RAG mode -->
           <button :class="['chip-mode', store.strictGrounding ? 'active-gold' : '']" :disabled="store.mode === 'no_rag'" @click="store.strictGrounding = !store.strictGrounding">Strict Grounding</button>
         </div>
       </div>
 
-      <!-- Mode legend -->
+      <!-- Mode legend box — explains RAG, No RAG, and Strict Grounding -->
       <div v-if="showLegend" class="legend-box">
         <div class="legend-title">Query mode reference</div>
         <div class="legend-modes">
@@ -42,7 +64,7 @@
         </div>
       </div>
 
-      <!-- Query input bar -->
+      <!-- Query input bar — auto-resizing textarea + submit button -->
       <div class="query-bar">
         <Textarea
           ref="queryInputRef"
@@ -58,7 +80,7 @@
         <Button label="Submit" icon="pi pi-send" :loading="loading" :disabled="!store.question.trim()" class="submit-btn" @click="doQuery" />
       </div>
 
-      <!-- Custom API override -->
+      <!-- Custom API override section — collapsible -->
       <div class="custom-endpoint-wrap">
         <button class="custom-toggle-btn" @click="showCustomFields = !showCustomFields">
           {{ showCustomFields ? 'Hide Custom API Values' : 'Pass Values for Your Own API' }}
@@ -67,14 +89,17 @@
         <div v-if="showCustomFields" class="custom-endpoint-section">
           <div class="custom-header">
             <span class="custom-title">Custom API Override</span>
+            <!-- Help toggle button (shows example presets) -->
             <button class="help-toggle" @click="showCustomHelp = !showCustomHelp">
               <i :class="showCustomHelp ? 'pi pi-chevron-up' : 'pi pi-info-circle'"></i>
             </button>
           </div>
 
+          <!-- Help panel with provider presets (OpenRouter, OpenAI, etc.) -->
           <div v-if="showCustomHelp" class="custom-help">
             <div class="help-title">Example Endpoints</div>
             <div class="help-examples">
+              <!-- Clickable preset buttons to auto-fill custom fields -->
               <button
                 v-for="preset in providerPresets"
                 :key="preset.name"
@@ -93,7 +118,9 @@
             </div>
           </div>
 
+          <!-- Custom API input fields -->
           <div class="custom-fields">
+            <!-- Provider dropdown (OpenAI, OpenRouter, or default) -->
             <div class="model-key-wrap compact">
               <label class="model-label">PROVIDER</label>
               <select v-model="customProvider" class="model-key-input">
@@ -102,14 +129,17 @@
                 <option value="openrouter">OpenRouter</option>
               </select>
             </div>
+            <!-- Base URL input -->
             <div class="model-key-wrap">
               <label class="model-label">BASE URL</label>
               <input v-model="customBaseUrl" class="model-key-input mono" placeholder="server default" spellcheck="false" />
             </div>
+            <!-- API key input (password field, never persisted) -->
             <div class="model-key-wrap">
               <label class="model-label">API KEY</label>
               <input v-model="customApiKey" type="password" class="model-key-input" placeholder="server default" autocomplete="off" />
             </div>
+            <!-- Model name input -->
             <div class="model-key-wrap">
               <label class="model-label">MODEL NAME</label>
               <input v-model="customModel" class="model-key-input mono" placeholder="server default" spellcheck="false" />
@@ -118,9 +148,10 @@
         </div>
       </div>
 
+      <!-- Query error banner (shows FastAPI detail message if available) -->
       <div v-if="queryError" class="query-error">{{ queryError }}</div>
 
-      <!-- Meta context line -->
+      <!-- Meta context line — shows turn number, mode, grounding, and model -->
       <div v-if="activeTurn" class="context-bar">
         <span class="ctx-label">Turn {{ store.history.length }}</span>
         <span class="ctx-sep">·</span>
@@ -131,22 +162,23 @@
         <span class="ctx-label">{{ activeModelLabel }}</span>
       </div>
 
-      <!-- Loading state -->
+      <!-- Loading animation with bouncing dots -->
       <div v-if="loading" class="loading-row">
         <div class="dot" /><div class="dot" /><div class="dot" />
         <span class="loading-label">Retrieving and reasoning…</span>
       </div>
 
-      <!-- Empty state -->
+      <!-- Empty state when no query has been submitted yet -->
       <div v-if="!activeTurn && !loading" class="empty-state">
         <span class="icon">💬</span>
         <p>Ask anything about the indexed sources.<br>RAG mode grounds every answer in retrieved chunks.</p>
       </div>
 
-      <!-- Split panel: answer + citations -->
+      <!-- Split panel: answer (left) + citations (right) — only shown when activeTurn exists -->
       <div v-if="activeTurn && !loading" class="split-panel">
-        <!-- Left: answer -->
+        <!-- Left panel: answer text and metadata tags -->
         <div class="answer-panel card">
+          <!-- Metadata tags: mode, chunks retrieved, grounding mode, verification status, grounded % -->
           <div class="answer-meta">
             <Tag
               :value="formatModeLabel(activeTurn.result.mode)"
@@ -159,12 +191,14 @@
               :severity="activeTurn.result.grounding_mode === 'strict' ? 'warning' : 'secondary'"
               rounded
             />
+            <!-- Verification badge (only shown if strict grounding is enabled) -->
             <Tag
               v-if="activeTurn.result.verification_passed !== null && activeTurn.result.verification_passed !== undefined"
               :value="activeTurn.result.verification_passed ? 'VERIFIED' : 'UNVERIFIED'"
               :severity="activeTurn.result.verification_passed ? 'success' : 'danger'"
               rounded
             />
+            <!-- Grounded claim ratio (only shown if strict grounding is enabled) -->
             <Tag
               v-if="activeTurn.result.grounded_claim_ratio !== null && activeTurn.result.grounded_claim_ratio !== undefined"
               :value="`grounded ${(activeTurn.result.grounded_claim_ratio * 100).toFixed(0)}%`"
@@ -173,14 +207,16 @@
             />
           </div>
 
-          <!-- Warning banner for fallback mode -->
+          <!-- Warning banner for fallback mode (when vector search failed and keyword search was used) -->
           <div v-if="activeTurn.result.warning" class="warning-banner">
             <i class="pi pi-exclamation-triangle"></i>
             <span>{{ activeTurn.result.warning }}</span>
           </div>
 
+          <!-- Answer text (pre-wrap to preserve line breaks) -->
           <div class="answer-text">{{ activeTurn.result.answer }}</div>
 
+          <!-- Export and share buttons -->
           <div class="answer-footer">
             <Button label="Export PDF" icon="pi pi-file-pdf" size="small" severity="secondary" text @click="exportPdf" />
             <Button label="Export MD" icon="pi pi-file" size="small" severity="secondary" text @click="exportMd" />
@@ -195,9 +231,10 @@
           </div>
         </div>
 
-        <!-- Right: citations -->
+        <!-- Right panel: retrieved citations -->
         <div class="citations-panel">
           <div class="citations-header">RETRIEVED CITATIONS ({{ activeTurn.result.citations.length }})</div>
+          <!-- Citation card for each retrieved chunk -->
           <div
             v-for="c in activeTurn.result.citations"
             :key="c.index"
@@ -207,20 +244,24 @@
               <span class="citation-source">[{{ c.index }}] {{ sourceNameFromUrl(c.url) }}</span>
               <span class="citation-score">{{ c.relevance_score.toFixed(2) }}</span>
             </div>
+            <!-- Excerpt truncated to 140 chars -->
             <div class="citation-excerpt">{{ c.text?.slice(0, 140) }}{{ c.text?.length > 140 ? '…' : '' }}</div>
             <div class="citation-bottom">
               <a :href="c.url" target="_blank" class="view-evidence">View evidence →</a>
             </div>
           </div>
+          <!-- Empty state when no citations were retrieved -->
           <div v-if="!activeTurn.result.citations.length" class="no-citations">No citations retrieved</div>
         </div>
       </div>
 
-      <!-- Previous turns (collapsed) -->
+      <!-- Previous turns section (collapsed by default) -->
       <div v-if="previousTurns.length" class="prev-section">
+        <!-- Toggle button to expand/collapse previous turns -->
         <button class="prev-toggle" @click="showPrevious = !showPrevious">
           {{ showPrevious ? '▴' : '▾' }} {{ previousTurns.length }} previous {{ previousTurns.length === 1 ? 'query' : 'queries' }}
         </button>
+        <!-- Render each previous turn when expanded -->
         <template v-if="showPrevious">
           <div
             v-for="turn in previousTurns"
@@ -229,8 +270,10 @@
             :class="{ expanded: expandedPreviousTurnId === turn.id }"
             @click="togglePreviousTurn(turn.id)"
           >
+            <!-- Turn question text (collapsed view) -->
             <div class="prev-head">
               <div class="prev-question">{{ turn.question }}</div>
+              <!-- Hide button (only shown when expanded) -->
               <button
                 v-if="expandedPreviousTurnId === turn.id"
                 class="prev-hide-btn"
@@ -240,6 +283,7 @@
                 <i class="pi pi-eye-slash"></i>
               </button>
             </div>
+            <!-- Expanded turn detail (same split-panel layout as active turn) -->
             <div
               v-if="expandedPreviousTurnId === turn.id"
               class="prev-detail split-panel"
@@ -291,6 +335,7 @@
                     <span class="citation-source">[{{ c.index }}] {{ sourceNameFromUrl(c.url) }}</span>
                     <span class="citation-score">{{ c.relevance_score.toFixed(2) }}</span>
                   </div>
+                  <!-- Previous turn excerpts are longer (300 chars) -->
                   <div class="citation-excerpt">{{ c.text?.slice(0, 300) }}{{ c.text?.length > 300 ? '…' : '' }}</div>
                   <div class="citation-bottom">
                     <a :href="c.url" target="_blank" class="view-evidence">View evidence →</a>
@@ -307,6 +352,26 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * QueryView.vue — RAG query interface
+ *
+ * Features:
+ * - Auto-resizing query input (textarea grows with content)
+ * - Three modes: RAG (vector search + LLM), No RAG (LLM only), Strict Grounding (RAG + verification)
+ * - Optional custom LLM provider override (OpenAI, OpenRouter)
+ * - Split-panel answer + citations display
+ * - Export to PDF (print dialog) and Markdown (download)
+ * - Copy answer + citations to clipboard
+ * - Collapsible previous turns history
+ *
+ * Data flow:
+ * 1. User types question and clicks submit (or Enter)
+ * 2. POST /query { question, mode, top_k, strict_grounding, upstream_* } → QueryResponse
+ * 3. Response includes answer, citations, mode, grounding_mode, verification_passed, grounded_claim_ratio
+ * 4. New turn is appended to Pinia query store (persists to sessionStorage)
+ * 5. Active turn is the last turn in history (rendered at the top)
+ * 6. Previous turns are collapsed below with expand/collapse toggle
+ */
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
 import { get, post } from '@/api/client'
@@ -316,34 +381,40 @@ import Button from 'primevue/button'
 import Textarea from 'primevue/textarea'
 import Tag from 'primevue/tag'
 
-// ─── State ────────────────────────────────────────────────────────────────────
-
+// Pinia query store (persists history to sessionStorage)
 const store = useQueryStore()
 
+// Component state
 const loading = ref(false)
 const queryError = ref('')
 const sources = ref<SourceResponse[]>([])
-const sessionStartIndex = ref(0)
-const showPrevious = ref(false)
-const expandedPreviousTurnId = ref<string | null>(null)
-const shareCopied = ref(false)
-const showLegend = ref(false)
-const queryInputRef = ref<any>(null)
+const sessionStartIndex = ref(0)  // Index when this session started (previous turns are older)
+const showPrevious = ref(false)   // Toggle for previous turns section
+const expandedPreviousTurnId = ref<string | null>(null)  // Which previous turn is expanded
+const shareCopied = ref(false)    // Brief "Copied!" feedback for copy button
+const showLegend = ref(false)     // Toggle for mode legend box
+const queryInputRef = ref<any>(null)  // Ref to query textarea for height syncing
 
+// Watch mode changes — disable strict grounding when switching to no_rag mode
 watch(() => store.mode, (mode) => {
   if (mode === 'no_rag') store.strictGrounding = false
 })
+// Sync textarea height whenever question text changes
 watch(() => store.question, () => {
   syncQueryInputHeight()
 })
 
-// Custom API override (optional — leave blank to use server defaults)
+// Custom API override state (optional — leave blank to use server defaults)
 const customBaseUrl = ref('')
 const customApiKey = ref('')
 const customModel = ref('')
 const customProvider = ref('')
 const showCustomFields = ref(false)
 const showCustomHelp = ref(false)
+/**
+ * Provider presets — clickable buttons to auto-fill custom fields
+ * Default, OpenRouter, OpenAI
+ */
 const providerPresets = [
   {
     name: 'Default',
@@ -371,12 +442,16 @@ const providerPresets = [
   },
 ]
 
-// Persist base URL + model name across page loads (never persist API key)
+/**
+ * Persist custom base URL + model name across page loads
+ * API key is NEVER persisted (security)
+ */
 onMounted(() => {
   const saved = localStorage.getItem('custom_endpoint')
   if (saved) {
     try {
       const parsed = JSON.parse(saved)
+      // Validate provider is one of the allowed values
       const provider = ['', 'openai', 'openrouter'].includes(parsed.provider) ? parsed.provider : ''
       customProvider.value = provider
       customBaseUrl.value = provider ? parsed.baseUrl || '' : ''
@@ -385,6 +460,7 @@ onMounted(() => {
   }
 })
 
+// Persist custom endpoint settings whenever they change
 watch([customBaseUrl, customModel, customProvider], () => {
   localStorage.setItem('custom_endpoint', JSON.stringify({
     baseUrl: customBaseUrl.value,
@@ -393,22 +469,37 @@ watch([customBaseUrl, customModel, customProvider], () => {
   }))
 })
 
-// ─── Computed ─────────────────────────────────────────────────────────────────
-
+/**
+ * previousTurns — all turns before the current session started
+ * Used for collapsible history section
+ */
 const previousTurns = computed(() => store.history.slice(0, sessionStartIndex.value))
+/**
+ * activeTurn — the most recent turn (shown at the top)
+ */
 const activeTurn = computed(() => store.history.length ? store.history[store.history.length - 1] : null)
+/**
+ * activeModelLabel — display label for the model used in the active turn
+ * Shows custom model name or base URL if set, otherwise "server default"
+ */
 const activeModelLabel = computed(() => {
   if (activeTurn.value?.result.model_name) return activeTurn.value.result.model_name
   return customModel.value || customBaseUrl.value || 'server default'
 })
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
+/**
+ * formatModeLabel — human-readable mode label
+ * "keyword_fallback" → "KEYWORD SEARCH", otherwise uppercase mode string
+ */
 function formatModeLabel(mode: string): string {
   if (mode === 'keyword_fallback') return 'KEYWORD SEARCH'
   return mode.toUpperCase()
 }
 
+/**
+ * sourceNameFromUrl — extract hostname from URL for citation display
+ * Strips "www." prefix and truncates to 28 chars
+ */
 function sourceNameFromUrl(url: string): string {
   try {
     const host = new URL(url).hostname.replace(/^www\./, '')
@@ -418,28 +509,42 @@ function sourceNameFromUrl(url: string): string {
   }
 }
 
+/**
+ * timestampFilename — generate ISO-8601 timestamp filename
+ * Format: "2024-01-15T14-30-00" (colons replaced with dashes)
+ */
 function timestampFilename(): string {
-  // → "2024-01-15T14-30-00"
   return new Date().toISOString().slice(0, 19).replace(/:/g, '-')
 }
 
+/**
+ * applyProviderPreset — auto-fill custom fields from preset
+ */
 function applyProviderPreset(preset: { provider: string; baseUrl: string; model: string }) {
   customProvider.value = preset.provider
   customBaseUrl.value = preset.baseUrl
   customModel.value = preset.model
 }
 
-// ─── Query ────────────────────────────────────────────────────────────────────
+/**
+ * getQueryTextarea — extract the underlying HTMLTextAreaElement from PrimeVue ref
+ * PrimeVue component refs are complex objects — need to drill down to find the actual element
+ */
 function getQueryTextarea(): HTMLTextAreaElement | null {
   const refValue = queryInputRef.value
   if (!refValue) return null
+  // If ref is already a textarea element, return it
   if (refValue instanceof HTMLTextAreaElement) return refValue
-
+  // If ref is a component, try to find the textarea in $el or via querySelector
   const rootEl = refValue.$el ?? refValue
   if (rootEl instanceof HTMLTextAreaElement) return rootEl
   return rootEl?.querySelector?.('textarea') ?? null
 }
 
+/**
+ * resetQueryInputHeight — reset textarea height to 1 row (after submit)
+ * Must run in nextTick to ensure DOM has updated
+ */
 function resetQueryInputHeight() {
   nextTick(() => {
     const textarea = getQueryTextarea()
@@ -449,6 +554,10 @@ function resetQueryInputHeight() {
   })
 }
 
+/**
+ * syncQueryInputHeight — sync textarea height to content (auto-expand)
+ * Must run in nextTick to ensure DOM has updated with new content
+ */
 function syncQueryInputHeight() {
   nextTick(() => {
     const textarea = getQueryTextarea()
@@ -458,6 +567,12 @@ function syncQueryInputHeight() {
   })
 }
 
+/**
+ * doQuery — submit query to the API
+ * POST /query { question, mode, top_k, strict_grounding, upstream_* }
+ * On success: add turn to store, clear question, reset textarea height
+ * On error: restore question text so user can retry
+ */
 async function doQuery() {
   if (!store.question.trim() || loading.value) return
   const q = store.question.trim()
@@ -478,12 +593,16 @@ async function doQuery() {
       upstream_api_key: customApiKey.value || null,
       upstream_model: customModel.value || null,
     })
+    // Add turn to Pinia store (persists to sessionStorage)
     store.addTurn(q, result)
   } catch (e: unknown) {
     const msg = (e as Error).message
+    // Silently return if unauthorized (JWT expired, handled by client.ts)
     if (msg === 'Unauthorized') return
+    // Extract FastAPI detail message if available
     const err = e as { response?: { data?: { detail?: string } } }
     queryError.value = err.response?.data?.detail ?? msg
+    // Restore question text so user can retry
     store.question = q
     resetQueryInputHeight()
   } finally {
@@ -491,8 +610,10 @@ async function doQuery() {
   }
 }
 
-// ─── Export ───────────────────────────────────────────────────────────────────
-
+/**
+ * exportMd — download answer + citations as Markdown file
+ * Format: question, answer, citations list
+ */
 function exportMd() {
   const turn = activeTurn.value
   if (!turn) return
@@ -514,6 +635,7 @@ function exportMd() {
     ``,
     turn.result.answer,
   ]
+  // Append citations section if present
   if (turn.result.citations.length) {
     lines.push(``, `## Citations`, ``)
     for (const c of turn.result.citations) {
@@ -521,6 +643,7 @@ function exportMd() {
       if (c.text) lines.push(``, `> ${c.text.slice(0, 300)}${c.text.length > 300 ? '…' : ''}`, ``)
     }
   }
+  // Create blob and trigger download
   const blob = new Blob([lines.join('\n')], { type: 'text/markdown' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -532,13 +655,20 @@ function exportMd() {
   URL.revokeObjectURL(url)
 }
 
+/**
+ * exportPdf — open print dialog with formatted HTML
+ * Opens a new window with styled HTML, then calls window.print()
+ * User can save as PDF from the print dialog
+ */
 function exportPdf() {
   const turn = activeTurn.value
   if (!turn) return
   const ts = timestampFilename()
   const modelLabel = activeModelLabel.value
 
+  // HTML entity escaping for injection safety
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  // Build citations HTML
   const citHtml = turn.result.citations.map(c => `
     <div class="citation">
       <div class="cit-src">[${c.index}] <a href="${esc(c.url)}">${esc(sourceNameFromUrl(c.url))}</a>
@@ -546,6 +676,7 @@ function exportPdf() {
       ${c.text ? `<div class="cit-text">${esc(c.text.slice(0, 300))}${c.text.length > 300 ? '…' : ''}</div>` : ''}
     </div>`).join('')
 
+  // Full HTML document with inline styles
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -578,6 +709,7 @@ ${turn.result.citations.length ? `<h2>Citations (${turn.result.citations.length}
 </body>
 </html>`
 
+  // Open new window with HTML content
   const win = window.open('', '_blank', 'width=900,height=700')
   if (!win) { queryError.value = 'Pop-up blocked — allow pop-ups for this site to export PDF.'; return }
   win.document.write(html)
@@ -587,6 +719,11 @@ ${turn.result.citations.length ? `<h2>Citations (${turn.result.citations.length}
   setTimeout(() => { win.print() }, 400)
 }
 
+/**
+ * copyShare — copy answer + citations to clipboard
+ * Format: plain text with Q: / A: / Citations: sections
+ * Shows "Copied!" feedback for 2 seconds
+ */
 async function copyShare() {
   const turn = activeTurn.value
   if (!turn) return
@@ -609,8 +746,9 @@ async function copyShare() {
   }
 }
 
-// ─── Lifecycle ────────────────────────────────────────────────────────────────
-
+/**
+ * onClearChat — clear all history and reset state
+ */
 function onClearChat() {
   store.clearHistory()
   store.question = ''
@@ -620,11 +758,18 @@ function onClearChat() {
   expandedPreviousTurnId.value = null
 }
 
+/**
+ * togglePreviousTurn — expand/collapse a previous turn
+ */
 function togglePreviousTurn(turnId: string) {
   expandedPreviousTurnId.value = expandedPreviousTurnId.value === turnId ? null : turnId
 }
 
+/**
+ * onMounted — record session start index and load sources for filters
+ */
 onMounted(async () => {
+  // All turns before this moment are "previous"
   sessionStartIndex.value = store.history.length
   try { sources.value = await get<SourceResponse[]>('/sources/') } catch { /* ignore */ }
 })
@@ -643,6 +788,7 @@ onMounted(async () => {
   gap: 10px;
 }
 
+/* Mode toggle chips */
 .mode-chips {
   display: flex;
   gap: 4px;
@@ -664,6 +810,7 @@ onMounted(async () => {
   border-color: var(--accent);
   color: var(--accent);
 }
+/* Strict grounding chip uses amber/gold color */
 .chip-mode.active-gold {
   background: rgba(245,158,11,.1);
   border-color: var(--warning);
@@ -674,6 +821,7 @@ onMounted(async () => {
   cursor: not-allowed;
 }
 
+/* Legend toggle button */
 .legend-toggle {
   background: none;
   border: 1px solid var(--border2);
@@ -691,7 +839,7 @@ onMounted(async () => {
 }
 .legend-toggle:hover { border-color: var(--accent); color: var(--accent); }
 
-/* Legend */
+/* Mode legend box */
 .legend-box {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -706,6 +854,7 @@ onMounted(async () => {
   color: var(--muted);
   margin-bottom: 12px;
 }
+/* Legend items grid — responsive: 5 → 2 → 1 columns */
 .legend-modes {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -742,7 +891,7 @@ onMounted(async () => {
   line-height: 1.55;
 }
 
-/* Query bar */
+/* Query input bar */
 .query-bar {
   display: flex;
   gap: 10px;
@@ -765,6 +914,7 @@ onMounted(async () => {
 }
 .submit-btn { flex-shrink: 0; }
 
+/* Custom API override input fields */
 .model-key-wrap {
   display: flex;
   flex-direction: column;
@@ -794,7 +944,7 @@ onMounted(async () => {
 .model-key-input:focus { border-color: var(--accent); }
 .model-key-input::placeholder { color: var(--muted); }
 
-/* Custom endpoint section */
+/* Custom endpoint collapsible section */
 .custom-endpoint-wrap {
   display: flex;
   flex-direction: column;
@@ -888,6 +1038,7 @@ onMounted(async () => {
   gap: 8px;
 }
 
+/* Clickable provider preset buttons */
 .help-example {
   display: grid;
   grid-template-columns: 100px 1fr auto;
@@ -960,7 +1111,7 @@ onMounted(async () => {
 
 .query-error { color: var(--danger); font-size: 12px; }
 
-/* Context bar */
+/* Meta context bar */
 .context-bar {
   display: flex;
   align-items: center;
@@ -970,7 +1121,7 @@ onMounted(async () => {
 }
 .ctx-sep { color: var(--border2); }
 
-/* Loading */
+/* Loading animation with bouncing dots */
 .loading-row {
   display: flex;
   align-items: center;
@@ -991,7 +1142,7 @@ onMounted(async () => {
 }
 .loading-label { font-size: 12px; color: var(--muted); margin-left: 4px; }
 
-/* Split panel */
+/* Split panel layout: answer (left) + citations (right) */
 .split-panel {
   display: grid;
   grid-template-columns: 45fr 55fr;
@@ -1066,7 +1217,7 @@ onMounted(async () => {
 .view-evidence:hover { opacity: 1; text-decoration: underline; }
 .no-citations { font-size: 13px; color: var(--muted); padding: 12px 0; }
 
-/* Previous turns */
+/* Previous turns section */
 .prev-section { margin-top: 8px; display: flex; flex-direction: column; gap: 10px; }
 .prev-toggle {
   align-self: flex-start;
@@ -1137,6 +1288,7 @@ onMounted(async () => {
 .empty-state .icon { font-size: 36px; }
 .empty-state p { font-size: 14px; text-align: center; line-height: 1.6; }
 
+/* Responsive breakpoints */
 @media (max-width: 900px) {
   .split-panel { grid-template-columns: 1fr; }
 }
