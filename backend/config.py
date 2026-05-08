@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     # ── Qdrant ────────────────────────────────────
     qdrant_url: str = "http://qdrant.qdrant.svc:6333"
     qdrant_collection: str = "rag_chunks"
+    qdrant_replication_factor: int = 1
 
     # ── LLM (text generation — any OpenAI-compatible endpoint) ──
     query_base_url: str = ""

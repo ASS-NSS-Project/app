@@ -110,6 +110,7 @@ class EmbeddingService:
             collection_name=settings.qdrant_collection,
             vectors_config={"dense": VectorParams(size=settings.embedding_dim, distance=Distance.COSINE)},
             sparse_vectors_config={"sparse": SparseVectorParams()},
+            replication_factor=settings.qdrant_replication_factor,
         )
 
         # Add payload indexes for efficient filtered retrieval
