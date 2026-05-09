@@ -17,7 +17,7 @@
           <li>Multimodal ingest pipeline</li>
           <li>RAG with source citations</li>
           <li>CAPTCHA incident management</li>
-          <li>Embedding A/B experiments &amp; evaluation (TBD)</li>
+          <li>A/B experiments &amp; evaluation (TBD)</li>
         </ul>
       </div>
     </div>
@@ -78,7 +78,7 @@
         <Button label="Sign In" class="w-full signin-btn" :loading="loading" @click="doLogin" />
 
         <a class="docs-link" href="/user-docs/" target="_blank" rel="noopener noreferrer">
-          User documentation
+          User Documentation
         </a>
       </div>
     </div>
