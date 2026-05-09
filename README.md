@@ -72,6 +72,16 @@ docker compose up --build
 
 Open <http://localhost:8080> and sign in with `FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_PASSWORD`.
 
+For SSO testing, use the local Keycloak realm imported from `keycloak/realm-import.json`.
+All demo users use password `password`:
+
+| User | Role |
+|------|------|
+| `webrag-admin@example.local` | `webrag_admin` |
+| `webrag-curator@example.local` | `webrag_curator` |
+| `webrag-analyst@example.local` | `webrag_analyst` |
+| `webrag-user@example.local` | `webrag_user` |
+
 Useful local URLs:
 
 | Service | URL |
@@ -80,6 +90,7 @@ Useful local URLs:
 | User documentation | <http://localhost:8080/user-docs/> (public, no login required) |
 | API | <http://localhost:8000> |
 | Swagger UI | <http://localhost:8000/docs> when `API_DOCS=true` |
+| Keycloak | <http://localhost:8081> |
 | Qdrant dashboard | <http://localhost:6333/dashboard> |
 | RabbitMQ management | <http://localhost:15672> |
 
@@ -125,7 +136,7 @@ All runtime configuration is environment-driven. See `.env.example` for the comp
 | `QUERY_*` | Text LLM endpoint and model |
 | `VLM_*` | Vision model endpoint and model |
 | `JWT_SECRET`, `FIRST_ADMIN_*` | Auth bootstrap |
-| `KEYCLOAK_*` | Optional production OIDC |
+| `KEYCLOAK_*` | Local and production OIDC |
 | `API_DOCS` | Enable `/docs` and `/redoc` locally |
 
 ## Documentation
