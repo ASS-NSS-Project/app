@@ -306,6 +306,7 @@
           <ol>
             <li>Klikněte na <strong>Sign in with OIDC</strong>.</li>
             <li>Prohlížeč vás přesměruje do Keycloaku.</li>
+            <li>Pokud Keycloak zobrazí volbu <strong>Google</strong>, klikněte na ni. Je to běžný způsob pokračování přes školní / organizační účet.</li>
             <li>Přihlaste se svým běžným účtem.</li>
             <li>Po úspěšném přihlášení se vrátíte zpět do WebRAGu.</li>
           </ol>
@@ -342,20 +343,29 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
         <section id="cs-query">
           <h2>Query <span class="badge all">všichni uživatelé</span></h2>
           <p>Query je hlavní obrazovka pro pokládání otázek. V režimu <strong>RAG</strong> systém nejdřív najde relevantní části uložených dokumentů a teprve potom z nich připraví odpověď. Odpověď doplní citacemi, abyste viděli, odkud informace pochází.</p>
-          <h3>Režimy dotazu</h3>
+          <h3>Režimy v rozhraní</h3>
           <table>
             <tr><th>Režim</th><th>Kdy se používá</th></tr>
             <tr><td>rag</td><td>Běžný režim. Hledá v uložených dokumentech a odpovídá s citacemi.</td></tr>
             <tr><td>no_rag</td><td>Model odpoví bez hledání ve znalostní bázi. Hodí se pro porovnání.</td></tr>
-            <tr><td>keyword_fallback</td><td>Automatická záloha, když není dostupné vektorové vyhledávání. Použije textové hledání v databázi.</td></tr>
           </table>
+          <h3>Automatická záloha vyhledávání</h3>
+          <p><code>keyword_fallback</code> není tlačítko v rozhraní. Je to stav odpovědi, který se objeví automaticky, když WebRAG nemůže použít vektorové vyhledávání nebo nenajde žádné vektorové výsledky. V takové situaci se pokusí najít podklady textovým hledáním v databázi a v odpovědi zobrazí varování.</p>
           <h3>Důležité volby</h3>
           <ul>
-            <li><strong>Strict Grounding</strong> říká modelu, aby odpovídal pouze z nalezených dokumentů.</li>
+            <li><strong>Strict Grounding</strong> říká modelu, aby odpovídal pouze z nalezených dokumentů. Pokud je vypnutý, odpověď je volnější a model může přidat obecné znalosti mimo nalezené dokumenty.</li>
             <li><strong>top_k</strong> je API parametr pro počet nalezených částí dokumentů. Výchozí hodnota je 5. Vyšší číslo dává modelu více podkladů, ale odpověď může být pomalejší.</li>
             <li><strong>source_id</strong> je API parametr pro omezení dotazu jen na jeden zdroj.</li>
-            <li><strong>Custom API Override</strong> ve frontend rozhraní i API polích <code>upstream_*</code> dovolí jednorázově použít vlastní OpenAI nebo OpenRouter klíč. Klíč se neukládá.</li>
           </ul>
+          <h3>Výběr poskytovatele modelu</h3>
+          <p>Ve výchozím stavu WebRAG používá model nastavený na serveru. Pokud potřebujete jednorázově vyzkoušet jiný kompatibilní model, otevřete v Query část <strong>Pass Values for Your Own API</strong>.</p>
+          <ul>
+            <li><strong>Provider</strong> může být <strong>Default</strong>, <strong>OpenAI</strong> nebo <strong>OpenRouter</strong>.</li>
+            <li><strong>Base URL</strong> je adresa API poskytovatele. Tlačítko nápovědy nabízí předvyplněné příklady.</li>
+            <li><strong>API Key</strong> se použije jen pro aktuální požadavek a neukládá se.</li>
+            <li><strong>Model Name</strong> je přesný název modelu u poskytovatele, například <code>gpt-4o</code> nebo <code>openrouter/auto</code>.</li>
+          </ul>
+          <p>Stejné nastavení lze poslat přes API poli <code>upstream_provider</code>, <code>upstream_base_url</code>, <code>upstream_api_key</code> a <code>upstream_model</code>.</p>
           <div class="note">Nově nahrané dokumenty se dají najít textově hned po ingestu. Kvalitnější vektorové hledání začne fungovat po dokončení embedding workeru, obvykle za 1 až 5 minut.</div>
           <h3>API příklad: položit RAG otázku</h3>
           <pre><code>curl -s -X POST "$WEBRAG_URL/query/" \
@@ -373,6 +383,20 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
   -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"question":"Explain what WebRAG is.","mode":"no_rag","top_k":5,"strict_grounding":false}'</code></pre>
+          <h3>API příklad: vlastní poskytovatel modelu</h3>
+          <pre><code>curl -s -X POST "$WEBRAG_URL/query/" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "Summarize the newest indexed source.",
+    "mode": "rag",
+    "top_k": 5,
+    "strict_grounding": true,
+    "upstream_provider": "openai",
+    "upstream_base_url": "https://api.openai.com/v1",
+    "upstream_api_key": "paste-provider-key-here",
+    "upstream_model": "gpt-4o"
+  }'</code></pre>
         </section>
 
         <section id="cs-kb">
@@ -510,6 +534,7 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
           <ol>
             <li>Click <strong>Sign in with OIDC</strong>.</li>
             <li>Your browser opens Keycloak.</li>
+            <li>If Keycloak shows a <strong>Google</strong> option, click it. This is the normal way to continue with your school / organization account.</li>
             <li>Sign in with your normal account.</li>
             <li>After success, you return to WebRAG.</li>
           </ol>
@@ -546,20 +571,29 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
         <section id="en-query">
           <h2>Query <span class="badge all">all users</span></h2>
           <p>Query is the main screen for asking questions. In <strong>RAG</strong> mode, WebRAG first finds relevant parts of indexed documents and then asks the language model to answer from that material. The answer includes citations so you can inspect the evidence.</p>
-          <h3>Query Modes</h3>
+          <h3>Modes in the UI</h3>
           <table>
             <tr><th>Mode</th><th>Meaning</th></tr>
             <tr><td>rag</td><td>Normal mode. Searches indexed documents and answers with citations.</td></tr>
             <tr><td>no_rag</td><td>Skips the knowledge base. Useful for comparison.</td></tr>
-            <tr><td>keyword_fallback</td><td>Automatic fallback when vector search is unavailable. Uses database text search.</td></tr>
           </table>
+          <h3>Automatic Search Fallback</h3>
+          <p><code>keyword_fallback</code> is not a button in the UI. It is a response state that appears automatically when WebRAG cannot use vector search or receives no vector results. In that situation, it tries database keyword search and shows a warning in the answer.</p>
           <h3>Important Options</h3>
           <ul>
-            <li><strong>Strict Grounding</strong> tells the model to answer only from retrieved documents.</li>
+            <li><strong>Strict Grounding</strong> tells the model to answer only from retrieved documents. When it is off, the answer is relaxed and may include general model knowledge outside retrieved documents.</li>
             <li><strong>top_k</strong> is an API argument for how many chunks to retrieve. Default is 5. Higher values give more context but may be slower.</li>
             <li><strong>source_id</strong> is an API argument that restricts search to one source.</li>
-            <li><strong>Custom API Override</strong> in the UI and the API <code>upstream_*</code> fields let you use your own OpenAI or OpenRouter key for one request. The key is not stored.</li>
           </ul>
+          <h3>Choosing a Model Provider</h3>
+          <p>By default, WebRAG uses the model configured on the server. If you need to try another compatible model for one request, open <strong>Pass Values for Your Own API</strong> on the Query screen.</p>
+          <ul>
+            <li><strong>Provider</strong> can be <strong>Default</strong>, <strong>OpenAI</strong>, or <strong>OpenRouter</strong>.</li>
+            <li><strong>Base URL</strong> is the provider API address. The help button offers ready-made examples.</li>
+            <li><strong>API Key</strong> is used only for the current request and is not stored.</li>
+            <li><strong>Model Name</strong> is the exact model name at the provider, for example <code>gpt-4o</code> or <code>openrouter/auto</code>.</li>
+          </ul>
+          <p>The same settings are available through the API fields <code>upstream_provider</code>, <code>upstream_base_url</code>, <code>upstream_api_key</code>, and <code>upstream_model</code>.</p>
           <div class="note">New documents are keyword-searchable right after ingest. Better vector search becomes available after the embedding worker finishes, usually in 1 to 5 minutes.</div>
           <h3>API Example: Ask a RAG Question</h3>
           <pre><code>curl -s -X POST "$WEBRAG_URL/query/" \
@@ -577,6 +611,20 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
   -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"question":"Explain what WebRAG is.","mode":"no_rag","top_k":5,"strict_grounding":false}'</code></pre>
+          <h3>API Example: Custom Model Provider</h3>
+          <pre><code>curl -s -X POST "$WEBRAG_URL/query/" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "Summarize the newest indexed source.",
+    "mode": "rag",
+    "top_k": 5,
+    "strict_grounding": true,
+    "upstream_provider": "openai",
+    "upstream_base_url": "https://api.openai.com/v1",
+    "upstream_api_key": "paste-provider-key-here",
+    "upstream_model": "gpt-4o"
+  }'</code></pre>
         </section>
 
         <section id="en-kb">
