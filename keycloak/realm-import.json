@@ -1,0 +1,141 @@
+{
+  "realm": "ass-nss-project",
+  "enabled": true,
+  "displayName": "ASS NSS Project",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "sslRequired": "external",
+  "groups": [
+    {
+      "name": "webrag_admin"
+    },
+    {
+      "name": "webrag_curator"
+    },
+    {
+      "name": "webrag_analyst"
+    },
+    {
+      "name": "webrag_user"
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "webrag-local",
+      "name": "WebRAG Local",
+      "description": "Local Docker Compose client for WebRAG development",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "webrag-local-secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "redirectUris": [
+        "http://localhost:8080/auth/keycloak/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:8080"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:8080/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "webrag-admin",
+      "email": "webrag-admin@example.local",
+      "firstName": "WebRAG",
+      "lastName": "Admin",
+      "enabled": true,
+      "emailVerified": true,
+      "groups": [
+        "/webrag_admin"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "webrag-curator",
+      "email": "webrag-curator@example.local",
+      "firstName": "WebRAG",
+      "lastName": "Curator",
+      "enabled": true,
+      "emailVerified": true,
+      "groups": [
+        "/webrag_curator"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "webrag-analyst",
+      "email": "webrag-analyst@example.local",
+      "firstName": "WebRAG",
+      "lastName": "Analyst",
+      "enabled": true,
+      "emailVerified": true,
+      "groups": [
+        "/webrag_analyst"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "webrag-user",
+      "email": "webrag-user@example.local",
+      "firstName": "WebRAG",
+      "lastName": "User",
+      "enabled": true,
+      "emailVerified": true,
+      "groups": [
+        "/webrag_user"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

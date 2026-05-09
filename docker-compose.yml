@@ -15,7 +15,7 @@
 services:
   minio:
     image: minio/minio:latest
-    container_name: rag_minio
+    container_name: webrag_minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -26,13 +26,13 @@ services:
       - "9000:9000"   # S3 API endpoint: http://localhost:9000
       - "9001:9001"   # MinIO console: http://localhost:9001
     volumes:
-      - minio_data:/data
+      - webrag_minio_data:/data
     networks:
-      - ragnet
+      - webragnet
 
   minio_init:
     image: minio/mc:latest
-    container_name: rag_minio_init
+    container_name: webrag_minio_init
     depends_on:
       minio:
         condition: service_started
@@ -44,11 +44,11 @@ services:
         mc mb -p local/${S3_BUCKET_DOCS:-rag-documents-dev} || true
       "
     networks:
-      - ragnet
+      - webragnet
 
   postgres:
     image: postgres:16
-    container_name: rag_postgres
+    container_name: webrag_postgres
     restart: unless-stopped
     environment:
       TZ: Europe/Prague
@@ -56,9 +56,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-ragdb}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - webrag_postgres_data:/var/lib/postgresql/data
     networks:
-      - ragnet
+      - webragnet
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-raguser} -d $${POSTGRES_DB:-ragdb}"]
       interval: 5s
@@ -68,7 +68,7 @@ services:
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
-    container_name: rag_rabbitmq
+    container_name: webrag_rabbitmq
     restart: unless-stopped
     security_opt:
       - label=disable   # Podman rootless: allow volume chown for erlang cookie (SELinux); Docker ignores this
@@ -93,9 +93,9 @@ services:
     ports:
       - "15672:15672"   # Management UI: http://localhost:15672
     networks:
-      - ragnet
+      - webragnet
     volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
+      - webrag_rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 10s
@@ -104,19 +104,37 @@ services:
 
   qdrant:
     image: qdrant/qdrant:latest
-    container_name: rag_qdrant
+    container_name: webrag_qdrant
     volumes:
-      - qdrant_data:/qdrant/storage
+      - webrag_qdrant_data:/qdrant/storage
     ports:
       - "6333:6333"   # Dashboard: http://localhost:6333/dashboard
     networks:
-      - ragnet
+      - webragnet
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: webrag_keycloak
+    restart: unless-stopped
+    command: start-dev --import-realm
+    environment:
+      TZ: Europe/Prague
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HTTP_PORT: 8080
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "8081:8080"   # Keycloak admin/login UI: http://localhost:8081
+    volumes:
+      - ./keycloak/realm-import.json:/opt/keycloak/data/import/realm-import.json:ro,z
+    networks:
+      - webragnet
 
   api:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: rag_api
+    container_name: webrag_api
     restart: unless-stopped
     environment:
       - TZ=Europe/Prague
@@ -150,11 +168,12 @@ services:
 
       - SERVICE_NAME=api
 
-      # Optional: Keycloak OIDC (leave empty to disable SSO in local dev)
-      - KEYCLOAK_URL=${KEYCLOAK_URL:-}
-      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-}
-      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-}
-      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-}
+      # Local Keycloak OIDC. KEYCLOAK_URL is browser-facing; KEYCLOAK_INTERNAL_URL is container-facing.
+      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://localhost:8081}
+      - KEYCLOAK_INTERNAL_URL=${KEYCLOAK_INTERNAL_URL:-http://keycloak:8080}
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-ass-nss-project}
+      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-webrag-local}
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-webrag-local-secret}
       - KEYCLOAK_REDIRECT_URI=${KEYCLOAK_REDIRECT_URI:-http://localhost:8080/auth/keycloak/callback}
       - KEYCLOAK_ADMIN_CLIENT_ID=${KEYCLOAK_ADMIN_CLIENT_ID:-}
       - KEYCLOAK_ADMIN_CLIENT_SECRET=${KEYCLOAK_ADMIN_CLIENT_SECRET:-}
@@ -166,6 +185,8 @@ services:
       rabbitmq:
         condition: service_healthy
       qdrant:
+        condition: service_started
+      keycloak:
         condition: service_started
       minio:
         condition: service_started
@@ -184,15 +205,15 @@ services:
       - "8000:8000"   # API direct access (optional, frontend also proxies via nginx)
     volumes:
       - ./backend:/app:z
-      - api:/root/.cache/huggingface
+      - webrag_api_cache:/root/.cache/huggingface
     networks:
-      - ragnet
+      - webragnet
 
   worker_ingest:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: rag_worker_ingest
+    container_name: webrag_worker_ingest
     restart: unless-stopped
     environment:
       - TZ=Europe/Prague
@@ -236,15 +257,15 @@ services:
       "
     volumes:
       - ./backend:/app:z
-      - worker_ingest:/root/.cache/huggingface
+      - webrag_worker_ingest_cache:/root/.cache/huggingface
     networks:
-      - ragnet
+      - webragnet
 
   worker_embed:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: rag_worker_embed
+    container_name: webrag_worker_embed
     restart: unless-stopped
     environment:
       - TZ=Europe/Prague
@@ -282,31 +303,31 @@ services:
       "
     volumes:
       - ./backend:/app:z
-      - worker_embed:/root/.cache/huggingface
+      - webrag_worker_embed_cache:/root/.cache/huggingface
     networks:
-      - ragnet
+      - webragnet
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: rag_frontend
+    container_name: webrag_frontend
     depends_on:
       - api
     ports:
       - "8080:80"   # UI: http://localhost:8080  (nginx also proxies /auth, /sources, etc. to the api)
     networks:
-      - ragnet
+      - webragnet
 
 volumes:
-  minio_data:
-  postgres_data:
-  rabbitmq_data:  # Persists erlang cookie and queued messages across restarts
-  qdrant_data:
-  api:            # BGE-M3 weights for API (~570 MB, downloaded once)
-  worker_ingest:  # BGE-M3 weights for ingest worker (~570 MB, downloaded once)
-  worker_embed:   # BGE-M3 weights for embedding worker (~570 MB, downloaded once)
+  webrag_minio_data:
+  webrag_postgres_data:
+  webrag_rabbitmq_data:  # Persists erlang cookie and queued messages across restarts
+  webrag_qdrant_data:
+  webrag_api_cache:            # BGE-M3 weights for API (~570 MB, downloaded once)
+  webrag_worker_ingest_cache:  # BGE-M3 weights for ingest worker (~570 MB, downloaded once)
+  webrag_worker_embed_cache:   # BGE-M3 weights for embedding worker (~570 MB, downloaded once)
 
 networks:
-  ragnet:
+  webragnet:
     driver: bridge
