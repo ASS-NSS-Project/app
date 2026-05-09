@@ -139,6 +139,7 @@ class Settings(BaseSettings):
 
     # --- Keycloak OIDC (optional for local dev, required in production)
     keycloak_url: str = ""                     # e.g. https://keycloak.nss.jkzl.eu
+    keycloak_internal_url: str = ""            # e.g. http://keycloak:8080 in Docker Compose
     keycloak_realm: str = "ass-nss-project"
     keycloak_client_id: str = ""
     keycloak_client_secret: str = ""

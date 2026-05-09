@@ -54,9 +54,17 @@ router = APIRouter(prefix="/auth", tags=["auth-keycloak"])
 _STATE_TTL_SECONDS = 600
 
 
-def _oidc_base() -> str:
-    """Return the base path for all Keycloak OIDC endpoints for the configured realm."""
-    return f"{settings.keycloak_url}/realms/{settings.keycloak_realm}/protocol/openid-connect"
+def _oidc_base(internal: bool = False) -> str:
+    """
+    Return the base path for Keycloak OIDC endpoints.
+
+    Local Docker Compose needs two URLs:
+    - public URL: browser redirects to Keycloak on localhost
+    - internal URL: API container exchanges the code with the keycloak service
+    Production normally uses one URL for both.
+    """
+    base_url = settings.keycloak_internal_url if internal and settings.keycloak_internal_url else settings.keycloak_url
+    return f"{base_url}/realms/{settings.keycloak_realm}/protocol/openid-connect"
 
 
 def _create_state() -> str:
@@ -224,7 +232,7 @@ async def keycloak_callback(
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             token_resp = await client.post(
-                f"{_oidc_base()}/token",
+                f"{_oidc_base(internal=True)}/token",
                 data={
                     "grant_type": "authorization_code",
                     "code": code,
@@ -252,7 +260,7 @@ async def keycloak_callback(
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             userinfo_resp = await client.get(
-                f"{_oidc_base()}/userinfo",
+                f"{_oidc_base(internal=True)}/userinfo",
                 headers={"Authorization": f"Bearer {access_token}"},
             )
     except (httpx.ConnectError, httpx.TimeoutException, httpx.TransportError) as exc:
