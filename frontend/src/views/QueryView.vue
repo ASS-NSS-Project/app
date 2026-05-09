@@ -51,15 +51,7 @@
           </div>
           <div class="legend-item">
             <span class="legend-badge badge-strict">Strict Grounding</span>
-            <span class="legend-text">Fail-closed mode: the system answers only from retrieved chunks, verifies citation support, and refuses if evidence is insufficient. Prevents supplementation with general knowledge. Only available in RAG mode.</span>
-          </div>
-          <div class="legend-item">
-            <span class="legend-badge badge-grounding-strict">Grounding: strict</span>
-            <span class="legend-text">The current answer is restricted to retrieved documents. If the retrieved context is missing or too weak, the system should say that it cannot answer from indexed sources.</span>
-          </div>
-          <div class="legend-item">
-            <span class="legend-badge badge-grounding-relaxed">Grounding: relaxed</span>
-            <span class="legend-text">The answer may include general model knowledge outside retrieved documents. When retrieval finds nothing, the response should say that first, then separate any general answer from the indexed-source result.</span>
+            <span class="legend-text">Fail-closed mode: the system answers only from retrieved chunks, verifies citation support, and refuses if evidence is insufficient. When it is off, answers are relaxed and may include general model knowledge outside retrieved documents. Only available in RAG mode.</span>
           </div>
         </div>
       </div>
