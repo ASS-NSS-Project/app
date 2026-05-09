@@ -296,7 +296,6 @@
         <section>
           <h1>WebRAG uživatelská dokumentace</h1>
           <p class="lead">WebRAG je aplikace pro dotazování nad uloženými webovými zdroji. V běžném použití se přihlásíte, položíte otázku a odpověď dostanete společně s odkazy na části dokumentů, ze kterých systém vycházel.</p>
-          <div class="note"><strong>Tip:</strong> Rozhraní aplikace zůstává anglicky. Stejně jsou anglicky i napojené nástroje Grafana a Keycloak, proto dokumentace používá názvy obrazovek přesně tak, jak je uvidíte v aplikaci.</div>
         </section>
 
         <section id="cs-login">
@@ -306,7 +305,7 @@
           <ol>
             <li>Klikněte na <strong>Sign in with OIDC</strong>.</li>
             <li>Prohlížeč vás přesměruje do Keycloaku.</li>
-            <li>Pokud Keycloak zobrazí volbu <strong>Google</strong>, klikněte na ni. Je to běžný způsob pokračování přes školní / organizační účet.</li>
+            <li>Pokud Keycloak zobrazí volbu <strong>Google</strong>, klikněte na ni.</li>
             <li>Přihlaste se svým běžným účtem.</li>
             <li>Po úspěšném přihlášení se vrátíte zpět do WebRAGu.</li>
           </ol>
@@ -342,15 +341,15 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
 
         <section id="cs-query">
           <h2>Query <span class="badge all">všichni uživatelé</span></h2>
-          <p>Query je hlavní obrazovka pro pokládání otázek. V režimu <strong>RAG</strong> systém nejdřív najde relevantní části uložených dokumentů a teprve potom z nich připraví odpověď. Odpověď doplní citacemi, abyste viděli, odkud informace pochází.</p>
+          <p>Query je hlavní obrazovka pro pokládání otázek. V <strong>RAG mode</strong> systém nejdřív najde relevantní části uložených dokumentů a teprve potom z nich připraví odpověď. Odpověď doplní citacemi, abyste viděli, odkud informace pochází.</p>
           <h3>Režimy v rozhraní</h3>
           <table>
             <tr><th>Režim</th><th>Kdy se používá</th></tr>
-            <tr><td>rag</td><td>Běžný režim. Hledá v uložených dokumentech a odpovídá s citacemi.</td></tr>
-            <tr><td>no_rag</td><td>Model odpoví bez hledání ve znalostní bázi. Hodí se pro porovnání.</td></tr>
+            <tr><td>RAG mode</td><td>Běžný režim. Hledá v uložených dokumentech a odpovídá s citacemi.</td></tr>
+            <tr><td>No RAG mode</td><td>Model odpoví bez hledání ve znalostní bázi. Hodí se pro porovnání.</td></tr>
           </table>
           <h3>Automatická záloha vyhledávání</h3>
-          <p><code>keyword_fallback</code> není tlačítko v rozhraní. Je to stav odpovědi, který se objeví automaticky, když WebRAG nemůže použít vektorové vyhledávání nebo nenajde žádné vektorové výsledky. V takové situaci se pokusí najít podklady textovým hledáním v databázi a v odpovědi zobrazí varování.</p>
+          <p><code>keyword_fallback</code> znamená, že WebRAG dočasně použil jednodušší textové vyhledávání, protože běžné vyhledávání nebylo dostupné nebo nenašlo dost podkladů. Odpověď může být méně přesná, proto vždy zkontrolujte citace.</p>
           <h3>Důležité volby</h3>
           <ul>
             <li><strong>Strict Grounding</strong> říká modelu, aby odpovídal pouze z nalezených dokumentů. Pokud je vypnutý, odpověď je volnější a model může přidat obecné znalosti mimo nalezené dokumenty.</li>
@@ -363,11 +362,11 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
             <li><strong>Provider</strong> může být <strong>Default</strong>, <strong>OpenAI</strong> nebo <strong>OpenRouter</strong>.</li>
             <li><strong>Base URL</strong> je adresa API poskytovatele. Tlačítko nápovědy nabízí předvyplněné příklady.</li>
             <li><strong>API Key</strong> se použije jen pro aktuální požadavek a neukládá se.</li>
-            <li><strong>Model Name</strong> je přesný název modelu u poskytovatele, například <code>gpt-4o</code> nebo <code>openrouter/auto</code>.</li>
+            <li><strong>Model Name</strong> je přesný název modelu u poskytovatele, například <code>gpt-5.5</code> nebo <code>openrouter/auto</code>.</li>
           </ul>
           <p>Stejné nastavení lze poslat přes API poli <code>upstream_provider</code>, <code>upstream_base_url</code>, <code>upstream_api_key</code> a <code>upstream_model</code>.</p>
-          <div class="note">Nově nahrané dokumenty se dají najít textově hned po ingestu. Kvalitnější vektorové hledání začne fungovat po dokončení embedding workeru, obvykle za 1 až 5 minut.</div>
-          <h3>API příklad: položit RAG otázku</h3>
+          <div class="note">Po přidání nových dokumentů může chvíli trvat, než se začnou plně používat v odpovědích.</div>
+          <h3>API příklad: položit otázku v RAG mode</h3>
           <pre><code>curl -s -X POST "$WEBRAG_URL/query/" \
   -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
   -H "Content-Type: application/json" \
@@ -378,7 +377,7 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
     "strict_grounding": true,
     "source_id": null
   }'</code></pre>
-          <h3>API příklad: odpověď bez RAG</h3>
+          <h3>API příklad: odpověď v No RAG mode</h3>
           <pre><code>curl -s -X POST "$WEBRAG_URL/query/" \
   -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
   -H "Content-Type: application/json" \
@@ -395,7 +394,7 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
     "upstream_provider": "openai",
     "upstream_base_url": "https://api.openai.com/v1",
     "upstream_api_key": "paste-provider-key-here",
-    "upstream_model": "gpt-4o"
+    "upstream_model": "gpt-5.5"
   }'</code></pre>
         </section>
 
@@ -404,12 +403,12 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
           <p>Knowledge Base ukazuje dokumenty, které už WebRAG stáhl a rozdělil na menší části nazývané chunks. Každý chunk může být použit jako podklad pro odpověď v Query.</p>
           <h3>Co zde uvidíte</h3>
           <ul>
-            <li>Počet dokumentů, chunků, zdrojů a procento chunků připravených pro RAG.</li>
+            <li>Počet dokumentů, chunků, zdrojů a procento chunků připravených pro RAG mode.</li>
             <li>Tabulku dokumentů s URL, použitou ingest strategií, kvalitou a časem vložení.</li>
             <li>Detail chunků pro konkrétní dokument.</li>
             <li>Odkaz na uložený Markdown dokument nebo screenshot evidence, pokud existuje.</li>
           </ul>
-          <p>Admin a curator mohou dokument smazat. Smazání odstraní dokument, jeho chunky a pokusí se odstranit i vektory z Qdrantu.</p>
+          <p>Admin a curator mohou dokument smazat. Smazání odstraní dokument a jeho části z vyhledávání.</p>
           <h3>API příklady</h3>
           <pre><code>curl -s "$WEBRAG_URL/documents/stats" \
   -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
@@ -432,7 +431,6 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
             <tr><td>rendered</td><td>Otevře stránku v headless prohlížeči. Vhodné pro stránky závislé na JavaScriptu.</td></tr>
             <tr><td>screenshot</td><td>Udělá screenshot a nechá text přečíst vizuálním modelem. Nejdražší záloha pro složité stránky.</td></tr>
           </table>
-          <p>Backend chrání systém před SSRF: odmítá URL směřující na lokální, privátní nebo link-local adresy.</p>
           <h3>API příklady</h3>
           <pre><code>curl -s "$WEBRAG_URL/sources/?limit=25" \
   -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
@@ -502,15 +500,21 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
 
         <section id="cs-experiments">
           <h2>Experiments <span class="badge planned">admin / analyst</span></h2>
-          <p>Experiments jsou připravené jako budoucí obrazovka pro měření kvality vyhledávání. V aktuální verzi je ve frontendu zatím placeholder a backend endpointy nejsou implementované.</p>
-          <p>Plánovaný smysl: vytvořit sadu testovacích otázek, spustit ji proti RAG pipeline a sledovat metriky jako Recall@k, MRR, nDCG a latenci.</p>
-          <div class="note warn"><strong>Aktuálně:</strong> Pokud potřebujete porovnávat chování modelu dnes, použijte Query v režimu RAG a No RAG a výsledky ukládejte ručně exportem do Markdownu nebo PDF.</div>
+          <p>Experiments jsou připravené jako budoucí obrazovka pro porovnávání kvality odpovědí. V aktuální verzi je ve frontendu zatím placeholder a backend endpointy nejsou implementované.</p>
+          <p>Smyslem je vzít sadu testovacích otázek a změřit, jestli WebRAG našel správné podklady rychle a ve správném pořadí.</p>
+          <ul>
+            <li><strong>Recall@k</strong> říká, kolik správných podkladů se dostalo do krátkého seznamu výsledků. Je to podobné jako ověřit, jestli jste z regálu vytáhli všechny důležité knihy.</li>
+            <li><strong>MRR</strong> sleduje, jak brzy se objeví první dobrý výsledek. Nejlepší stav je, když je první hned nahoře.</li>
+            <li><strong>nDCG</strong> měří, jestli jsou nejlepší výsledky seřazené nahoře, podobně jako dobrý žebříček doporučení.</li>
+            <li><strong>Latency</strong> znamená, jak dlouho uživatel čeká na odpověď.</li>
+          </ul>
+          <div class="note warn"><strong>Aktuálně:</strong> Pokud potřebujete porovnávat chování modelu dnes, použijte Query v RAG mode a No RAG mode a výsledky ukládejte ručně exportem do Markdownu nebo PDF.</div>
         </section>
 
         <section id="cs-dashboard">
           <h2>Dashboard <span class="badge mid">admin / curator / analyst</span></h2>
-          <p>Dashboard otevírá Grafanu v nové kartě. Ukazuje provozní metriky systému, například počet zdrojů, dokumentů, incidentů, jobů a rozdělení ingest strategií.</p>
-          <p>V lokálním Docker Compose vývoji nemusí být produkční Grafana dostupná.</p>
+          <p>Dashboard otevírá přehled stavu WebRAGu v Grafaně. Pomáhá rychle vidět, kolik je v systému zdrojů a dokumentů, jestli se zpracování daří a jestli vznikají incidenty.</p>
+          <p>Pro běžné pokládání otázek Dashboard nepotřebujete. Je užitečný hlavně pro lidi, kteří se starají o obsah nebo provoz systému.</p>
         </section>
 
         <section id="cs-admin">
@@ -524,7 +528,6 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
         <section>
           <h1>WebRAG User Documentation</h1>
           <p class="lead">WebRAG lets you ask questions over web content that has been collected and indexed by the system. In normal use, you log in, ask a question, and receive an answer with citations that point back to the source material.</p>
-          <div class="note"><strong>Note:</strong> The app UI stays in English. Grafana and Keycloak are English too, so this documentation uses the same screen names you will see in the app.</div>
         </section>
 
         <section id="en-login">
@@ -534,7 +537,7 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
           <ol>
             <li>Click <strong>Sign in with OIDC</strong>.</li>
             <li>Your browser opens Keycloak.</li>
-            <li>If Keycloak shows a <strong>Google</strong> option, click it. This is the normal way to continue with your school / organization account.</li>
+            <li>If Keycloak shows a <strong>Google</strong> option, click it.</li>
             <li>Sign in with your normal account.</li>
             <li>After success, you return to WebRAG.</li>
           </ol>
@@ -570,15 +573,15 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
 
         <section id="en-query">
           <h2>Query <span class="badge all">all users</span></h2>
-          <p>Query is the main screen for asking questions. In <strong>RAG</strong> mode, WebRAG first finds relevant parts of indexed documents and then asks the language model to answer from that material. The answer includes citations so you can inspect the evidence.</p>
+          <p>Query is the main screen for asking questions. In <strong>RAG mode</strong>, WebRAG first finds relevant parts of indexed documents and then asks the language model to answer from that material. The answer includes citations so you can inspect the evidence.</p>
           <h3>Modes in the UI</h3>
           <table>
             <tr><th>Mode</th><th>Meaning</th></tr>
-            <tr><td>rag</td><td>Normal mode. Searches indexed documents and answers with citations.</td></tr>
-            <tr><td>no_rag</td><td>Skips the knowledge base. Useful for comparison.</td></tr>
+            <tr><td>RAG mode</td><td>Normal mode. Searches indexed documents and answers with citations.</td></tr>
+            <tr><td>No RAG mode</td><td>Skips the knowledge base. Useful for comparison.</td></tr>
           </table>
           <h3>Automatic Search Fallback</h3>
-          <p><code>keyword_fallback</code> is not a button in the UI. It is a response state that appears automatically when WebRAG cannot use vector search or receives no vector results. In that situation, it tries database keyword search and shows a warning in the answer.</p>
+          <p><code>keyword_fallback</code> means WebRAG temporarily used simpler text search because the regular search was unavailable or did not find enough evidence. The answer may be less precise, so always check the citations.</p>
           <h3>Important Options</h3>
           <ul>
             <li><strong>Strict Grounding</strong> tells the model to answer only from retrieved documents. When it is off, the answer is relaxed and may include general model knowledge outside retrieved documents.</li>
@@ -591,11 +594,11 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
             <li><strong>Provider</strong> can be <strong>Default</strong>, <strong>OpenAI</strong>, or <strong>OpenRouter</strong>.</li>
             <li><strong>Base URL</strong> is the provider API address. The help button offers ready-made examples.</li>
             <li><strong>API Key</strong> is used only for the current request and is not stored.</li>
-            <li><strong>Model Name</strong> is the exact model name at the provider, for example <code>gpt-4o</code> or <code>openrouter/auto</code>.</li>
+            <li><strong>Model Name</strong> is the exact model name at the provider, for example <code>gpt-5.5</code> or <code>openrouter/auto</code>.</li>
           </ul>
           <p>The same settings are available through the API fields <code>upstream_provider</code>, <code>upstream_base_url</code>, <code>upstream_api_key</code>, and <code>upstream_model</code>.</p>
-          <div class="note">New documents are keyword-searchable right after ingest. Better vector search becomes available after the embedding worker finishes, usually in 1 to 5 minutes.</div>
-          <h3>API Example: Ask a RAG Question</h3>
+          <div class="note">After new documents are added, it can take a short time before they are fully used in answers.</div>
+          <h3>API Example: Ask in RAG mode</h3>
           <pre><code>curl -s -X POST "$WEBRAG_URL/query/" \
   -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
   -H "Content-Type: application/json" \
@@ -606,7 +609,7 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
     "strict_grounding": true,
     "source_id": null
   }'</code></pre>
-          <h3>API Example: Ask Without RAG</h3>
+          <h3>API Example: Ask in No RAG mode</h3>
           <pre><code>curl -s -X POST "$WEBRAG_URL/query/" \
   -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
   -H "Content-Type: application/json" \
@@ -623,7 +626,7 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
     "upstream_provider": "openai",
     "upstream_base_url": "https://api.openai.com/v1",
     "upstream_api_key": "paste-provider-key-here",
-    "upstream_model": "gpt-4o"
+    "upstream_model": "gpt-5.5"
   }'</code></pre>
         </section>
 
@@ -637,7 +640,7 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
             <li>Chunk details for a selected document.</li>
             <li>Stored Markdown and screenshot evidence links when available.</li>
           </ul>
-          <p>Admins and curators can delete documents. Deletion removes the document, chunks, and attempts to remove the vectors from Qdrant.</p>
+          <p>Admins and curators can delete documents. Deletion removes the document and its parts from search.</p>
           <h3>API Examples</h3>
           <pre><code>curl -s "$WEBRAG_URL/documents/stats" \
   -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
@@ -660,7 +663,6 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
             <tr><td>rendered</td><td>Uses a headless browser. Useful for JavaScript-heavy pages.</td></tr>
             <tr><td>screenshot</td><td>Captures a screenshot and uses a visual model to read it. Most expensive fallback for difficult pages.</td></tr>
           </table>
-          <p>The backend protects the system against SSRF: private, local, and link-local addresses are rejected.</p>
           <h3>API Examples</h3>
           <pre><code>curl -s "$WEBRAG_URL/sources/?limit=25" \
   -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
@@ -730,15 +732,21 @@ export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
 
         <section id="en-experiments">
           <h2>Experiments <span class="badge planned">admin / analyst</span></h2>
-          <p>Experiments are planned for measuring retrieval quality. In the current version, the frontend shows a placeholder and backend endpoints are not implemented yet.</p>
-          <p>The planned purpose is to create a set of test questions, run them against the RAG pipeline, and track metrics such as Recall@k, MRR, nDCG, and latency.</p>
-          <div class="note warn"><strong>Currently:</strong> To compare behavior today, use Query in RAG and No RAG modes and save results manually with Markdown or PDF export.</div>
+          <p>Experiments are planned for comparing answer quality. In the current version, the frontend shows a placeholder and backend endpoints are not implemented yet.</p>
+          <p>The goal is to take a set of test questions and measure whether WebRAG found the right evidence quickly and in the right order.</p>
+          <ul>
+            <li><strong>Recall@k</strong> says how many correct pieces of evidence made it into the short result list. Think of checking whether you pulled all important books from a shelf.</li>
+            <li><strong>MRR</strong> tracks how soon the first good result appears. The ideal case is that the first result is already useful.</li>
+            <li><strong>nDCG</strong> measures whether the best results are near the top, like a well-sorted recommendation list.</li>
+            <li><strong>Latency</strong> means how long the user waits for the answer.</li>
+          </ul>
+          <div class="note warn"><strong>Currently:</strong> To compare behavior today, use Query in RAG mode and No RAG mode and save results manually with Markdown or PDF export.</div>
         </section>
 
         <section id="en-dashboard">
           <h2>Dashboard <span class="badge mid">admin / curator / analyst</span></h2>
-          <p>Dashboard opens Grafana in a new tab. It shows operational metrics such as source count, document count, incidents, jobs, and ingest strategy distribution.</p>
-          <p>The production Grafana dashboards may not be available in local Docker Compose development.</p>
+          <p>Dashboard opens a Grafana view of WebRAG health. It helps you quickly see how many sources and documents exist, whether processing is succeeding, and whether incidents are appearing.</p>
+          <p>You do not need Dashboard for normal questions. It is mainly useful for people who maintain content or operate the system.</p>
         </section>
 
         <section id="en-admin">

@@ -73,6 +73,7 @@ docker compose up --build
 Open <http://localhost:8080> and sign in with `FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_PASSWORD`.
 
 For SSO testing, use the local Keycloak realm imported from `keycloak/realm-import.json`.
+The local realm does not include the production Google identity provider; use the imported demo users directly.
 All demo users use password `password`:
 
 | User | Role |
@@ -101,6 +102,11 @@ Example scripts live in `example/`:
 ./example/03_list_sources.sh
 ./example/04_query.sh "What is Terraform?"
 ```
+
+Local security and indexing notes:
+
+- Source URLs are checked by the backend before ingest. Local, private, and link-local targets are rejected to reduce SSRF risk.
+- Qdrant stores the rebuildable vector index used for hybrid retrieval. After ingest, embedding can take a short time before new chunks are available to vector search.
 
 ## Production
 
