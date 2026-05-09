@@ -6,6 +6,7 @@
       - canSeeDashboard (admin, curator, analyst):  Dashboard link + Knowledge Base
       - canSeeExperiments (admin, analyst):  Analytics section
       - isRagAdmin (admin only):  Admin section
+      - Documentation: shown to every authenticated user
     The Incidents link shows a red badge when there are open incidents.
     The Experiments link shows an amber badge when experiments exist.
     Both counts are refreshed every 30 seconds via loadCounts().
@@ -70,6 +71,9 @@
         target="_blank"
         class="nav-item"
       >Access Control</a>
+
+      <div class="nav-section">Documentation</div>
+      <a href="/user-docs/" target="_blank" rel="noopener noreferrer" class="nav-item">User Docs</a>
     </div>
 
     <!-- Footer: username and sign-out button -->

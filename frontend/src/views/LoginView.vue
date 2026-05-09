@@ -2,7 +2,8 @@
   <!--
     Login page — split-panel layout.
     Left panel: brand/marketing content (hidden on mobile).
-    Right panel: sign-in form with optional Keycloak SSO button and password field.
+    Right panel: sign-in form with optional Keycloak SSO button, password field,
+    and a link to the user documentation.
   -->
   <div class="login-shell">
     <!-- Left brand panel — product description and feature list -->
@@ -73,16 +74,12 @@
           </div>
         </div>
 
-        <!-- "Remember me" checkbox — controls localStorage vs sessionStorage -->
-        <div class="remember-row">
-          <label class="remember-label">
-            <input type="checkbox" v-model="rememberMe" class="remember-check" />
-            Remember me
-          </label>
-        </div>
-
         <!-- Primary action button — shows a spinner while the request is in flight -->
         <Button label="Sign In" class="w-full signin-btn" :loading="loading" @click="doLogin" />
+
+        <a class="docs-link" href="/user-docs/" target="_blank" rel="noopener noreferrer">
+          User documentation
+        </a>
       </div>
     </div>
   </div>
@@ -239,29 +236,6 @@
   padding-left: 34px !important;
 }
 
-/* Remember me row */
-.remember-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  margin-top: -4px;
-}
-.remember-label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12px;
-  color: var(--text2);
-  cursor: pointer;
-}
-.remember-check {
-  width: 13px;
-  height: 13px;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
 /* Sign in button — full green */
 .signin-btn {
   background: var(--accent) !important;
@@ -271,6 +245,16 @@
   width: 100%;
   justify-content: center;
 }
+
+.docs-link {
+  display: block;
+  margin-top: 14px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text2);
+  text-decoration: none;
+}
+.docs-link:hover { color: var(--accent); }
 
 .divider-row {
   display: flex;
@@ -304,8 +288,8 @@
  * the password form.
  *
  * Password login calls auth.localLogin() which POSTs to /auth/local-login.
- * The "remember me" checkbox controls whether the JWT lands in localStorage
- * (persistent) or sessionStorage (session-only).
+ * Local first-admin login is session-only; OAuth persistence is controlled by
+ * Keycloak and handled in the auth store.
  *
  * After a successful login, the router navigates to /query.
  */
@@ -325,7 +309,6 @@ const router = useRouter()
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
-const rememberMe = ref(false)
 const keycloakEnabled = ref(false)  // true if Keycloak env vars are set on the server
 
 /** Redirect to the Keycloak OIDC flow (full-page navigation, not a fetch). */
@@ -351,7 +334,7 @@ async function doLogin() {
   error.value = ''
   loading.value = true
   try {
-    await auth.localLogin(password.value, rememberMe.value)
+    await auth.localLogin(password.value)
     await router.push('/query')
   } catch (e: unknown) {
     // Extract the FastAPI { detail: "..." } error message if available.

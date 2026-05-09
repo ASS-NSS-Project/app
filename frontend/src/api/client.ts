@@ -17,8 +17,8 @@
 
 /**
  * Read the JWT (or opaque API token) from whichever storage was used at login.
- * sessionStorage takes priority — it is set when the user chose "session-only".
- * Falls back to localStorage for "remember me" logins and OAuth callbacks.
+ * sessionStorage takes priority for local first-admin sessions.
+ * Falls back to localStorage for OAuth callbacks.
  */
 function getToken(): string | null {
   return sessionStorage.getItem('webrag_token') ?? localStorage.getItem('webrag_token')

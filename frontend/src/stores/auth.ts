@@ -4,10 +4,10 @@
  * Manages the logged-in user's JWT, profile, and all login/logout flows.
  *
  * Storage strategy:
- * - "Remember me" checked → localStorage (persists across browser restarts)
- * - "Remember me" unchecked → sessionStorage (cleared when tab/window closes)
- * - The stores always write to one and remove from the other so they never
- *   contain stale values from a previous login method.
+ * - Local first-admin login → sessionStorage (cleared when the browser session ends)
+ * - OAuth/Keycloak login → localStorage (persistent; controlled by the IdP session policy)
+ * - The stores remove stale values from the other storage so login methods do
+ *   not conflict with each other.
  *
  * OAuth flow (Keycloak callback):
  * - main.ts extracts the ?token= query parameter and stores it in localStorage
@@ -68,19 +68,15 @@ export const useAuthStore = defineStore('auth', () => {
   /**
    * OAuth2 form login (username + password).
    * Used by the Swagger /docs "Authorize" button and API script access.
-   * @param remember - If true, persist in localStorage; otherwise sessionStorage.
    */
-  async function login(email: string, password: string, remember = false) {
+  async function login(email: string, password: string) {
     const data = await loginForm(email, password) as LoginResponse
     token.value = data.access_token
     user.value = { id: data.user_id, username: data.username, email: data.email, role: data.role, full_name: null }
-    // Write to the chosen storage and remove from the other to avoid conflicts.
-    const target = remember ? localStorage : sessionStorage
-    const other  = remember ? sessionStorage : localStorage
-    target.setItem(_K.token, data.access_token)
-    target.setItem(_K.user, JSON.stringify(user.value))
-    other.removeItem(_K.token)
-    other.removeItem(_K.user)
+    sessionStorage.setItem(_K.token, data.access_token)
+    sessionStorage.setItem(_K.user, JSON.stringify(user.value))
+    localStorage.removeItem(_K.token)
+    localStorage.removeItem(_K.user)
   }
 
   /**
@@ -88,16 +84,14 @@ export const useAuthStore = defineStore('auth', () => {
    * The backend finds the first user with a hashed password (the bootstrap admin).
    * Used by the Vue UI login form — no username field needed.
    */
-  async function localLogin(password: string, remember = false) {
+  async function localLogin(password: string) {
     const data = await post<LoginResponse>('/auth/local-login', { password })
     token.value = data.access_token
     user.value = { id: data.user_id, username: data.username, email: data.email, role: data.role, full_name: null }
-    const target = remember ? localStorage : sessionStorage
-    const other  = remember ? sessionStorage : localStorage
-    target.setItem(_K.token, data.access_token)
-    target.setItem(_K.user, JSON.stringify(user.value))
-    other.removeItem(_K.token)
-    other.removeItem(_K.user)
+    sessionStorage.setItem(_K.token, data.access_token)
+    sessionStorage.setItem(_K.user, JSON.stringify(user.value))
+    localStorage.removeItem(_K.token)
+    localStorage.removeItem(_K.user)
   }
 
   /**
