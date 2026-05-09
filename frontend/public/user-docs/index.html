@@ -1,372 +1,724 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="cs">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WebRAG — User Documentation</title>
+  <title>WebRAG - User Documentation</title>
   <style>
     :root {
       --bg: #0a0a0a;
       --surface: #111111;
-      --border: #222222;
+      --surface2: #171717;
+      --border: #282828;
       --text: #e5e7eb;
-      --text2: #9ca3af;
-      --muted: #6b7280;
+      --text2: #a1a1aa;
+      --muted: #71717a;
       --accent: #00e676;
       --warning: #fbbf24;
       --danger: #f87171;
+      --info: #60a5fa;
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
+    html { scroll-behavior: smooth; }
     body {
+      min-height: 100vh;
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
       font-size: 14px;
-      line-height: 1.6;
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
+      line-height: 1.65;
     }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
 
     header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 12px 24px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
       position: sticky;
       top: 0;
-      z-index: 10;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 52px;
+      padding: 10px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
     }
-    .logo-mark { font-size: 20px; color: var(--accent); }
-    .logo-name { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
-    .header-sub { font-size: 13px; color: var(--muted); margin-left: 8px; }
+    .logo-mark { color: var(--accent); font-size: 20px; }
+    .logo-name { font-weight: 700; letter-spacing: -0.2px; }
+    .header-sub { color: var(--muted); font-size: 13px; }
+    .language-switch {
+      margin-left: auto;
+      display: flex;
+      gap: 6px;
+      padding: 3px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+    }
+    .language-switch button {
+      border: 0;
+      border-radius: 4px;
+      padding: 5px 9px;
+      color: var(--text2);
+      background: transparent;
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+    }
+    .language-switch button.active {
+      color: #001307;
+      background: var(--accent);
+      font-weight: 700;
+    }
 
-    .layout { display: flex; flex: 1; }
-
+    .layout { display: flex; align-items: flex-start; }
     nav {
-      width: 200px;
+      position: sticky;
+      top: 52px;
+      width: 230px;
+      height: calc(100vh - 52px);
+      overflow-y: auto;
       flex-shrink: 0;
+      padding: 12px 0 20px;
       background: var(--surface);
       border-right: 1px solid var(--border);
-      padding: 12px 0;
-      position: sticky;
-      top: 45px;
-      height: calc(100vh - 45px);
-      overflow-y: auto;
     }
-
+    .nav-set { display: none; }
+    .nav-set.active { display: block; }
     .nav-section {
-      padding: 10px 16px 3px;
-      font-size: 9px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.9px;
+      padding: 13px 18px 4px;
       color: var(--muted);
-      opacity: 0.55;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .8px;
+      text-transform: uppercase;
     }
-
     nav a {
       display: block;
-      padding: 7px 16px;
+      padding: 7px 18px;
       color: var(--text2);
-      font-size: 13px;
-      text-decoration: none;
       border-left: 2px solid transparent;
-      transition: color 0.15s, background 0.15s;
+      font-size: 13px;
     }
     nav a:hover {
       color: var(--text);
-      background: rgba(255,255,255,.03);
+      background: rgba(255,255,255,.035);
+      text-decoration: none;
     }
 
     main {
-      flex: 1;
-      padding: 40px 48px;
-      max-width: 860px;
+      width: min(980px, calc(100vw - 230px));
+      padding: 38px 50px 70px;
     }
-
+    .lang-panel { display: none; }
+    .lang-panel.active { display: block; }
     section {
-      margin-bottom: 56px;
-      scroll-margin-top: 60px;
+      margin-bottom: 54px;
+      scroll-margin-top: 72px;
     }
-
-    section h2 {
-      font-size: 1.3rem;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 8px;
-      padding-bottom: 8px;
+    h1 {
+      margin-bottom: 10px;
+      font-size: 30px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+    h2 {
+      margin-bottom: 10px;
+      padding-bottom: 9px;
       border-bottom: 1px solid var(--border);
+      font-size: 22px;
+      line-height: 1.25;
+      letter-spacing: 0;
     }
-
-    section h3 {
-      font-size: 0.95rem;
-      font-weight: 600;
-      color: var(--text);
-      margin: 20px 0 8px;
+    h3 {
+      margin: 22px 0 7px;
+      font-size: 15px;
+      line-height: 1.35;
     }
+    p { margin-bottom: 12px; color: var(--text2); }
+    ul, ol { margin: 0 0 14px 20px; color: var(--text2); }
+    li { margin-bottom: 5px; }
+    strong { color: var(--text); }
 
-    section p { color: var(--text2); margin-bottom: 12px; }
-
-    ul, ol { color: var(--text2); padding-left: 20px; margin-bottom: 12px; }
-    li { margin-bottom: 4px; }
-
-    .role-badge {
-      display: inline-block;
-      font-size: 10px;
-      font-weight: 600;
-      padding: 1px 7px;
-      border-radius: 99px;
+    .lead {
+      max-width: 760px;
+      color: var(--text2);
+      font-size: 15px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
       margin-left: 6px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
       vertical-align: middle;
     }
-    .role-all  { background: rgba(0,230,118,.12); color: var(--accent); border: 1px solid rgba(0,230,118,.25); }
-    .role-mid  { background: rgba(251,191,36,.12); color: var(--warning); border: 1px solid rgba(251,191,36,.25); }
-    .role-admin{ background: rgba(248,113,113,.12); color: var(--danger);  border: 1px solid rgba(248,113,113,.25); }
-
-    table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 13px; }
-    th { text-align: left; padding: 8px 12px; background: var(--surface); color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
-    td { padding: 8px 12px; color: var(--text2); border-bottom: 1px solid var(--border); }
-    td:first-child { color: var(--text); font-family: ui-monospace, monospace; font-size: 12px; }
-    tr:last-child td { border-bottom: none; }
-
-    code {
-      font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-      font-size: 12px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 1px 5px;
-      color: var(--accent);
-    }
-    pre {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 14px 16px;
-      overflow-x: auto;
-      margin: 10px 0 16px;
-    }
-    pre code { background: none; border: none; padding: 0; color: var(--text); }
+    .all { color: var(--accent); background: rgba(0,230,118,.1); border: 1px solid rgba(0,230,118,.25); }
+    .mid { color: var(--warning); background: rgba(251,191,36,.1); border: 1px solid rgba(251,191,36,.25); }
+    .admin { color: var(--danger); background: rgba(248,113,113,.1); border: 1px solid rgba(248,113,113,.25); }
+    .planned { color: var(--info); background: rgba(96,165,250,.1); border: 1px solid rgba(96,165,250,.25); }
 
     .note {
-      background: rgba(0,230,118,.06);
-      border: 1px solid rgba(0,230,118,.2);
+      margin: 13px 0 16px;
+      padding: 11px 14px;
+      border: 1px solid rgba(0,230,118,.22);
       border-radius: 6px;
-      padding: 10px 14px;
+      background: rgba(0,230,118,.055);
       color: var(--text2);
       font-size: 13px;
-      margin: 12px 0;
     }
-    .note strong { color: var(--accent); }
+    .warn {
+      border-color: rgba(251,191,36,.24);
+      background: rgba(251,191,36,.07);
+    }
+    table {
+      width: 100%;
+      margin: 12px 0 18px;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      padding: 8px 10px;
+      text-align: left;
+      color: var(--muted);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 9px 10px;
+      color: var(--text2);
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    td:first-child {
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    code {
+      padding: 1px 5px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--accent);
+      background: var(--surface2);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+    }
+    pre {
+      margin: 10px 0 18px;
+      padding: 14px 16px;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface2);
+    }
+    pre code {
+      padding: 0;
+      border: 0;
+      color: var(--text);
+      background: transparent;
+      white-space: pre;
+    }
 
-    @media (max-width: 720px) {
-      .layout { flex-direction: column; }
-      nav { position: static; width: 100%; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
-      main { padding: 24px 20px; }
+    @media (max-width: 800px) {
+      header { padding: 10px 16px; flex-wrap: wrap; }
+      .header-sub { display: none; }
+      .layout { display: block; }
+      nav {
+        position: static;
+        width: 100%;
+        height: auto;
+        max-height: none;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+      main {
+        width: 100%;
+        padding: 28px 20px 58px;
+      }
+      h1 { font-size: 26px; }
+      table { display: block; overflow-x: auto; }
     }
   </style>
 </head>
 <body>
+  <header>
+    <span class="logo-mark">&#9672;</span>
+    <span class="logo-name">WebRAG</span>
+    <span class="header-sub">User Documentation</span>
+    <div class="language-switch" aria-label="Language">
+      <button id="btn-cs" class="active" type="button" onclick="setLang('cs')">CZ</button>
+      <button id="btn-en" type="button" onclick="setLang('en')">EN</button>
+    </div>
+  </header>
 
-<header>
-  <span class="logo-mark">&#9672;</span>
-  <span class="logo-name">WebRAG</span>
-  <span class="header-sub">User Documentation</span>
-</header>
+  <div class="layout">
+    <nav>
+      <div id="nav-cs" class="nav-set active">
+        <div class="nav-section">Začátek</div>
+        <a href="#cs-login">Jak se přihlásit</a>
+        <a href="#cs-api-token">REST API Access</a>
+        <div class="nav-section">Funkce</div>
+        <a href="#cs-query">Query</a>
+        <a href="#cs-kb">Knowledge Base</a>
+        <a href="#cs-sources">Sources</a>
+        <a href="#cs-pipeline">Pipeline / Jobs</a>
+        <a href="#cs-incidents">Incidents</a>
+        <a href="#cs-experiments">Experiments</a>
+        <div class="nav-section">Správa</div>
+        <a href="#cs-dashboard">Dashboard</a>
+        <a href="#cs-admin">Audit &amp; Access</a>
+      </div>
 
-<div class="layout">
-  <nav>
-    <div class="nav-section">Query</div>
-    <a href="#query">Query</a>
-    <a href="#knowledge-base">Knowledge Base</a>
+      <div id="nav-en" class="nav-set">
+        <div class="nav-section">Start</div>
+        <a href="#en-login">How to Log In</a>
+        <a href="#en-api-token">REST API Access</a>
+        <div class="nav-section">Features</div>
+        <a href="#en-query">Query</a>
+        <a href="#en-kb">Knowledge Base</a>
+        <a href="#en-sources">Sources</a>
+        <a href="#en-pipeline">Pipeline / Jobs</a>
+        <a href="#en-incidents">Incidents</a>
+        <a href="#en-experiments">Experiments</a>
+        <div class="nav-section">Administration</div>
+        <a href="#en-dashboard">Dashboard</a>
+        <a href="#en-admin">Audit &amp; Access</a>
+      </div>
+    </nav>
 
-    <div class="nav-section">Ingest</div>
-    <a href="#sources">Sources</a>
-    <a href="#pipeline">Pipeline</a>
-    <a href="#incidents">Incidents</a>
+    <main>
+      <div id="panel-cs" class="lang-panel active">
+        <section>
+          <h1>WebRAG uživatelská dokumentace</h1>
+          <p class="lead">WebRAG je aplikace pro dotazování nad uloženými webovými zdroji. V běžném použití se přihlásíte, položíte otázku a odpověď dostanete společně s odkazy na části dokumentů, ze kterých systém vycházel.</p>
+          <div class="note"><strong>Tip:</strong> Rozhraní aplikace zůstává anglicky. Stejně jsou anglicky i napojené nástroje Grafana a Keycloak, proto dokumentace používá názvy obrazovek přesně tak, jak je uvidíte v aplikaci.</div>
+        </section>
 
-    <div class="nav-section">Analytics</div>
-    <a href="#experiments">Experiments</a>
+        <section id="cs-login">
+          <h2>Jak se přihlásit <span class="badge all">všichni uživatelé</span></h2>
+          <p>Na přihlašovací stránce jsou podle nastavení serveru dostupné jeden nebo dva způsoby přihlášení.</p>
+          <h3>Přihlášení přes OIDC / Keycloak</h3>
+          <ol>
+            <li>Klikněte na <strong>Sign in with OIDC</strong>.</li>
+            <li>Prohlížeč vás přesměruje do Keycloaku.</li>
+            <li>Přihlaste se svým běžným účtem.</li>
+            <li>Po úspěšném přihlášení se vrátíte zpět do WebRAGu.</li>
+          </ol>
+          <p>Tento způsob je určen pro běžné uživatele. Trvání přihlášení se řídí nastavením Keycloaku.</p>
+          <h3>Lokální first-admin přihlášení</h3>
+          <p>Lokální heslo slouží hlavně pro první nastavení nebo nouzovou administraci. Zadává se pouze heslo, ne uživatelské jméno. Toto přihlášení je jen pro aktuální relaci prohlížeče.</p>
+          <h3>Role a co uvidíte</h3>
+          <table>
+            <tr><th>Role</th><th>Co může dělat</th></tr>
+            <tr><td>webrag_user</td><td>Dotazování v Query a vlastní REST API token.</td></tr>
+            <tr><td>webrag_analyst</td><td>Query, Knowledge Base, Experiments a REST API.</td></tr>
+            <tr><td>webrag_curator</td><td>Správa zdrojů, pipeline, incidenty, Knowledge Base, Query a REST API.</td></tr>
+            <tr><td>webrag_admin</td><td>Všechny funkce včetně auditních logů, Keycloak administrace a mazání vybraných záznamů.</td></tr>
+          </table>
+        </section>
 
-    <div class="nav-section">API</div>
-    <a href="#api-access">REST API Access</a>
+        <section id="cs-api-token">
+          <h2>REST API Access <span class="badge all">všichni uživatelé</span></h2>
+          <p>REST API token použijete, pokud chcete WebRAG volat ze skriptu, terminálu nebo jiného nástroje. V aplikaci otevřete <strong>REST API Access</strong>, klikněte na <strong>Obtain API Token</strong> a token si hned uložte.</p>
+          <ul>
+            <li>Token se zobrazí pouze jednou.</li>
+            <li>Server ukládá pouze jeho hash, ne čitelnou hodnotu.</li>
+            <li>Když token ztratíte, použijte <strong>Regenerate</strong>. Starý token se tím zneplatní.</li>
+            <li>Token posílejte v hlavičce <code>Authorization: Bearer &lt;WEBRAG_API_TOKEN&gt;</code>.</li>
+          </ul>
+          <pre><code>export WEBRAG_URL="https://webrag.example.com"
+export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
+          <p>V příkladech níže nahraďte <code>WEBRAG_URL</code> adresou vaší instalace. Pokud je ve vašem prostředí API vystavené pod prefixem <code>/api</code>, přidejte ho před cestu endpointu.</p>
+          <h3>Kontrola přístupu</h3>
+          <pre><code>curl -s "$WEBRAG_URL/auth/me" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+        </section>
 
-    <div class="nav-section">Overview</div>
-    <a href="#dashboard">Dashboard</a>
-
-    <div class="nav-section">Admin</div>
-    <a href="#admin">Audit &amp; Access</a>
-  </nav>
-
-  <main>
-
-    <section id="query">
-      <h2>Query <span class="role-badge role-all">all users</span></h2>
-      <p>The Query page is the default landing page for every authenticated user. It lets you ask natural-language questions against the indexed knowledge base and receive answers with citations.</p>
-      <h3>How it works</h3>
-      <p>Your question is embedded with the local BGE-M3 model, run against Qdrant using hybrid vector search (dense + sparse with RRF fusion), and the retrieved chunks are passed together with your question to the configured LLM. The answer is returned alongside citations — each one links to the source URL and shows the relevance score of the retrieved chunk.</p>
-      <h3>Query modes</h3>
-      <table>
-        <tr><th>Mode</th><th>When it is used</th><th>UI indicator</th></tr>
-        <tr><td>rag</td><td>Normal operation — retrieves indexed chunks first, then generates the answer</td><td>Blue "RAG" tag</td></tr>
-        <tr><td>no_rag</td><td>Calls the LLM directly without any indexed context</td><td>Gray "NO_RAG" tag</td></tr>
-        <tr><td>keyword_fallback</td><td>Automatic fallback when Qdrant is unavailable — uses Postgres full-text search instead</td><td>Orange "KEYWORD SEARCH" tag and a warning banner</td></tr>
-      </table>
-      <h3>Options</h3>
-      <ul>
-        <li><strong>Model</strong> — choose from the LLM providers configured on the server.</li>
-        <li><strong>Strict grounding</strong> — when on, the LLM is instructed to answer only from the retrieved chunks, not from its training data.</li>
-        <li><strong>Source filter</strong> — restrict retrieval to a single indexed source.</li>
-        <li><strong>top_k</strong> — number of chunks to retrieve (default 5).</li>
-      </ul>
-      <div class="note"><strong>Note:</strong> Documents are keyword-searchable immediately after ingest. Vector search (better relevance) becomes available 1–5 minutes later, once the embedding worker finishes processing.</div>
-    </section>
-
-    <section id="knowledge-base">
-      <h2>Knowledge Base <span class="role-badge role-mid">admin &middot; curator &middot; analyst</span></h2>
-      <p>Browse, search, and inspect all documents that have been ingested into the system.</p>
-      <h3>What you can do</h3>
-      <ul>
-        <li>Search documents by title or URL.</li>
-        <li>Filter by source to see only documents from one monitored URL.</li>
-        <li>Open a document to read its extracted markdown.</li>
-        <li>Expand the <strong>Chunks</strong> panel to see the individual text segments indexed in Qdrant.</li>
-        <li>Download the raw markdown via a pre-signed S3 link.</li>
-        <li>Delete a document — also removes its chunks and Qdrant vectors.</li>
-      </ul>
-      <h3>Chunk types</h3>
-      <table>
-        <tr><th>Type</th><th>Description</th></tr>
-        <tr><td>text</td><td>Prose paragraphs split at token boundaries</td></tr>
-        <tr><td>table</td><td>Table content extracted from the page</td></tr>
-        <tr><td>block</td><td>Structured blocks extracted by the VLM (screenshot) strategy</td></tr>
-      </table>
-    </section>
-
-    <section id="sources">
-      <h2>Sources <span class="role-badge role-mid">admin &middot; curator</span></h2>
-      <p>Sources are the URLs WebRAG monitors and periodically scrapes. Each source is ingested on a configurable schedule and its content is stored in the knowledge base.</p>
-      <h3>Scraping strategies</h3>
-      <table>
-        <tr><th>Strategy</th><th>How it works</th><th>Best for</th></tr>
-        <tr><td>api</td><td>Jina.ai reader API + RSS/Atom feed fallback → markdown</td><td>News feeds, clean article pages</td></tr>
-        <tr><td>html</td><td>Raw HTTP fetch + BeautifulSoup + markdownify</td><td>Simple static pages</td></tr>
-        <tr><td>rendered</td><td>Playwright headless browser, full DOM + markdownify</td><td>JavaScript-heavy pages</td></tr>
-        <tr><td>screenshot</td><td>Playwright screenshot + VLM text extraction</td><td>Pages where the HTML is unparseable</td></tr>
-      </table>
-      <p>The system tries the preferred strategy first. If the extracted text is below the quality threshold (200 characters), it falls back to the next strategy in the chain. A CAPTCHA or block page detected at any step automatically creates an <a href="#incidents">Incident</a>.</p>
-      <h3>Crawl frequency</h3>
-      <p>Each source has a <strong>crawl frequency in hours</strong>. The scheduler checks every 5 minutes for sources that are due and queues an ingest job automatically.</p>
-      <div class="note"><strong>SSRF protection:</strong> URLs pointing to private, loopback, or link-local addresses are rejected by the backend.</div>
-    </section>
-
-    <section id="pipeline">
-      <h2>Pipeline <span class="role-badge role-mid">admin &middot; curator</span></h2>
-      <p>The Pipeline page shows the history of all ingest jobs across all sources. Each row represents one scrape attempt and its outcome.</p>
-      <h3>Job statuses</h3>
-      <table>
-        <tr><th>Status</th><th>Meaning</th></tr>
-        <tr><td>pending</td><td>Queued in RabbitMQ, not yet picked up by a worker</td></tr>
-        <tr><td>running</td><td>Worker is actively processing the job</td></tr>
-        <tr><td>done</td><td>Scrape succeeded; content stored to S3 and Postgres</td></tr>
-        <tr><td>failed</td><td>All strategies exhausted without extracting usable content</td></tr>
-        <tr><td>captcha_blocked</td><td>CAPTCHA or block page detected; an Incident was created</td></tr>
-      </table>
-      <h3>Strategy fallback chain</h3>
-      <p>For each job the page shows four steps in order: <strong>API/Feed &rarr; HTML &rarr; Rendered &rarr; Screenshot+VLM</strong>. Steps are marked as the one that succeeded, skipped (if a later strategy was selected directly), or failed.</p>
-      <h3>Ingest timing</h3>
-      <ul>
-        <li><strong>Ingest phase (~30 s)</strong> — scrapes the page, splits into chunks, stores to S3 and Postgres. Content is keyword-searchable immediately.</li>
-        <li><strong>Embedding phase (1–5 min, background)</strong> — the embedding worker runs BGE-M3 and upserts dense + sparse vectors to Qdrant. Vector search activates after this phase.</li>
-      </ul>
-    </section>
-
-    <section id="incidents">
-      <h2>Incidents <span class="role-badge role-mid">admin &middot; curator</span></h2>
-      <p>An incident is created automatically when the ingest worker detects a CAPTCHA, rate-limit page, or access block during scraping. This page lets you review and resolve them.</p>
-      <h3>Incident statuses</h3>
-      <table>
-        <tr><th>Status</th><th>Meaning</th></tr>
-        <tr><td>open</td><td>Detected, not yet reviewed — shown as a red badge in the sidebar</td></tr>
-        <tr><td>in_progress</td><td>Under investigation</td></tr>
-        <tr><td>resolved</td><td>Closed manually or by a successful subsequent ingest</td></tr>
-      </table>
-      <p>Resolving an incident clears the badge count in the sidebar. Admins can also create a synthetic test incident to verify that CAPTCHA detection is working correctly.</p>
-    </section>
-
-    <section id="experiments">
-      <h2>Experiments <span class="role-badge role-admin">admin</span> <span class="role-badge role-mid">analyst</span></h2>
-      <p>Experiments run batch query benchmarks against the knowledge base to measure retrieval quality. Each experiment defines a set of test queries with expected keywords and computes standard information-retrieval metrics.</p>
-      <h3>Metrics</h3>
-      <table>
-        <tr><th>Metric</th><th>Description</th></tr>
-        <tr><td>Recall@k</td><td>Fraction of relevant chunks found in the top-k results</td></tr>
-        <tr><td>MRR</td><td>Mean Reciprocal Rank — how highly the first relevant result is ranked</td></tr>
-        <tr><td>nDCG</td><td>Normalized Discounted Cumulative Gain — ranking quality weighted by position</td></tr>
-        <tr><td>Avg latency (ms)</td><td>Mean end-to-end query time across all test queries</td></tr>
-      </table>
-      <div class="note"><strong>Note:</strong> The Experiments feature is currently scaffolded. The models and services are in place; the full UI workflow will be exposed in a future release.</div>
-    </section>
-
-    <section id="api-access">
-      <h2>REST API Access <span class="role-badge role-all">all users</span></h2>
-      <p>Every authenticated user can generate a personal long-lived API token for programmatic access to WebRAG from scripts and terminals.</p>
-      <h3>Generating a token</h3>
-      <ol>
-        <li>Open <strong>REST API Access</strong> in the sidebar.</li>
-        <li>Click <strong>Obtain API Token</strong>.</li>
-        <li>Copy the token immediately — it is shown exactly once. The server stores only its SHA-256 hash and cannot retrieve the plaintext again.</li>
-        <li>If the token is lost, click <strong>Regenerate</strong> to issue a new one (the previous token is immediately invalidated).</li>
-      </ol>
-      <p>Tokens expire after 90 days. Authenticate requests with a Bearer header:</p>
-      <pre><code>Authorization: Bearer &lt;your-token&gt;</code></pre>
-      <h3>Key endpoints</h3>
-      <table>
-        <tr><th>Method</th><th>Path</th><th>Purpose</th></tr>
-        <tr><td>GET</td><td>/health</td><td>Liveness check (no auth required)</td></tr>
-        <tr><td>GET</td><td>/auth/me</td><td>Validate token and return your profile</td></tr>
-        <tr><td>GET</td><td>/sources/</td><td>List monitored sources</td></tr>
-        <tr><td>POST</td><td>/query/</td><td>Ask a RAG question</td></tr>
-        <tr><td>GET</td><td>/documents/</td><td>Browse indexed documents</td></tr>
-        <tr><td>POST</td><td>/sources/{id}/ingest</td><td>Trigger an immediate ingest (curator and above)</td></tr>
-      </table>
-      <h3>Example</h3>
-      <pre><code>curl -s -X POST https://webrag.nss.jkzl.eu/api/query/ \
-  -H "Authorization: Bearer $TOKEN" \
+        <section id="cs-query">
+          <h2>Query <span class="badge all">všichni uživatelé</span></h2>
+          <p>Query je hlavní obrazovka pro pokládání otázek. V režimu <strong>RAG</strong> systém nejdřív najde relevantní části uložených dokumentů a teprve potom z nich připraví odpověď. Odpověď doplní citacemi, abyste viděli, odkud informace pochází.</p>
+          <h3>Režimy dotazu</h3>
+          <table>
+            <tr><th>Režim</th><th>Kdy se používá</th></tr>
+            <tr><td>rag</td><td>Běžný režim. Hledá v uložených dokumentech a odpovídá s citacemi.</td></tr>
+            <tr><td>no_rag</td><td>Model odpoví bez hledání ve znalostní bázi. Hodí se pro porovnání.</td></tr>
+            <tr><td>keyword_fallback</td><td>Automatická záloha, když není dostupné vektorové vyhledávání. Použije textové hledání v databázi.</td></tr>
+          </table>
+          <h3>Důležité volby</h3>
+          <ul>
+            <li><strong>Strict Grounding</strong> říká modelu, aby odpovídal pouze z nalezených dokumentů.</li>
+            <li><strong>top_k</strong> je API parametr pro počet nalezených částí dokumentů. Výchozí hodnota je 5. Vyšší číslo dává modelu více podkladů, ale odpověď může být pomalejší.</li>
+            <li><strong>source_id</strong> je API parametr pro omezení dotazu jen na jeden zdroj.</li>
+            <li><strong>Custom API Override</strong> ve frontend rozhraní i API polích <code>upstream_*</code> dovolí jednorázově použít vlastní OpenAI nebo OpenRouter klíč. Klíč se neukládá.</li>
+          </ul>
+          <div class="note">Nově nahrané dokumenty se dají najít textově hned po ingestu. Kvalitnější vektorové hledání začne fungovat po dokončení embedding workeru, obvykle za 1 až 5 minut.</div>
+          <h3>API příklad: položit RAG otázku</h3>
+          <pre><code>curl -s -X POST "$WEBRAG_URL/query/" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"question":"What sources are indexed?","mode":"rag","top_k":5,"strict_grounding":true}'</code></pre>
-      <p>In production, prefix all paths with <code>/api</code> (e.g. <code>/api/query/</code>). Traefik strips the prefix before forwarding to the backend. In local development use paths directly against <code>http://localhost:8000</code>.</p>
-    </section>
+  -d '{
+    "question": "What sources are indexed?",
+    "mode": "rag",
+    "top_k": 5,
+    "strict_grounding": true,
+    "source_id": null
+  }'</code></pre>
+          <h3>API příklad: odpověď bez RAG</h3>
+          <pre><code>curl -s -X POST "$WEBRAG_URL/query/" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"question":"Explain what WebRAG is.","mode":"no_rag","top_k":5,"strict_grounding":false}'</code></pre>
+        </section>
 
-    <section id="dashboard">
-      <h2>Dashboard <span class="role-badge role-mid">admin &middot; curator &middot; analyst</span></h2>
-      <p>The Dashboard link opens the <strong>WebRAG Overview</strong> Grafana dashboard in a new tab. It shows live system metrics: active sources, Qdrant collection size, open incidents, total ingest jobs, a 24-hour activity bar chart, and a strategy distribution breakdown.</p>
-      <div class="note"><strong>Production only.</strong> The Grafana dashboards are part of the Kubernetes monitoring stack and are not available in local Docker Compose development.</div>
-    </section>
+        <section id="cs-kb">
+          <h2>Knowledge Base <span class="badge mid">admin / curator / analyst</span></h2>
+          <p>Knowledge Base ukazuje dokumenty, které už WebRAG stáhl a rozdělil na menší části nazývané chunks. Každý chunk může být použit jako podklad pro odpověď v Query.</p>
+          <h3>Co zde uvidíte</h3>
+          <ul>
+            <li>Počet dokumentů, chunků, zdrojů a procento chunků připravených pro RAG.</li>
+            <li>Tabulku dokumentů s URL, použitou ingest strategií, kvalitou a časem vložení.</li>
+            <li>Detail chunků pro konkrétní dokument.</li>
+            <li>Odkaz na uložený Markdown dokument nebo screenshot evidence, pokud existuje.</li>
+          </ul>
+          <p>Admin a curator mohou dokument smazat. Smazání odstraní dokument, jeho chunky a pokusí se odstranit i vektory z Qdrantu.</p>
+          <h3>API příklady</h3>
+          <pre><code>curl -s "$WEBRAG_URL/documents/stats" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+          <pre><code>curl -s "$WEBRAG_URL/documents/?limit=20&amp;offset=0" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+          <pre><code>curl -s "$WEBRAG_URL/documents/DOCUMENT_ID/chunks" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+          <pre><code>curl -s "$WEBRAG_URL/documents/DOCUMENT_ID/markdown-url" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+        </section>
 
-    <section id="admin">
-      <h2>Audit Logs &amp; Access Control <span class="role-badge role-admin">admin only</span></h2>
-      <h3>Audit Logs</h3>
-      <p>Opens the <strong>WebRAG Audit Logs</strong> Grafana dashboard in a new tab. Every significant action — logins, source changes, ingest triggers, API token generation — is immutably recorded in the <code>audit_logs</code> table and surfaced here through Loki log panels.</p>
-      <h3>Access Control</h3>
-      <p>Opens the Keycloak Admin Console in a new tab. User accounts, group membership, and role assignments are managed there. Roles map as follows:</p>
-      <table>
-        <tr><th>Keycloak group</th><th>Role</th><th>Access</th></tr>
-        <tr><td>webrag_admin</td><td>Admin</td><td>All pages and admin actions</td></tr>
-        <tr><td>webrag_curator</td><td>Curator</td><td>Sources, Pipeline, Incidents, Query, Knowledge Base, REST API</td></tr>
-        <tr><td>webrag_analyst</td><td>Analyst</td><td>Query, Knowledge Base, Experiments, REST API</td></tr>
-        <tr><td>webrag_user</td><td>User</td><td>Query and REST API only</td></tr>
-      </table>
-      <p>Role changes take effect on the user's next login, or automatically if the frontend detects a mismatch and refreshes the JWT (checked every 30 seconds while logged in).</p>
-    </section>
+        <section id="cs-sources">
+          <h2>Sources <span class="badge mid">admin / curator</span></h2>
+          <p>Source je webová stránka nebo feed, který má WebRAG pravidelně sledovat. U zdroje nastavujete název, URL, typ oprávnění, preferovanou ingest strategii a frekvenci kontroly.</p>
+          <h3>Ingest strategie</h3>
+          <table>
+            <tr><th>Strategie</th><th>Vysvětlení</th></tr>
+            <tr><td>api</td><td>Nejdříve zkusí Jina.ai reader a RSS/Atom feed. Dobré pro články a čistý obsah.</td></tr>
+            <tr><td>html</td><td>Stáhne běžné HTML bez spouštění JavaScriptu. Rychlé pro jednoduché stránky.</td></tr>
+            <tr><td>rendered</td><td>Otevře stránku v headless prohlížeči. Vhodné pro stránky závislé na JavaScriptu.</td></tr>
+            <tr><td>screenshot</td><td>Udělá screenshot a nechá text přečíst vizuálním modelem. Nejdražší záloha pro složité stránky.</td></tr>
+          </table>
+          <p>Backend chrání systém před SSRF: odmítá URL směřující na lokální, privátní nebo link-local adresy.</p>
+          <h3>API příklady</h3>
+          <pre><code>curl -s "$WEBRAG_URL/sources/?limit=25" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+          <pre><code>curl -s -X POST "$WEBRAG_URL/sources/" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Example source",
+    "base_url": "https://example.com",
+    "permission_type": "public",
+    "preferred_strategy": "api",
+    "crawl_frequency_hours": 24
+  }'</code></pre>
+          <pre><code>curl -s -X PATCH "$WEBRAG_URL/sources/SOURCE_ID" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"preferred_strategy":"rendered","crawl_frequency_hours":12}'</code></pre>
+        </section>
 
-  </main>
-</div>
+        <section id="cs-pipeline">
+          <h2>Pipeline / Jobs <span class="badge mid">admin / curator</span></h2>
+          <p>Pipeline ukazuje práci ingest systému: čekající úlohy, běžící workery, chybovost za posledních 24 hodin a historii jednotlivých jobů. Job je jeden pokus stáhnout a zpracovat konkrétní URL.</p>
+          <h3>Stavy jobů</h3>
+          <table>
+            <tr><th>Stav</th><th>Význam</th></tr>
+            <tr><td>pending</td><td>Job čeká ve frontě.</td></tr>
+            <tr><td>running</td><td>Worker job právě zpracovává.</td></tr>
+            <tr><td>done</td><td>Obsah byl úspěšně uložen.</td></tr>
+            <tr><td>failed</td><td>Zpracování selhalo nebo bylo zrušeno.</td></tr>
+            <tr><td>captcha_blocked</td><td>Web ukázal CAPTCHA nebo blokaci; vznikne incident.</td></tr>
+          </table>
+          <p>Job můžete ručně spustit ze Sources nebo přes API. Pending/running job lze zrušit. Admin může mazat dokončené job záznamy.</p>
+          <h3>API příklady</h3>
+          <pre><code>curl -s "$WEBRAG_URL/sources/pipeline/stats" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+          <pre><code>curl -s "$WEBRAG_URL/sources/jobs/all?limit=20&amp;status=failed" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+          <pre><code>curl -s -X POST "$WEBRAG_URL/sources/SOURCE_ID/ingest" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/specific-page"}'</code></pre>
+          <pre><code>curl -s -X POST "$WEBRAG_URL/sources/jobs/JOB_ID/cancel" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+        </section>
 
+        <section id="cs-incidents">
+          <h2>Incidents <span class="badge mid">admin / curator</span></h2>
+          <p>Incident vznikne, když scraper narazí na CAPTCHA, rate limit nebo jinou blokaci. Cílem není blokaci obejít, ale dát člověku jasně vědět, že zdroj vyžaduje kontrolu.</p>
+          <h3>Práce s incidentem</h3>
+          <ul>
+            <li><strong>Resolve</strong> uzavře incident s poznámkou a automaticky zařadí nový retry job.</li>
+            <li><strong>Whitelist</strong> v UI je rychlá varianta resolve s předvyplněnou poznámkou.</li>
+            <li>Admin může vytvořit testovací incident přes API endpoint <code>/incidents/simulate</code>.</li>
+          </ul>
+          <h3>API příklady</h3>
+          <pre><code>curl -s "$WEBRAG_URL/incidents/?status=open&amp;limit=20" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+          <pre><code>curl -s -X POST "$WEBRAG_URL/incidents/INCIDENT_ID/resolve" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"resolution_note":"Checked the source; access is available again."}'</code></pre>
+          <pre><code>curl -s -X POST "$WEBRAG_URL/incidents/simulate" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/captcha-test","severity":"medium"}'</code></pre>
+        </section>
+
+        <section id="cs-experiments">
+          <h2>Experiments <span class="badge planned">admin / analyst</span></h2>
+          <p>Experiments jsou připravené jako budoucí obrazovka pro měření kvality vyhledávání. V aktuální verzi je ve frontendu zatím placeholder a backend endpointy nejsou implementované.</p>
+          <p>Plánovaný smysl: vytvořit sadu testovacích otázek, spustit ji proti RAG pipeline a sledovat metriky jako Recall@k, MRR, nDCG a latenci.</p>
+          <div class="note warn"><strong>Aktuálně:</strong> Pokud potřebujete porovnávat chování modelu dnes, použijte Query v režimu RAG a No RAG a výsledky ukládejte ručně exportem do Markdownu nebo PDF.</div>
+        </section>
+
+        <section id="cs-dashboard">
+          <h2>Dashboard <span class="badge mid">admin / curator / analyst</span></h2>
+          <p>Dashboard otevírá Grafanu v nové kartě. Ukazuje provozní metriky systému, například počet zdrojů, dokumentů, incidentů, jobů a rozdělení ingest strategií.</p>
+          <p>V lokálním Docker Compose vývoji nemusí být produkční Grafana dostupná.</p>
+        </section>
+
+        <section id="cs-admin">
+          <h2>Audit &amp; Access <span class="badge admin">admin</span></h2>
+          <p>Admin část obsahuje odkazy na auditní logy v Grafaně a správu přístupu v Keycloaku. Auditní logy slouží ke kontrole důležitých akcí, jako jsou přihlášení, změny zdrojů, spuštění ingestu, dotazy a generování API tokenů.</p>
+          <p>Role se spravují v Keycloaku. Frontend kontroluje změnu role každých 30 sekund a při změně si obnoví token.</p>
+        </section>
+      </div>
+
+      <div id="panel-en" class="lang-panel">
+        <section>
+          <h1>WebRAG User Documentation</h1>
+          <p class="lead">WebRAG lets you ask questions over web content that has been collected and indexed by the system. In normal use, you log in, ask a question, and receive an answer with citations that point back to the source material.</p>
+          <div class="note"><strong>Note:</strong> The app UI stays in English. Grafana and Keycloak are English too, so this documentation uses the same screen names you will see in the app.</div>
+        </section>
+
+        <section id="en-login">
+          <h2>How to Log In <span class="badge all">all users</span></h2>
+          <p>The login screen can show one or two login methods depending on server configuration.</p>
+          <h3>OIDC / Keycloak Login</h3>
+          <ol>
+            <li>Click <strong>Sign in with OIDC</strong>.</li>
+            <li>Your browser opens Keycloak.</li>
+            <li>Sign in with your normal account.</li>
+            <li>After success, you return to WebRAG.</li>
+          </ol>
+          <p>This is the normal login method for users. Session persistence is controlled by Keycloak.</p>
+          <h3>Local First-Admin Login</h3>
+          <p>The local password is mainly for initial setup or emergency administration. You enter only the password, not a username. This login lasts only for the current browser session.</p>
+          <h3>Roles</h3>
+          <table>
+            <tr><th>Role</th><th>What the user can do</th></tr>
+            <tr><td>webrag_user</td><td>Use Query and manage a personal REST API token.</td></tr>
+            <tr><td>webrag_analyst</td><td>Use Query, Knowledge Base, Experiments, and REST API.</td></tr>
+            <tr><td>webrag_curator</td><td>Manage sources, pipeline jobs, incidents, Knowledge Base, Query, and REST API.</td></tr>
+            <tr><td>webrag_admin</td><td>All features, including audit logs, Keycloak administration, and selected delete actions.</td></tr>
+          </table>
+        </section>
+
+        <section id="en-api-token">
+          <h2>REST API Access <span class="badge all">all users</span></h2>
+          <p>Use a REST API token when you want to call WebRAG from a script, terminal, or another tool. Open <strong>REST API Access</strong>, click <strong>Obtain API Token</strong>, and store the token immediately.</p>
+          <ul>
+            <li>The token is shown only once.</li>
+            <li>The server stores only its hash, not the readable token.</li>
+            <li>If you lose it, click <strong>Regenerate</strong>. The old token becomes invalid.</li>
+            <li>Send it as <code>Authorization: Bearer &lt;WEBRAG_API_TOKEN&gt;</code>.</li>
+          </ul>
+          <pre><code>export WEBRAG_URL="https://webrag.example.com"
+export WEBRAG_API_TOKEN="paste-token-here"</code></pre>
+          <p>Replace <code>WEBRAG_URL</code> with your deployment URL. If your environment exposes API routes under <code>/api</code>, add that prefix before the endpoint path.</p>
+          <h3>Check Your Token</h3>
+          <pre><code>curl -s "$WEBRAG_URL/auth/me" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+        </section>
+
+        <section id="en-query">
+          <h2>Query <span class="badge all">all users</span></h2>
+          <p>Query is the main screen for asking questions. In <strong>RAG</strong> mode, WebRAG first finds relevant parts of indexed documents and then asks the language model to answer from that material. The answer includes citations so you can inspect the evidence.</p>
+          <h3>Query Modes</h3>
+          <table>
+            <tr><th>Mode</th><th>Meaning</th></tr>
+            <tr><td>rag</td><td>Normal mode. Searches indexed documents and answers with citations.</td></tr>
+            <tr><td>no_rag</td><td>Skips the knowledge base. Useful for comparison.</td></tr>
+            <tr><td>keyword_fallback</td><td>Automatic fallback when vector search is unavailable. Uses database text search.</td></tr>
+          </table>
+          <h3>Important Options</h3>
+          <ul>
+            <li><strong>Strict Grounding</strong> tells the model to answer only from retrieved documents.</li>
+            <li><strong>top_k</strong> is an API argument for how many chunks to retrieve. Default is 5. Higher values give more context but may be slower.</li>
+            <li><strong>source_id</strong> is an API argument that restricts search to one source.</li>
+            <li><strong>Custom API Override</strong> in the UI and the API <code>upstream_*</code> fields let you use your own OpenAI or OpenRouter key for one request. The key is not stored.</li>
+          </ul>
+          <div class="note">New documents are keyword-searchable right after ingest. Better vector search becomes available after the embedding worker finishes, usually in 1 to 5 minutes.</div>
+          <h3>API Example: Ask a RAG Question</h3>
+          <pre><code>curl -s -X POST "$WEBRAG_URL/query/" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "What sources are indexed?",
+    "mode": "rag",
+    "top_k": 5,
+    "strict_grounding": true,
+    "source_id": null
+  }'</code></pre>
+          <h3>API Example: Ask Without RAG</h3>
+          <pre><code>curl -s -X POST "$WEBRAG_URL/query/" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"question":"Explain what WebRAG is.","mode":"no_rag","top_k":5,"strict_grounding":false}'</code></pre>
+        </section>
+
+        <section id="en-kb">
+          <h2>Knowledge Base <span class="badge mid">admin / curator / analyst</span></h2>
+          <p>Knowledge Base shows documents that WebRAG has already collected and split into smaller parts called chunks. Each chunk can be used as evidence for Query answers.</p>
+          <h3>What You Can See</h3>
+          <ul>
+            <li>Document, chunk, source, and embedding readiness counts.</li>
+            <li>A table of documents with URL, ingest strategy, quality, and ingest time.</li>
+            <li>Chunk details for a selected document.</li>
+            <li>Stored Markdown and screenshot evidence links when available.</li>
+          </ul>
+          <p>Admins and curators can delete documents. Deletion removes the document, chunks, and attempts to remove the vectors from Qdrant.</p>
+          <h3>API Examples</h3>
+          <pre><code>curl -s "$WEBRAG_URL/documents/stats" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+          <pre><code>curl -s "$WEBRAG_URL/documents/?limit=20&amp;offset=0" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+          <pre><code>curl -s "$WEBRAG_URL/documents/DOCUMENT_ID/chunks" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+          <pre><code>curl -s "$WEBRAG_URL/documents/DOCUMENT_ID/markdown-url" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+        </section>
+
+        <section id="en-sources">
+          <h2>Sources <span class="badge mid">admin / curator</span></h2>
+          <p>A source is a website or feed that WebRAG should monitor. For each source you set a name, URL, permission type, preferred ingest strategy, and crawl frequency.</p>
+          <h3>Ingest Strategies</h3>
+          <table>
+            <tr><th>Strategy</th><th>Meaning</th></tr>
+            <tr><td>api</td><td>Tries Jina.ai reader and RSS/Atom first. Good for articles and clean content.</td></tr>
+            <tr><td>html</td><td>Fetches plain HTML without JavaScript. Fast for simple static pages.</td></tr>
+            <tr><td>rendered</td><td>Uses a headless browser. Useful for JavaScript-heavy pages.</td></tr>
+            <tr><td>screenshot</td><td>Captures a screenshot and uses a visual model to read it. Most expensive fallback for difficult pages.</td></tr>
+          </table>
+          <p>The backend protects the system against SSRF: private, local, and link-local addresses are rejected.</p>
+          <h3>API Examples</h3>
+          <pre><code>curl -s "$WEBRAG_URL/sources/?limit=25" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+          <pre><code>curl -s -X POST "$WEBRAG_URL/sources/" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Example source",
+    "base_url": "https://example.com",
+    "permission_type": "public",
+    "preferred_strategy": "api",
+    "crawl_frequency_hours": 24
+  }'</code></pre>
+          <pre><code>curl -s -X PATCH "$WEBRAG_URL/sources/SOURCE_ID" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"preferred_strategy":"rendered","crawl_frequency_hours":12}'</code></pre>
+        </section>
+
+        <section id="en-pipeline">
+          <h2>Pipeline / Jobs <span class="badge mid">admin / curator</span></h2>
+          <p>Pipeline shows ingest system activity: pending jobs, active workers, 24-hour error rate, and job history. A job is one attempt to fetch and process one URL.</p>
+          <h3>Job Statuses</h3>
+          <table>
+            <tr><th>Status</th><th>Meaning</th></tr>
+            <tr><td>pending</td><td>The job is waiting in the queue.</td></tr>
+            <tr><td>running</td><td>A worker is processing it.</td></tr>
+            <tr><td>done</td><td>Content was stored successfully.</td></tr>
+            <tr><td>failed</td><td>Processing failed or the job was cancelled.</td></tr>
+            <tr><td>captcha_blocked</td><td>The website showed a CAPTCHA or block page; an incident is created.</td></tr>
+          </table>
+          <p>You can trigger jobs from Sources or through the API. Pending/running jobs can be cancelled. Admins can delete finished job records.</p>
+          <h3>API Examples</h3>
+          <pre><code>curl -s "$WEBRAG_URL/sources/pipeline/stats" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+          <pre><code>curl -s "$WEBRAG_URL/sources/jobs/all?limit=20&amp;status=failed" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+          <pre><code>curl -s -X POST "$WEBRAG_URL/sources/SOURCE_ID/ingest" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/specific-page"}'</code></pre>
+          <pre><code>curl -s -X POST "$WEBRAG_URL/sources/jobs/JOB_ID/cancel" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+        </section>
+
+        <section id="en-incidents">
+          <h2>Incidents <span class="badge mid">admin / curator</span></h2>
+          <p>An incident is created when the scraper meets a CAPTCHA, rate limit, or access block. The goal is not to bypass it silently, but to tell a human that the source needs attention.</p>
+          <h3>Working With Incidents</h3>
+          <ul>
+            <li><strong>Resolve</strong> closes the incident with a note and automatically queues a retry job.</li>
+            <li><strong>Whitelist</strong> in the UI is a quick resolve action with a prepared note.</li>
+            <li>Admins can create a test incident through <code>/incidents/simulate</code>.</li>
+          </ul>
+          <h3>API Examples</h3>
+          <pre><code>curl -s "$WEBRAG_URL/incidents/?status=open&amp;limit=20" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN"</code></pre>
+          <pre><code>curl -s -X POST "$WEBRAG_URL/incidents/INCIDENT_ID/resolve" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"resolution_note":"Checked the source; access is available again."}'</code></pre>
+          <pre><code>curl -s -X POST "$WEBRAG_URL/incidents/simulate" \
+  -H "Authorization: Bearer $WEBRAG_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/captcha-test","severity":"medium"}'</code></pre>
+        </section>
+
+        <section id="en-experiments">
+          <h2>Experiments <span class="badge planned">admin / analyst</span></h2>
+          <p>Experiments are planned for measuring retrieval quality. In the current version, the frontend shows a placeholder and backend endpoints are not implemented yet.</p>
+          <p>The planned purpose is to create a set of test questions, run them against the RAG pipeline, and track metrics such as Recall@k, MRR, nDCG, and latency.</p>
+          <div class="note warn"><strong>Currently:</strong> To compare behavior today, use Query in RAG and No RAG modes and save results manually with Markdown or PDF export.</div>
+        </section>
+
+        <section id="en-dashboard">
+          <h2>Dashboard <span class="badge mid">admin / curator / analyst</span></h2>
+          <p>Dashboard opens Grafana in a new tab. It shows operational metrics such as source count, document count, incidents, jobs, and ingest strategy distribution.</p>
+          <p>The production Grafana dashboards may not be available in local Docker Compose development.</p>
+        </section>
+
+        <section id="en-admin">
+          <h2>Audit &amp; Access <span class="badge admin">admin</span></h2>
+          <p>The admin section links to audit logs in Grafana and access control in Keycloak. Audit logs help review important actions such as logins, source changes, ingest triggers, queries, and API token generation.</p>
+          <p>Roles are managed in Keycloak. The frontend checks for role changes every 30 seconds and refreshes the token when needed.</p>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    function setLang(lang) {
+      var isCs = lang === 'cs'
+      document.documentElement.lang = lang
+      document.getElementById('panel-cs').classList.toggle('active', isCs)
+      document.getElementById('panel-en').classList.toggle('active', !isCs)
+      document.getElementById('nav-cs').classList.toggle('active', isCs)
+      document.getElementById('nav-en').classList.toggle('active', !isCs)
+      document.getElementById('btn-cs').classList.toggle('active', isCs)
+      document.getElementById('btn-en').classList.toggle('active', !isCs)
+      try { localStorage.setItem('webrag_docs_lang', lang) } catch (e) {}
+    }
+
+    try {
+      var saved = localStorage.getItem('webrag_docs_lang')
+      if (saved === 'en') setLang('en')
+    } catch (e) {}
+  </script>
 </body>
 </html>
