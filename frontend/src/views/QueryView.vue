@@ -429,8 +429,8 @@ const providerPresets = [
     provider: 'openai',
     baseUrl: 'https://api.openai.com/v1',
     endpoint: 'https://api.openai.com/v1',
-    model: 'gpt-4o',
-    models: 'gpt-4o, gpt-4.1, o4-mini',
+    model: 'gpt-5.5',
+    models: 'gpt-5.5, gpt-5.4, o4-mini',
   },
 ]
 

@@ -102,7 +102,7 @@ export interface JobResponse {
 export interface ModelInfo {
   id: string      // internal identifier used to look up the model
   label: string   // display name shown in the dropdown
-  model: string   // API model name string (e.g. "gpt-4o")
+  model: string   // API model name string (e.g. "gpt-5.5")
   group: string   // grouping label (e.g. "Default", "OpenAI")
 }
 
@@ -118,7 +118,7 @@ export interface QueryRequest {
   upstream_provider?: string | null    // "openai" or "openrouter"
   upstream_base_url?: string | null    // optional API base URL override
   upstream_api_key?: string | null     // API key (never stored server-side)
-  upstream_model?: string | null       // model name (e.g. "gpt-4o")
+  upstream_model?: string | null       // model name (e.g. "gpt-5.5")
 }
 
 /** One source citation in a query answer — points to the chunk's origin URL. */
