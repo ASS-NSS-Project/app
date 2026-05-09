@@ -406,9 +406,12 @@ def cancel_job(
     Cancel a pending or running ingest job.
 
     Sets status to "failed" with error_message "Cancelled by user".
-    The worker may have already picked up the job — if so it will still run
-    to completion but the result won't be used (the job is marked failed).
-    There is no mechanism to interrupt a running worker mid-scrape.
+
+    - Pending jobs: the worker sees status=failed in its pre-flight check and
+      skips the job entirely before starting any scraping.
+    - Running jobs: the worker checks the DB status at each strategy boundary.
+      The currently-executing strategy runs to completion, then the pipeline
+      stops before attempting the next one.
     """
     job = db.query(IngestJob).filter(IngestJob.id == job_id).first()
     if not job:

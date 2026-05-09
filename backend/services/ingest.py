@@ -37,6 +37,7 @@ CAPTCHA detection runs at every step. When detected, the ingest job is
 marked "captcha_blocked" and a curator Incident is created for review.
 """
 
+import asyncio
 import hashlib
 import io
 import logging
@@ -148,7 +149,19 @@ class IngestService:
             text, strategy, evidence_id = await self._run_pipeline(job)
 
             if text is None:
-                # All strategies exhausted without usable content
+                # Refresh to distinguish cancellation from genuine exhaustion —
+                # the cancel API sets status=failed before _run_pipeline returns.
+                self.db.refresh(job)
+                if job.status == JobStatus.failed:
+                    # Already marked by the cancel API; don't overwrite the message.
+                    logger.info("Ingest pipeline stopped due to cancellation", extra={
+                        "event": "ingest_cancelled",
+                        "job_id": job.id,
+                        "source_id": job.source_id,
+                        "url": job.url,
+                    })
+                    return job
+
                 job.status = JobStatus.failed
                 job.error_message = "All strategies exhausted without extracting content"
                 job.finished_at = datetime.utcnow()
@@ -223,6 +236,19 @@ class IngestService:
         strategies = self._get_strategy_order(source.preferred_strategy)
 
         for strategy in strategies:
+            # Re-read the job row — the cancel API may have set status=failed
+            # while a previous strategy was running.
+            self.db.refresh(job)
+            if job.status == JobStatus.failed:
+                logger.info("Job cancelled mid-pipeline, stopping", extra={
+                    "event": "ingest_cancelled",
+                    "job_id": job.id,
+                    "source_id": job.source_id,
+                    "url": job.url,
+                    "strategy": strategy.value,
+                })
+                return None, None, None
+
             logger.info("Trying ingest strategy", extra={
                 "event": "ingest_strategy_attempt",
                 "job_id": job.id,
@@ -230,6 +256,8 @@ class IngestService:
                 "url": job.url,
                 "strategy": strategy.value,
             })
+            if source.rate_limit_rps > 0:
+                await asyncio.sleep(1.0 / source.rate_limit_rps)
             try:
                 if strategy == IngestStrategy.api:
                     result = await self._strategy_api(job)
