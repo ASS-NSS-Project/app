@@ -114,6 +114,17 @@ create_and_ingest "Vector Databases - Qdrant docs; Vectors" "https://qdrant.tech
 
 create_and_ingest "Fake link" "https://f.a.k.e" "api"
 
+create_and_ingest "MENDELU - Main Website" "https://mendelu.cz/" "api"
+create_and_ingest "MENDELU - About University" "https://mendelu.cz/o-univerzite/" "api"
+create_and_ingest "MENDELU - News" "https://mendelu.cz/aktuality/" "api"
+
+create_and_ingest "PEF MENDELU - Main Website" "https://pef.mendelu.cz/" "api"
+create_and_ingest "PEF MENDELU - Basic Information" "https://pef.mendelu.cz/o-fakulte/zakladni-informace/" "api"
+create_and_ingest "PEF MENDELU - Organizational Structure" "https://pef.mendelu.cz/o-fakulte/organizacni-struktura/" "api"
+
+create_and_ingest "LDF MENDELU - Main Website" "https://ldf.mendelu.cz/" "api"
+create_and_ingest "LDF MENDELU - News" "https://ldf.mendelu.cz/aktuality/" "api"
+
 echo ""
 echo "Done. Monitor progress at ${API_URL}/sources/ or in the Pipeline view."
 
