@@ -75,5 +75,42 @@ create_and_ingest "What is Terraform? | Terraform | HashiCorp Developer" "https:
 create_and_ingest "Terraform (Software) - Wikipedia" "https://en.wikipedia.org/wiki/Terraform_(software)" "api"
 create_and_ingest "What is Terraform? | IBM" "https://www.ibm.com/think/topics/terraform" "api"
 
+create_and_ingest "Blog Python - default posts feed" "http://blog.python.org/feeds/posts/default" "api"
+create_and_ingest "xkcd Atom" "https://xkcd.com/atom.xml" "api"
+create_and_ingest "Hacker News RSS" "https://hnrss.org/frontpage" "api"
+
+create_and_ingest "Quotes to Scrape" "https://quotes.toscrape.com/" "html"
+create_and_ingest "Python Official Blogs" "https://www.python.org/blogs/" "html"
+create_and_ingest "Qdrant - Hybrid Queries" "https://qdrant.tech/documentation/search/hybrid-queries/" "html"
+create_and_ingest "BGE-Model BGE-M3" "BGE-M3" "html"
+
+create_and_ingest "Quotes to Scrape - JS" "https://https://quotes.toscrape.com/js/" "rendered"
+create_and_ingest "Quotes to Scrape - Scroll" "https://https://quotes.toscrape.com/scroll" "rendered"
+
+create_and_ingest "xkcd" "https://xkcd.com/" "screenshot"
+create_and_ingest "quotes.toscrape" "https://quotes.toscrape.com/tableful/" "screenshot"
+
+create_and_ingest "Embeddings - HF MTEB (Embedding) Leaderboard" "https://huggingface.co/spaces/mteb/leaderboard" "api"
+create_and_ingest "Embeddings - Hugging Face BGE-M3" "https://huggingface.co/BAAI/bge-m3" "api"
+create_and_ingest "Embeddings - BGE Model; BGE-M3" "https://bge-model.com/bge/bge_m3.html" "api"
+create_and_ingest "Embeddings - M3-Embedding" "https://arxiv.org/abs/2402.03216" "api"
+create_and_ingest "Hybrid Search" "https://qdrant.tech/documentation/search/hybrid-queries/" "api"
+create_and_ingest "Hybrid Search" "https://qdrant.tech/course/essentials/day-3/hybrid-search/" "api"
+create_and_ingest "Hybrid Search" "https://qdrant.tech/documentation/tutorials-search-engineering/reranking-hybrid-search/" "api"
+create_and_ingest "Vector Databases - Qdrant docs." "https://qdrant.tech/documentation/" "api"
+create_and_ingest "Vector Databases - Qdrant docs; Collections" "https://qdrant.tech/documentation/concepts/collections/" "api"
+create_and_ingest "Vector Databases - Qdrant docs; Points" "https://qdrant.tech/documentation/concepts/points/" "api"
+create_and_ingest "Vector Databases - Qdrant docs; Vectors" "https://qdrant.tech/documentation/concepts/vectors/" "api"
+
+create_and_ingest "Fake link" "https://f.a.k.e" "api"
+
 echo ""
 echo "Done. Monitor progress at ${API_URL}/sources/ or in the Pipeline view."
+
+
+# What is an embedding model?
+# What does BGE-M3 do?
+# Why is BGE-M3 useful for multilingual search?
+# What does multi-functionality mean in BGE-M3?
+# What does multi-granularity mean?
+# How is BGE-M3 different from a normal keyword search?
