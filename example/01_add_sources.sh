@@ -66,10 +66,15 @@ create_and_ingest() {
 # ── 3. Seed sources ───────────────────────────────────────────────────────────
 
 create_and_ingest "MENDELU" "https://mendelu.cz" "html"
+
 create_and_ingest "ITHope" "https://www.ithope.cz/" "rendered"
+create_and_ingest "ITHope - Záchrana dat, Obnova dat Brno" "https://www.ithope.cz/zachrana-dat/" "rendered"
+create_and_ingest "ITHope - Jak postupovat při záchraně dat" "https://www.ithope.cz/jak-postupovat-pri-zachrane-dat/" "html"
+create_and_ingest "ITHope - Mechanické závady pevných disků HDD a jejích možné příčiny" "https://www.ithope.cz/mechanicke-zavady-pevnych-disku-hdd/" "rendered"
+
 create_and_ingest "FarmAI" "https://farmai.eu/" "screenshot"
+
 create_and_ingest "ReCAPTCHA Demo" "https://www.google.com/recaptcha/api2/demo" "html"
-create_and_ingest "ReCAPTCHA Demo" "https://www.google.com/recaptcha/api2/demo" "api"
 create_and_ingest "Overview - Qdrant" "https://qdrant.tech/documentation/overview/" "api"
 create_and_ingest "What is Terraform? | Terraform | HashiCorp Developer" "https://developer.hashicorp.com/terraform/intro" "api"
 create_and_ingest "Terraform (Software) - Wikipedia" "https://en.wikipedia.org/wiki/Terraform_(software)" "api"
@@ -82,7 +87,6 @@ create_and_ingest "Hacker News RSS" "https://hnrss.org/frontpage" "api"
 create_and_ingest "Quotes to Scrape" "https://quotes.toscrape.com/" "html"
 create_and_ingest "Python Official Blogs" "https://www.python.org/blogs/" "html"
 create_and_ingest "Qdrant - Hybrid Queries" "https://qdrant.tech/documentation/search/hybrid-queries/" "html"
-create_and_ingest "BGE-Model BGE-M3" "BGE-M3" "html"
 
 create_and_ingest "Quotes to Scrape - JS" "https://https://quotes.toscrape.com/js/" "rendered"
 create_and_ingest "Quotes to Scrape - Scroll" "https://https://quotes.toscrape.com/scroll" "rendered"
@@ -90,13 +94,19 @@ create_and_ingest "Quotes to Scrape - Scroll" "https://https://quotes.toscrape.c
 create_and_ingest "xkcd" "https://xkcd.com/" "screenshot"
 create_and_ingest "quotes.toscrape" "https://quotes.toscrape.com/tableful/" "screenshot"
 
+create_and_ingest "AWS - What is RAG?" "https://aws.amazon.com/what-is/retrieval-augmented-generation/" "api"
+create_and_ingest "Nvidia Blog - What is RAG" "https://blogs.nvidia.com/blog/what-is-retrieval-augmented-generation/" "api"
+create_and_ingest "Retrieval-augmented Generation | Wiki" "https://en.wikipedia.org/wiki/Retrieval-augmented_generation" "html"
+
 create_and_ingest "Embeddings - HF MTEB (Embedding) Leaderboard" "https://huggingface.co/spaces/mteb/leaderboard" "api"
 create_and_ingest "Embeddings - Hugging Face BGE-M3" "https://huggingface.co/BAAI/bge-m3" "api"
 create_and_ingest "Embeddings - BGE Model; BGE-M3" "https://bge-model.com/bge/bge_m3.html" "api"
 create_and_ingest "Embeddings - M3-Embedding" "https://arxiv.org/abs/2402.03216" "api"
+
 create_and_ingest "Hybrid Search" "https://qdrant.tech/documentation/search/hybrid-queries/" "api"
 create_and_ingest "Hybrid Search" "https://qdrant.tech/course/essentials/day-3/hybrid-search/" "api"
 create_and_ingest "Hybrid Search" "https://qdrant.tech/documentation/tutorials-search-engineering/reranking-hybrid-search/" "api"
+
 create_and_ingest "Vector Databases - Qdrant docs." "https://qdrant.tech/documentation/" "api"
 create_and_ingest "Vector Databases - Qdrant docs; Collections" "https://qdrant.tech/documentation/concepts/collections/" "api"
 create_and_ingest "Vector Databases - Qdrant docs; Points" "https://qdrant.tech/documentation/concepts/points/" "api"
